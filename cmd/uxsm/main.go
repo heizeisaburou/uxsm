@@ -13,55 +13,88 @@ import (
 // version la pone el Makefile al compilar: go build -ldflags "-X main.version=…".
 var version = "dev"
 
-// command es una suborden: su nombre, una línea de ayuda y la función que la
-// ejecuta con los argumentos que vienen detrás del nombre.
+// command es una suborden: su nombre, una línea de ayuda, la función que la
+// ejecuta con los argumentos que vienen detrás del nombre y si se oculta en la
+// ayuda general.
 type command struct {
 	name    string
 	summary string
 	run     func(args []string) error
+	hidden  bool
 }
 
-// commands son las subórdenes visibles, en el orden en que salen en la ayuda.
-// aux no está: la llaman las unidades de systemd, no las personas.
-var commands = []command{
-	{"start", "start an X11 session from a session entry", runStart},
-	{"version", "print the version", runVersion},
+// group es un conjunto de subórdenes con su propia ayuda. uxsm tiene dos: el
+// de primer nivel (start, stop…) y el de aux (exec, waitpid). Los dos reparten
+// con el mismo código, así que se comportan igual.
+type group struct {
+	// name es cómo se escribe el grupo en la línea de órdenes: "uxsm" o "uxsm aux".
+	name        string
+	description string
+	commands    []command
+}
+
+// rootCommands son las subórdenes de uxsm, en el orden en que salen en la
+// ayuda. aux está oculta: la llaman las unidades de systemd, no las personas,
+// pero se ejecuta igual que las demás.
+var rootCommands = group{
+	name:        "uxsm",
+	description: "Start and manage X11 sessions under systemd --user.",
+	commands: []command{
+		{"start", "start an X11 session from a session entry", runStart, false},
+		{"stop", "stop the running session", runStop, false},
+		{"version", "print the version", runVersion, false},
+		{"aux", "internal commands used by uxsm's systemd units", runAux, true},
+	},
 }
 
 func main() {
-	os.Exit(run(os.Args[1:]))
+	os.Exit(exitCode(rootCommands.dispatch(os.Args[1:])))
 }
 
-// run elige la suborden y traduce su resultado a código de salida: 0 si va
-// bien, 2 si los argumentos están mal y 1 con cualquier otro error.
-func run(args []string) int {
+// dispatch selecciona la suborden a partir del primer argumento y le pasa
+// el resto tal cual.
+//
+// `help`, `-h` y `--help` sólo se interpretan aquí si aparecen en primera
+// posición; cualquier ayuda posterior corresponde a la suborden.
+func (g group) dispatch(args []string) error {
 	if len(args) == 0 {
-		usage(os.Stderr)
-		return 2
+		g.usage(os.Stderr)
+		return errUsage
 	}
 
 	name, rest := args[0], args[1:]
-	switch name {
-	case "-h", "--help", "help":
-		usage(os.Stdout)
-		return 0
-	case "aux":
-		return exitCode(runAux(rest))
+	if name == "help" || isHelpFlag(name) {
+		g.usage(os.Stdout)
+		return nil
 	}
-	for _, c := range commands {
+	for _, c := range g.commands {
 		if c.name == name {
-			return exitCode(c.run(rest))
+			return c.run(rest)
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "uxsm: unknown command %q\n\n", name)
-	usage(os.Stderr)
-	return 2
+	fmt.Fprintf(os.Stderr, "%s: unknown command %q\n\n", g.name, name)
+	g.usage(os.Stderr)
+	return errUsage
+}
+
+// usage escribe la ayuda del grupo, sin las subórdenes ocultas.
+func (g group) usage(w io.Writer) {
+	fmt.Fprintf(w, "Usage: %s <command> [options]\n\n%s\n\nCommands:\n", g.name, g.description)
+	for _, c := range g.commands {
+		if !c.hidden {
+			fmt.Fprintf(w, "  %-9s %s\n", c.name, c.summary)
+		}
+	}
+	fmt.Fprintf(w, "\nRun \"%s <command> -h\" for help on a command.\n", g.name)
 }
 
 // errUsage marca los errores de argumentos, que ya han enseñado su ayuda.
 var errUsage = errors.New("usage")
 
+// exitCode traduce el resultado de una suborden a código de salida: 0 si va
+// bien o se ha pedido ayuda, 2 si los argumentos están mal y 1 con cualquier
+// otro error, que además se escribe.
 func exitCode(err error) int {
 	switch {
 	case err == nil, errors.Is(err, flag.ErrHelp):
@@ -74,14 +107,6 @@ func exitCode(err error) int {
 	}
 }
 
-func usage(w io.Writer) {
-	fmt.Fprint(w, "Usage: uxsm <command> [options]\n\nCommands:\n")
-	for _, c := range commands {
-		fmt.Fprintf(w, "  %-9s %s\n", c.name, c.summary)
-	}
-	fmt.Fprint(w, "\nRun \"uxsm <command> -h\" for help on a command.\n")
-}
-
 // wantsHelp dice si args pide ayuda en cualquier posición antes de "--".
 //
 // flag deja de leer opciones en el primer argumento que no lo es, así que por
@@ -90,12 +115,23 @@ func usage(w io.Writer) {
 // que va detrás de "--" es del programa que se lanza, no de uxsm.
 func wantsHelp(args []string) bool {
 	for _, a := range args {
-		switch a {
-		case "--":
+		if a == "--" {
 			return false
-		case "-h", "-help", "--h", "--help":
+		}
+		if isHelpFlag(a) {
 			return true
 		}
+	}
+	return false
+}
+
+// isHelpFlag dice si a es una forma de pedir ayuda. Son las cuatro que reconoce
+// el paquete flag, para que valgan las mismas en cualquier sitio: `uxsm -help`
+// y `uxsm start bspwm.desktop -help`.
+func isHelpFlag(a string) bool {
+	switch a {
+	case "-h", "-help", "--h", "--help":
+		return true
 	}
 	return false
 }

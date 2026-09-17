@@ -1,0 +1,10 @@
+[Unit]
+Description=uxsm: X11 session of %i
+Documentation=https://github.com/heizeisaburou/uxsm
+Requires=uxsm-desktop@%i.service
+BindsTo=graphical-session.target
+Before=graphical-session.target
+PropagatesStopTo=graphical-session.target
+Conflicts=uxsm-shutdown.target
+Before=uxsm-shutdown.target
+StopWhenUnneeded=yes

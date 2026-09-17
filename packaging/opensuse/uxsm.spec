@@ -49,7 +49,7 @@ make test
 %files
 %license LICENSE
 %{_bindir}/uxsm
-%{_prefix}/lib/systemd/user/uxsm-desktop@.service
+%{_prefix}/lib/systemd/user/uxsm-*
 
 # openSUSE keeps the changelog in uxsm.changes, not here.
 %changelog

@@ -1,9 +1,6 @@
 [Unit]
-Description=uxsm: X11 desktop of %i
+Description=uxsm: bind the X11 session to PID %i
 Documentation=https://github.com/heizeisaburou/uxsm
-BindsTo=uxsm-session@%i.target
-Before=uxsm-session@%i.target graphical-session.target
-PropagatesStopTo=uxsm-session@%i.target graphical-session.target
 OnSuccess=uxsm-shutdown.target
 OnSuccessJobMode=replace-irreversibly
 OnFailure=uxsm-shutdown.target
@@ -14,6 +11,6 @@ CollectMode=inactive-or-failed
 
 [Service]
 Type=exec
-ExecStart=@BINDIR@/uxsm aux exec %i
+ExecStart=@BINDIR@/uxsm aux waitpid %i
 Restart=no
-Slice=session.slice
+Slice=background.slice

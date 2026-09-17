@@ -4,30 +4,28 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"syscall"
 
 	"github.com/heizeisaburou/uxsm/internal/desktopentry"
+	"github.com/heizeisaburou/uxsm/internal/pidwait"
 )
 
-// runAux agrupa las subórdenes internas, las que llaman las unidades de
-// systemd de uxsm desde sus Exec*=. No salen en la ayuda general.
-func runAux(args []string) error {
-	const auxUsage = "Usage: uxsm aux <exec> ...\n\nInternal commands used by uxsm's systemd units.\n"
-	if len(args) == 0 {
-		fmt.Fprint(os.Stderr, auxUsage)
-		return errUsage
-	}
-	// `uxsm aux -h` pide la ayuda de aux; `uxsm aux exec -h`, la de exec.
-	if wantsHelp(args[:1]) {
-		fmt.Fprint(os.Stdout, auxUsage)
-		return nil
-	}
+// auxCommands son las subórdenes internas, las que llaman las unidades de
+// systemd de uxsm desde sus Exec*=. Salen en `uxsm aux -h`, no en la ayuda
+// general.
+var auxCommands = group{
+	name:        "uxsm aux",
+	description: "Internal commands used by uxsm's systemd units.",
+	commands: []command{
+		{"exec", "replace this process with the Exec= of a session entry", runAuxExec, false},
+		{"waitpid", "wait until a process exits", runAuxWaitPID, false},
+	},
+}
 
-	switch args[0] {
-	case "exec":
-		return runAuxExec(args[1:])
-	}
-	return fmt.Errorf("unknown aux command %q", args[0])
+// runAux reparte `uxsm aux <suborden>` igual que se reparte `uxsm <suborden>`.
+func runAux(args []string) error {
+	return auxCommands.dispatch(args)
 }
 
 // runAuxExec ejecuta el escritorio de una entrada: `uxsm aux exec bspwm.desktop`.
@@ -64,4 +62,25 @@ func runAuxExec(args []string) error {
 	}
 
 	return syscall.Exec(path, argv, os.Environ())
+}
+
+// runAuxWaitPID espera a que termine un proceso: `uxsm aux waitpid 1234`.
+//
+// Es el ExecStart= de uxsm-bindpid@.service, con el PID del proceso de la sesión
+// como instancia. Cuando vuelve, el servicio termina y su OnSuccess= arranca
+// uxsm-shutdown.target, que apaga la sesión.
+func runAuxWaitPID(args []string) error {
+	fs := newFlagSet("aux waitpid", "<pid>", "Wait until a process exits; any process, not only a child.")
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		fs.Usage()
+		return errUsage
+	}
+	pid, err := strconv.Atoi(fs.Arg(0))
+	if err != nil {
+		return fmt.Errorf("invalid PID %q", fs.Arg(0))
+	}
+	return pidwait.Wait(pid)
 }

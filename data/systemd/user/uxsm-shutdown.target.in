@@ -1,0 +1,7 @@
+[Unit]
+Description=uxsm: shut down the X11 session
+Documentation=https://github.com/heizeisaburou/uxsm
+DefaultDependencies=no
+Conflicts=graphical-session-pre.target graphical-session.target xdg-desktop-autostart.target
+After=graphical-session-pre.target graphical-session.target xdg-desktop-autostart.target
+StopWhenUnneeded=yes

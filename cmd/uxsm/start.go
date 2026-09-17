@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/heizeisaburou/uxsm/internal/desktopentry"
 	"github.com/heizeisaburou/uxsm/internal/systemd"
@@ -14,8 +15,11 @@ import (
 //     o no tiene Exec=, antes de tocar systemd.
 //  2. Copia DISPLAY y XAUTHORITY al gestor de systemd: el escritorio va a correr
 //     como servicio, y los servicios sólo ven el entorno del gestor.
-//  3. Se sustituye por `systemctl --user start --wait uxsm-desktop@<id>.service`,
-//     que no vuelve hasta que el escritorio termina.
+//  3. Arranca uxsm-bindpid@<pid>.service con su propio PID, para que la sesión se
+//     apague si el display manager mata este proceso.
+//  4. Se sustituye por `systemctl --user start --wait uxsm-desktop@<id>.service`,
+//     que no vuelve hasta que el escritorio termina. Con exec el PID no cambia,
+//     así que el PID que vigila bindpid sigue siendo el de la sesión.
 func runStart(args []string) error {
 	fs := newFlagSet("start", "<entry.desktop>",
 		"Start the X11 session described by a session entry from the xsessions\n"+
@@ -38,6 +42,9 @@ func runStart(args []string) error {
 
 	if err := systemd.ImportEnvironment("DISPLAY", "XAUTHORITY"); err != nil {
 		return fmt.Errorf("importing the display into systemd: %w", err)
+	}
+	if err := systemd.Start(systemd.BindPIDUnit(os.Getpid())); err != nil {
+		return fmt.Errorf("binding the session to its process: %w", err)
 	}
 	return systemd.ExecStartWait(systemd.DesktopUnit(id))
 }

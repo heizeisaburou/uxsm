@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"syscall"
 )
@@ -21,6 +22,23 @@ import (
 func DesktopUnit(id string) string {
 	return "uxsm-desktop@" + id + ".service"
 }
+
+// SessionTarget es el target de la sesión de una entrada:
+// "uxsm-session@bspwm.desktop.target" para "bspwm.desktop". Mientras está
+// activo, lo está graphical-session.target.
+func SessionTarget(id string) string {
+	return "uxsm-session@" + id + ".target"
+}
+
+// BindPIDUnit es la unidad que vigila el proceso pid de la sesión y la apaga
+// cuando termina: "uxsm-bindpid@1234.service".
+func BindPIDUnit(pid int) string {
+	return "uxsm-bindpid@" + strconv.Itoa(pid) + ".service"
+}
+
+// ShutdownTarget es el target que apaga la sesión: al arrancarlo, systemd para
+// todo lo que choca con él (Conflicts=).
+const ShutdownTarget = "uxsm-shutdown.target"
 
 // CheckInstance comprueba que id vale tal cual como instancia de una unidad.
 //
@@ -47,11 +65,23 @@ func ImportEnvironment(names ...string) error {
 	return cmd.Run()
 }
 
-// ExecStartWait sustituye este proceso por `systemctl --user start --wait unit`.
+// Start arranca unit y espera a que systemd termine el arranque.
+func Start(unit string) error {
+	cmd := exec.Command("systemctl", "--user", "start", unit)
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	return cmd.Run()
+}
+
+// ExecStartWait reemplaza el proceso actual por:
 //
-// Con exec el PID no cambia: el proceso que vigila el display manager pasa a
-// ser el systemctl que espera, y la sesión dura exactamente lo que dure la
-// unidad. Si todo va bien no vuelve; sólo devuelve error si exec falla.
+//	systemctl --user start --wait unit
+//
+// `syscall.Exec` conserva el PID, así que el display manager sigue vigilando
+// el mismo proceso, que ahora es `systemctl`. Este espera hasta que la unidad
+// termine; cuando eso ocurre, también termina el proceso de sesión.
+//
+// Si `exec` funciona, esta función no retorna. Sólo devuelve un error si no
+// puede ejecutar `systemctl`.
 func ExecStartWait(unit string) error {
 	path, err := exec.LookPath("systemctl")
 	if err != nil {

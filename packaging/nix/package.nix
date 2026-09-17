@@ -33,10 +33,11 @@ buildGoModule (finalAttrs: {
 
   # Lo que el Makefile instala además del binario.
   postInstall = ''
-    install -Dm644 data/systemd/user/uxsm-desktop@.service.in \
-      $out/lib/systemd/user/uxsm-desktop@.service
-    substituteInPlace $out/lib/systemd/user/uxsm-desktop@.service \
-      --replace-fail @BINDIR@ $out/bin
+    for f in data/systemd/user/*.in; do
+      unit=$out/lib/systemd/user/$(basename "$f" .in)
+      install -Dm644 "$f" "$unit"
+      substituteInPlace "$unit" --replace-quiet @BINDIR@ $out/bin
+    done
   '';
 
   meta = {
