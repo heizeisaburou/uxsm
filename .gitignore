@@ -1,0 +1,17 @@
+# Private working notes, never published
+/.private
+
+/bin
+/dist
+/build
+
+# Package build leftovers
+/packaging/arch/*.pkg.tar.*
+/packaging/arch/src
+/packaging/arch/pkg
+/packaging/arch/uxsm-*.tar.gz
+/debian
+/.gocache
+
+# nix build
+/result

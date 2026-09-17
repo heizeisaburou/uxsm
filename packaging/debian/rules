@@ -1,0 +1,24 @@
+#!/usr/bin/make -f
+
+include /usr/share/dpkg/pkg-info.mk
+
+# Build daemons (sbuild, pbuilder) have no writable HOME and no network.
+export GOCACHE := $(CURDIR)/.gocache
+export GOPATH := $(CURDIR)/.gocache/gopath
+export GOPROXY := off
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	$(MAKE) build VERSION=$(DEB_VERSION_UPSTREAM)
+
+override_dh_auto_test:
+	$(MAKE) test
+
+override_dh_auto_install:
+	$(MAKE) install DESTDIR=$(CURDIR)/debian/uxsm PREFIX=/usr VERSION=$(DEB_VERSION_UPSTREAM)
+
+override_dh_auto_clean:
+	$(MAKE) clean
+	rm -rf $(CURDIR)/.gocache

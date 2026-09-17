@@ -1,0 +1,20 @@
+Source: uxsm
+Section: x11
+Priority: optional
+Maintainer: 平生三郎 <heizeisaburou@gmail.com>
+Build-Depends: debhelper-compat (= 13),
+               golang-go (>= 2:1.22~),
+Standards-Version: 4.7.0
+Homepage: https://github.com/heizeisaburou/uxsm
+Rules-Requires-Root: no
+
+Package: uxsm
+Architecture: any
+Depends: systemd,
+         ${misc:Depends},
+         ${shlibs:Depends},
+Built-Using: ${misc:Built-Using}
+Description: X11 session manager for systemd --user
+ uxsm starts X11 graphical sessions under systemd --user the way uwsm does
+ for Wayland: it prepares the session environment, binds the session to
+ graphical-session.target and cleans up when the session ends.

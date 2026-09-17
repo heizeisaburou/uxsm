@@ -1,0 +1,10 @@
+[Unit]
+Description=uxsm: X11 desktop of %i
+Documentation=https://github.com/heizeisaburou/uxsm
+CollectMode=inactive-or-failed
+
+[Service]
+Type=exec
+ExecStart=@BINDIR@/uxsm aux exec %i
+Restart=no
+Slice=session.slice

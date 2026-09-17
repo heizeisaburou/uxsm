@@ -1,0 +1,32 @@
+# Maintainer: 平生三郎 <heizeisaburou@gmail.com>
+#
+# Source of truth for the AUR package; the AUR repository gets a copy of this
+# file plus its .SRCINFO (makepkg --printsrcinfo > .SRCINFO).
+
+pkgname=uxsm
+pkgver=0.0.0
+pkgrel=1
+pkgdesc='X11 session manager for systemd --user, the X11 counterpart of uwsm'
+arch=('x86_64' 'aarch64')
+url='https://github.com/heizeisaburou/uxsm'
+license=('Apache-2.0')
+depends=('glibc' 'systemd')
+makedepends=('go>=1.22')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "$pkgname-$pkgver"
+  export CGO_CPPFLAGS="$CPPFLAGS" CGO_CFLAGS="$CFLAGS" CGO_CXXFLAGS="$CXXFLAGS" CGO_LDFLAGS="$LDFLAGS"
+  make build VERSION="$pkgver" GO_LDFLAGS='-linkmode=external'
+}
+
+check() {
+  cd "$pkgname-$pkgver"
+  make test
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  make install DESTDIR="$pkgdir" PREFIX=/usr VERSION="$pkgver"
+}
