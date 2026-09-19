@@ -15,7 +15,7 @@ display manager:
 - `uxsm check` y `uxsm setup xsessions-dir`: comprueban y arreglan que el display manager lea ese
   directorio.
 
-Cómo funciona por dentro: [`docs/internals.md`](docs/internals.md).
+Arquitectura, interacción con systemd y pruebas: [`docs/architecture.md`](docs/architecture.md).
 
 ## Estructura
 
@@ -73,7 +73,7 @@ instalar se añade en el `Makefile`, en la lista de ficheros de cada paquete y e
 `make test-vm` compila los paquetes de cada distribución dentro de máquinas virtuales, con las
 recetas de `packaging/`, y ejecuta las pruebas de integración con ellos instalados.
 `make release` lo hace en todas las distribuciones y deja el resultado en `releases/latest`
-―[`docs/internals.md`](docs/internals.md#compilación-y-prueba-de-los-paquetes)―.
+―[`docs/architecture.md`](docs/architecture.md#compilación-y-pruebas)―.
 
 Todos descargan el tarball de la etiqueta `v<versión>` de GitHub. Al publicar una versión hay
 que actualizar la suma del tarball donde la haya: `hash` en el de Nix, `sha256sums` en el

@@ -1,0 +1,76 @@
+digraph environment {
+  graph [
+    label="Entorno de la sesión: preparar y restaurar",
+    labelloc=t,
+    fontsize=24,
+    fontname="DejaVu Sans Bold",
+    bgcolor="#f8fafc",
+    pad=0.28,
+    nodesep=0.55,
+    ranksep=0.62,
+    splines=polyline
+  ];
+  node [shape=box, style="rounded,filled", fontname="DejaVu Sans", fontsize=11,
+        color="#2563eb", fillcolor="#eff6ff", fontcolor="#0f172a", margin="0.15,0.10"];
+  edge [fontname="DejaVu Sans", fontsize=9, color="#64748b", fontcolor="#334155", arrowsize=0.75];
+
+  subgraph cluster_prepare {
+    label="Inicio · uxsm aux prepare-env";
+    color="#93c5fd";
+    style="rounded,filled";
+    fillcolor="#ffffff";
+    fontname="DejaVu Sans Bold";
+
+    login [shape=folder, fillcolor="#fef3c7", color="#ca8a04",
+           label="env_login\nEntorno recibido del display manager"];
+    identity [shape=folder, fillcolor="#fef3c7", color="#ca8a04",
+              label="env_identity\nVariables XDG calculadas"];
+    manager [shape=cylinder, fillcolor="#ede9fe", color="#7c3aed",
+             label="Entorno actual de\nsystemd --user"];
+    snapshot [shape=folder, fillcolor="#fef3c7", color="#ca8a04",
+              label="env_pre\nFoto para restaurar al final"];
+    merge [label="Base = entorno del gestor\n+ entorno del login por encima"];
+    loader [label="loader.sh\n1. /etc/profile y ~/.profile\n2. identidad XDG\n3. uxsm/env y env-<desktop>\n   con sus directorios .d"];
+    diff [label="computeChanges\nQué poner · qué borrar · qué limpiar"];
+    marked [shape=folder, fillcolor="#fef3c7", color="#ca8a04",
+            label="env_cleanup\nNombres que pertenecen a la sesión"];
+    apply [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
+           label="systemctl --user\nset-environment / unset-environment"];
+    dbus [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
+          label="dbus-daemon solamente\nUpdateActivationEnvironment\n(dbus-broker delega en systemd)"];
+    process [shape=oval, fillcolor="#bbf7d0", color="#15803d", fontcolor="#14532d",
+             label="El escritorio y los servicios activados\nreciben el entorno de la sesión"];
+
+    manager -> snapshot;
+    manager -> merge;
+    login -> merge;
+    identity -> loader;
+    merge -> loader -> diff;
+    diff -> marked;
+    diff -> apply;
+    apply -> dbus;
+    apply -> process;
+  }
+
+  subgraph cluster_cleanup {
+    label="Cierre · uxsm aux cleanup-env";
+    color="#fca5a5";
+    style="rounded,filled";
+    fillcolor="#ffffff";
+    fontname="DejaVu Sans Bold";
+
+    stop [shape=oval, fillcolor="#fee2e2", color="#b91c1c", fontcolor="#7f1d1d",
+          label="uxsm-env@ deja de ser necesario\no entra en conflicto con shutdown"];
+    compare [label="Compara env_pre, env_cleanup\ny el entorno actual"];
+    unset [label="Borra variables creadas\npor la sesión"];
+    restore [label="Restaura todos los valores\nde env_pre"];
+    remove [shape=folder, fillcolor="#e2e8f0", color="#64748b",
+            label="Borra env_pre, env_cleanup,\nenv_login, env_identity y command"];
+
+    stop -> compare -> unset -> restore -> remove;
+  }
+
+  process -> stop [label=" al cerrar la sesión ", color="#b91c1c"];
+  snapshot -> compare [style=dashed];
+  marked -> compare [style=dashed];
+}

@@ -1,0 +1,66 @@
+digraph session_start {
+  graph [
+    label="Arranque de una sesión",
+    labelloc=t,
+    fontsize=24,
+    fontname="DejaVu Sans Bold",
+    bgcolor="#f8fafc",
+    pad=0.25,
+    nodesep=0.42,
+    ranksep=0.55,
+    splines=polyline
+  ];
+  node [shape=box, style="rounded,filled", fontname="DejaVu Sans", fontsize=11,
+        color="#2563eb", fillcolor="#eff6ff", fontcolor="#0f172a", margin="0.15,0.10"];
+  edge [fontname="DejaVu Sans", fontsize=9, color="#64748b", fontcolor="#334155", arrowsize=0.75];
+
+  caller [shape=oval, fillcolor="#dbeafe", label="Display manager o terminal"];
+  start [label="uxsm start TARGET\ncmd/uxsm/start.go"];
+  kind [shape=diamond, label="¿TARGET es un único\nID terminado en .desktop?"];
+
+  entry [label="desktopentry.Find\nBusca la entrada por XDG\ny lee Exec= y DesktopNames="];
+  command [label="Comando directo\nComprueba el ejecutable\nid = nombre del programa"];
+  resolved [shape=note, color="#64748b", fillcolor="#f1f5f9",
+            label="startTarget\nid · argv · DesktopNames\n¿entrada o comando?"];
+
+  identity [label="session.DesktopNames + IdentityVars\nCalcula XDG_CURRENT_DESKTOP,\nXDG_SESSION_DESKTOP, XDG_MENU_PREFIX\ny XDG_SESSION_TYPE=x11"];
+  wait [label="Espera a que termine cualquier\nsesión anterior que aún se apaga"];
+  files [shape=folder, fillcolor="#fef3c7", color="#ca8a04",
+         label="$XDG_RUNTIME_DIR/uxsm\nenv_login\nenv_identity\ncommand (sólo comando directo)"];
+
+  bind [label="systemctl --user start\nuxsm-bindpid@PID.service"];
+  replace [label="exec systemctl --user start --wait\nuxsm-desktop@ID.service\n\nEl PID que vigila el login no cambia"];
+
+  env [fillcolor="#ede9fe", color="#7c3aed",
+       label="uxsm-env@ID.service\nuxsm aux prepare-env\nPrepara el entorno antes del escritorio"];
+  aux [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
+       label="uxsm-desktop@ID.service\nuxsm aux exec ID"];
+  source [shape=diamond, fillcolor="#f0fdf4", color="#15803d",
+          label="¿ID termina en .desktop?"];
+  reread [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
+          label="Vuelve a leer Exec=\nde la entrada original"];
+  saved [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
+         label="Lee el comando guardado\nen el directorio de runtime"];
+  desktop [shape=oval, fillcolor="#bbf7d0", color="#15803d", fontcolor="#14532d",
+           label="exec ESCRITORIO\nEl escritorio es el proceso principal\ndel servicio de systemd"];
+
+  caller -> start -> kind;
+  kind -> entry [label=" sí "];
+  kind -> command [label=" no "];
+  entry -> resolved;
+  command -> resolved;
+  resolved -> identity -> wait -> files;
+  files -> bind;
+  files -> replace;
+  replace -> env [label=" Requires + After "];
+  env -> aux;
+  aux -> source;
+  source -> reread [label=" sí "];
+  source -> saved [label=" no "];
+  reread -> desktop;
+  saved -> desktop;
+
+  {rank=same; entry; command}
+  {rank=same; bind; replace}
+  {rank=same; reread; saved}
+}

@@ -1,0 +1,68 @@
+digraph session_entries {
+  graph [
+    label="Generación e instalación de entradas de sesión",
+    labelloc=t,
+    fontsize=24,
+    fontname="DejaVu Sans Bold",
+    bgcolor="#f8fafc",
+    pad=0.28,
+    nodesep=0.45,
+    ranksep=0.58,
+    splines=polyline
+  ];
+  node [shape=box, style="rounded,filled", fontname="DejaVu Sans", fontsize=11,
+        color="#2563eb", fillcolor="#eff6ff", fontcolor="#0f172a", margin="0.15,0.10"];
+  edge [fontname="DejaVu Sans", fontsize=9, color="#64748b", fontcolor="#334155", arrowsize=0.75];
+
+  cli [shape=oval, fillcolor="#dbeafe", label="uxsm entry [opciones] FUENTE"];
+  mode [shape=diamond, label="¿Qué tipo se pide?"];
+
+  ref [label="Modo normal\nBusca FUENTE.desktop existente"];
+  direct [label="--exec\nEntrada existente, tabla known\no comando después de --"];
+  plain [label="--plain\nTabla known o comando\ndespués de --"];
+
+  validate [label="Construye Source y rechaza:\n• algo que ya usa uxsm\n• systemctl --user start\n• metasesiones como default/xinit-compat"];
+  names [label="Combina DesktopNames conocidos con -D\n-e los sustituye (requiere --force-names\nsi descartaría nombres conocidos)"];
+
+  out_ref [shape=note, fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
+           label="bspwm-uxsm.desktop\nExec=uxsm start bspwm.desktop\n\nReferencia la entrada original"];
+  out_direct [shape=note, fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
+              label="bspwm-uxsm.desktop\nExec=uxsm start -D bspwm -- bspwm\n\nComando directo; no necesita la original"];
+  out_plain [shape=note, fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
+             label="bspwm.desktop\nExec=bspwm\n\nEntrada normal, sin uxsm"];
+
+  destination [label="Comprueba el destino\nSi ya existe o taparía otra entrada,\nsin -f se rechaza"];
+  preview [label="Sin -i\nEnseña la ruta y el contenido\nsin escribir nada"];
+  write [shape=folder, fillcolor="#fef3c7", color="#ca8a04",
+         label="Con -i\n/usr/local/share/xsessions/\n(necesita permisos de root)"];
+  dm [shape=diamond, label="¿El display manager lee\n/usr/local/share/xsessions?"];
+  visible [shape=oval, fillcolor="#bbf7d0", color="#15803d", fontcolor="#14532d",
+           label="La sesión aparece\nen la pantalla de login"];
+  tools [fillcolor="#fff7ed", color="#ea580c", fontcolor="#7c2d12",
+         label="uxsm check informa\nuxsm setup xsessions-dir propone/aplica\nel cambio para LightDM o SDDM\n(GDM sólo explica el cambio)"];
+
+  cli -> mode;
+  mode -> ref [label=" normal "];
+  mode -> direct [label=" --exec "];
+  mode -> plain [label=" --plain "];
+  ref -> validate;
+  direct -> validate;
+  plain -> validate;
+  validate -> names;
+  names -> out_ref [label=" normal "];
+  names -> out_direct [label=" --exec "];
+  names -> out_plain [label=" --plain "];
+  out_ref -> destination;
+  out_direct -> destination;
+  out_plain -> destination;
+  destination -> preview [label=" sin -i "];
+  destination -> write [label=" -i "];
+  write -> dm;
+  dm -> visible [label=" sí "];
+  dm -> tools [label=" no "];
+  tools -> visible [label=" tras configurarlo "];
+
+  {rank=same; ref; direct; plain}
+  {rank=same; out_ref; out_direct; out_plain}
+  {rank=same; preview; write}
+}

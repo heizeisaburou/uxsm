@@ -1,0 +1,66 @@
+digraph systemd_lifecycle {
+  graph [
+    label="Unidades de systemd y cierre de la sesión",
+    labelloc=t,
+    fontsize=24,
+    fontname="DejaVu Sans Bold",
+    bgcolor="#f8fafc",
+    pad=0.28,
+    nodesep=0.55,
+    ranksep=0.70,
+    splines=polyline
+  ];
+  node [shape=box, style="rounded,filled", fontname="DejaVu Sans", fontsize=11,
+        color="#2563eb", fillcolor="#eff6ff", fontcolor="#0f172a", margin="0.15,0.10"];
+  edge [fontname="DejaVu Sans", fontsize=9, color="#475569", fontcolor="#334155", arrowsize=0.75];
+
+  login [shape=oval, fillcolor="#dbeafe", label="Proceso de la sesión\nuxsm start → systemctl --wait"];
+  bind [label="uxsm-bindpid@PID.service\naux waitpid PID"];
+  env [label="uxsm-env@ID.service\nprepare-env / cleanup-env"];
+  desktop [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
+           label="uxsm-desktop@ID.service\nProceso principal: escritorio"];
+  session [shape=folder, label="uxsm-session@ID.target"];
+  pre [shape=folder, fillcolor="#ede9fe", color="#7c3aed",
+       label="graphical-session-pre.target"];
+  graphical [shape=folder, fillcolor="#ede9fe", color="#7c3aed",
+             label="graphical-session.target"];
+
+  quit [shape=oval, color="#b91c1c", fillcolor="#fee2e2", fontcolor="#7f1d1d",
+        label="El escritorio termina\no falla"];
+  killed [shape=oval, color="#b91c1c", fillcolor="#fee2e2", fontcolor="#7f1d1d",
+          label="El display manager mata\nel proceso de sesión"];
+  stop [shape=oval, color="#b91c1c", fillcolor="#fee2e2", fontcolor="#7f1d1d",
+        label="uxsm stop"];
+  shutdown [shape=octagon, color="#b91c1c", fillcolor="#fecaca", fontcolor="#7f1d1d",
+            label="uxsm-shutdown.target"];
+  cleanup [fillcolor="#fef3c7", color="#ca8a04",
+           label="ExecStopPost=aux cleanup-env\nRestaura el entorno y borra\nlos ficheros de runtime"];
+  down [shape=oval, fillcolor="#e2e8f0", color="#64748b",
+        label="Sesión completamente parada"];
+
+  login -> bind [label=" arranca "];
+  login -> desktop [label=" espera "];
+  desktop -> env [label=" Requires / After "];
+  env -> pre [label=" BindsTo "];
+  desktop -> session [label=" BindsTo "];
+  session -> graphical [label=" BindsTo "];
+
+  desktop -> quit [style=dashed, arrowhead=none];
+  bind -> killed [style=dashed, arrowhead=none];
+  quit -> shutdown [label=" OnSuccess / OnFailure ", color="#b91c1c"];
+  killed -> shutdown [label=" OnSuccess / OnFailure ", color="#b91c1c"];
+  stop -> shutdown [color="#b91c1c"];
+
+  shutdown -> desktop [label=" Conflicts ", color="#b91c1c", style=dashed];
+  shutdown -> session [label=" Conflicts ", color="#b91c1c", style=dashed];
+  shutdown -> graphical [label=" Conflicts ", color="#b91c1c", style=dashed];
+  shutdown -> pre [label=" Conflicts ", color="#b91c1c", style=dashed];
+  shutdown -> env [label=" Conflicts ", color="#b91c1c", style=dashed];
+  env -> cleanup [label=" al parar "];
+  cleanup -> down;
+
+  {rank=same; login; bind}
+  {rank=same; env; desktop; session}
+  {rank=same; pre; graphical}
+  {rank=same; quit; killed; stop}
+}
