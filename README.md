@@ -3,7 +3,19 @@
 Gestor de sesiones X11 para `systemd --user`: la versión X11 de
 [uwsm](https://github.com/Vladimir-csp/uwsm).
 
-Todavía no hace nada.
+Arranca el escritorio como servicio de `systemd --user`, le prepara el entorno y, al salir, apaga
+la sesión entera y deja el gestor como estaba. Se lanza desde la entrada de sesión que elige el
+display manager:
+
+- `uxsm start bspwm.desktop` o `uxsm start -- bspwm`: arranca la sesión, de una entrada o de un
+  comando.
+- `uxsm stop`: la cierra.
+- `uxsm entry bspwm`: genera la entrada de sesión de uxsm, `bspwm-uxsm.desktop`, y la instala en
+  `/usr/local/share/xsessions`.
+- `uxsm check` y `uxsm setup xsessions-dir`: comprueban y arreglan que el display manager lea ese
+  directorio.
+
+Cómo funciona por dentro: [`docs/internals.md`](docs/internals.md).
 
 ## Estructura
 
@@ -12,13 +24,16 @@ cmd/uxsm/            el binario: reparto de subórdenes y cada suborden
 internal/            el código de uxsm, por paquetes
 data/                lo que se instala además del binario: unidades de systemd
 docs/                documentación técnica
-test/                pruebas de integración en máquinas virtuales
+test/                compilación de los paquetes, pruebas de integración y recogida
+                     de las entradas de sesión de cada distribución, en máquinas
+                     virtuales
 packaging/arch/      PKGBUILD para el AUR
 packaging/debian/    directorio debian/ para Debian y Ubuntu
 packaging/fedora/    .spec para Fedora
 packaging/opensuse/  .spec y .changes para openSUSE
 packaging/nix/       paquete para nixpkgs
 flake.nix            el paquete de Nix compilado desde este directorio
+.githooks/           hooks de git, que se activan con `make hooks`
 Makefile             compilación e instalación, lo que llaman todos salvo Nix
 ```
 
@@ -54,6 +69,11 @@ instalar se añade en el `Makefile`, en la lista de ficheros de cada paquete y e
   no en el `.spec`.
 - **NixOS**: `packaging/nix/package.nix` va a nixpkgs como `pkgs/by-name/ux/uxsm/package.nix`.
   Desde el repositorio, `nix build` compila el directorio actual con `flake.nix`.
+
+`make test-vm` compila los paquetes de cada distribución dentro de máquinas virtuales, con las
+recetas de `packaging/`, y ejecuta las pruebas de integración con ellos instalados.
+`make release` lo hace en todas las distribuciones y deja el resultado en `releases/latest`
+―[`docs/internals.md`](docs/internals.md#compilación-y-prueba-de-los-paquetes)―.
 
 Todos descargan el tarball de la etiqueta `v<versión>` de GitHub. Al publicar una versión hay
 que actualizar la suma del tarball donde la haya: `hash` en el de Nix, `sha256sums` en el

@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Notion
+Comment=This session logs you into Notion
+Exec=/usr/bin/notion
+TryExec=/usr/bin/notion
+Icon=
+Type=XSession

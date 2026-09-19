@@ -10,7 +10,11 @@
 #              o una lista separada por comas: ubuntu,fedora
 #   orden      lo que se ejecuta; por defecto, qué máquina es
 #
+# La orden recibe en UXSM_VM_DISTRO el nombre de la máquina: ubuntu, fedora…
+#
 # UXSM_VM_UPLOAD=dir copia dir a ~/uxsm en cada máquina antes de la orden.
+# UXSM_VM_DOWNLOAD=dir trae ~/uxsm/out de cada máquina a dir si la orden termina
+# bien.
 #
 #   test/vm.sh all
 #   test/vm.sh pair 'uname -r'
@@ -147,8 +151,18 @@ EOF
     fi
 
     # El código de salida de la orden, no el de sed.
-    { vm_ssh "$command" 2>&1; echo $? > "$work/status"; } | sed "s/^/[$distro] /"
-    return "$(cat "$work/status")"
+    { vm_ssh "export UXSM_VM_DISTRO=$distro; $command" 2>&1; echo $? > "$work/status"; } | sed -u "s/^/[$distro] /"
+    rc=$(cat "$work/status")
+    [ "$rc" -eq 0 ] || return "$rc"
+
+    # UXSM_VM_DOWNLOAD: lo que la orden haya dejado en ~/uxsm/out.
+    if [ -n "${UXSM_VM_DOWNLOAD:-}" ]; then
+        mkdir -p "$UXSM_VM_DOWNLOAD"
+        vm_ssh 'tar -C ~/uxsm/out -cf - .' | tar -C "$UXSM_VM_DOWNLOAD" -xf - || {
+            echo "vm.sh[$distro]: could not download ~/uxsm/out" >&2
+            return 1
+        }
+    fi
 }
 
 summary=

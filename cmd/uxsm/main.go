@@ -40,8 +40,11 @@ var rootCommands = group{
 	name:        "uxsm",
 	description: "Start and manage X11 sessions under systemd --user.",
 	commands: []command{
-		{"start", "start an X11 session from a session entry", runStart, false},
+		{"start", "start an X11 session from a session entry or a command", runStart, false},
 		{"stop", "stop the running session", runStop, false},
+		{"entry", "generate a session entry and install it", runEntry, false},
+		{"check", "check that the system is ready for uxsm", runCheck, false},
+		{"setup", "change the system so that uxsm works fully", runSetup, false},
 		{"version", "print the version", runVersion, false},
 		{"aux", "internal commands used by uxsm's systemd units", runAux, true},
 	},
@@ -83,7 +86,7 @@ func (g group) usage(w io.Writer) {
 	fmt.Fprintf(w, "Usage: %s <command> [options]\n\n%s\n\nCommands:\n", g.name, g.description)
 	for _, c := range g.commands {
 		if !c.hidden {
-			fmt.Fprintf(w, "  %-9s %s\n", c.name, c.summary)
+			fmt.Fprintf(w, "  %-12s %s\n", c.name, c.summary)
 		}
 	}
 	fmt.Fprintf(w, "\nRun \"%s <command> -h\" for help on a command.\n", g.name)
@@ -138,8 +141,8 @@ func isHelpFlag(a string) bool {
 
 // parseFlags lee las opciones de una suborden. Si en cualquier parte se pide
 // ayuda, la enseña por la salida estándar y devuelve flag.ErrHelp, que acaba
-// con código 0. Si no, los errores de opciones y su ayuda van a la salida de
-// error.
+// con código 0. Si una opción está mal, flag ya ha escrito el error y la ayuda
+// en la salida de error, y devuelve errUsage, que acaba con código 2.
 func parseFlags(fs *flag.FlagSet, args []string) error {
 	if wantsHelp(args) {
 		fs.SetOutput(os.Stdout)
@@ -147,7 +150,10 @@ func parseFlags(fs *flag.FlagSet, args []string) error {
 		return flag.ErrHelp
 	}
 	fs.SetOutput(os.Stderr)
-	return fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return errUsage
+	}
+	return nil
 }
 
 // newFlagSet crea el conjunto de opciones de una suborden con su propia ayuda:

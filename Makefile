@@ -25,10 +25,10 @@ export CGO_ENABLED
 endif
 
 BIN := bin/uxsm
-SRC := go.mod $(shell find . -name '*.go' -not -path './.gocache/*' -not -path './.private/*')
+SRC := go.mod $(shell find . \( -name '*.go' -o -name '*.sh' \) -path './internal/*' -o -name '*.go' -path './cmd/*')
 UNITS := $(wildcard data/systemd/user/*.in)
 
-.PHONY: all build test vet fmt install uninstall test-vm dist clean
+.PHONY: all build test vet fmt install uninstall test-vm release hooks dist clean
 
 all: build
 
@@ -65,17 +65,25 @@ uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/uxsm
 	for f in $(UNITS); do rm -f "$(DESTDIR)$(USERUNITDIR)/$$(basename "$$f" .in)"; done
 
-# Pruebas de integración en máquinas virtuales desechables: instala uxsm en un
-# árbol aparte, lo sube a cada máquina con las pruebas y ejecuta
-# test/integration/run.sh. DISTROS es quick, pair, all o una lista con comas.
-# Sin cgo, para que el binario no dependa de la glibc de este sistema.
+# Pruebas de integración en máquinas virtuales desechables, con los paquetes
+# reales: test/release.sh compila el paquete de cada distribución en una máquina
+# de esa distribución, lo trae a build/release y lo instala en una máquina limpia
+# para ejecutar test/integration/run.sh. DISTROS es quick, pair, all o una lista con
+# comas; sólo se compilan los paquetes de esas distribuciones.
 DISTROS ?= quick
-VM_STAGE := build/vm
 test-vm:
-	rm -rf $(VM_STAGE)
-	$(MAKE) install BIN=$(VM_STAGE)/uxsm DESTDIR=$(CURDIR)/$(VM_STAGE)/root PREFIX=/usr CGO_ENABLED=0
-	cp -r test/integration $(VM_STAGE)/integration
-	UXSM_VM_UPLOAD=$(VM_STAGE) test/vm.sh $(DISTROS) 'sh ~/uxsm/integration/run.sh'
+	test/release.sh $(DISTROS)
+
+# Lo mismo en todas las distribuciones y, si todo pasa, build/release queda como
+# releases/latest.
+release:
+	test/release.sh --publish
+
+# Activa los hooks de .githooks en este clon: pre-commit pasa gofmt, vet y las
+# pruebas unitarias; pre-push exige `make release` antes de subir a main, a
+# master o una etiqueta vX.Y.Z.
+hooks:
+	git config core.hooksPath .githooks
 
 # El tarball de una versión, el mismo que genera GitHub para una etiqueta.
 dist:

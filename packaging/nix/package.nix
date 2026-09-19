@@ -31,7 +31,7 @@ buildGoModule (finalAttrs: {
     "-X main.version=${finalAttrs.version}"
   ];
 
-  # Lo que el Makefile instala además del binario.
+  # What the Makefile installs besides the binary.
   postInstall = ''
     for f in data/systemd/user/*.in; do
       unit=$out/lib/systemd/user/$(basename "$f" .in)

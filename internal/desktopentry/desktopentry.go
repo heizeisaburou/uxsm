@@ -1,5 +1,6 @@
 // Package desktopentry lee entradas de sesión (.desktop) según la Desktop Entry
-// Specification: sólo lo que uxsm necesita para arrancar una sesión.
+// Specification: sólo lo que uxsm necesita para arrancar una sesión y para
+// generar entradas a partir de otras.
 package desktopentry
 
 import (
@@ -15,6 +16,10 @@ import (
 	"github.com/heizeisaburou/uxsm/internal/xdg"
 )
 
+// XSessions es el subdirectorio de cada directorio de datos XDG donde están las
+// entradas de sesión X11: /usr/share/xsessions.
+const XSessions = "xsessions"
+
 // Entry es una entrada de sesión ya leída.
 type Entry struct {
 	// ID es el nombre del fichero, con .desktop: "bspwm.desktop".
@@ -23,6 +28,8 @@ type Entry struct {
 	Path string
 	// Name es la clave Name=, sin traducciones.
 	Name string
+	// Comment es la clave Comment=, sin traducciones.
+	Comment string
 	// Exec es la clave Exec= tal cual; para ejecutarla, ver SplitExec.
 	Exec string
 	// DesktopNames es la lista de DesktopNames=.
@@ -40,24 +47,33 @@ func Find(subdir, id string) (*Entry, error) {
 	}
 
 	for _, dir := range xdg.DataDirs() {
-		path := filepath.Join(dir, subdir, id)
-		f, err := os.Open(path)
+		e, err := Read(filepath.Join(dir, subdir, id))
 		if errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
-		if err != nil {
-			return nil, err
-		}
-		e, err := parse(f)
-		f.Close()
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", path, err)
-		}
-		e.ID, e.Path = id, path
-		return e, nil
+		return e, err
 	}
 
 	return nil, fmt.Errorf("session entry %q not found in any %s directory", id, subdir)
+}
+
+// Read lee la entrada del fichero path. Su ID es el nombre del fichero.
+func Read(path string) (*Entry, error) {
+	id := filepath.Base(path)
+	if err := checkID(id); err != nil {
+		return nil, err
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	e, err := parse(f)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	e.ID, e.Path = id, path
+	return e, nil
 }
 
 // checkID comprueba que id es el nombre de un fichero .desktop y nada más: sin
@@ -105,6 +121,8 @@ func parse(r io.Reader) (*Entry, error) {
 		switch key {
 		case "Name":
 			e.Name = unescape(value)
+		case "Comment":
+			e.Comment = unescape(value)
 		case "Exec":
 			e.Exec = value
 			seenExec = true

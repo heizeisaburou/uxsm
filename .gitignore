@@ -4,6 +4,7 @@
 /bin
 /dist
 /build
+/releases
 
 # Package build leftovers
 /packaging/arch/*.pkg.tar.*

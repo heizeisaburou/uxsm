@@ -1,0 +1,18 @@
+[Unit]
+Description=uxsm: environment of the X11 session of %i
+Documentation=https://github.com/heizeisaburou/uxsm
+BindsTo=graphical-session-pre.target
+Before=graphical-session-pre.target
+PropagatesStopTo=graphical-session-pre.target
+Conflicts=uxsm-shutdown.target
+Before=uxsm-shutdown.target
+StopWhenUnneeded=yes
+CollectMode=inactive-or-failed
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=@BINDIR@/uxsm aux prepare-env
+ExecStopPost=@BINDIR@/uxsm aux cleanup-env
+Restart=no
+Slice=session.slice

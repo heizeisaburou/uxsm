@@ -10,10 +10,13 @@ Rules-Requires-Root: no
 
 Package: uxsm
 Architecture: any
-Depends: systemd,
+# dbus-user-session provides the user manager's session bus at
+# $XDG_RUNTIME_DIR/bus, which `systemctl --user start --wait` needs. Ubuntu
+# installs it by default; minimal Debian installations do not.
+Depends: dbus-user-session,
+         systemd,
          ${misc:Depends},
          ${shlibs:Depends},
-Built-Using: ${misc:Built-Using}
 Description: X11 session manager for systemd --user
  uxsm starts X11 graphical sessions under systemd --user the way uwsm does
  for Wayland: it prepares the session environment, binds the session to

@@ -10,14 +10,21 @@ export GOPROXY := off
 %:
 	dh $@
 
+# Go writes no GNU build ID unless asked; dh_strip needs one to split the
+# debug symbols into the -dbgsym package. gobuildid derives it from Go's own
+# build ID, so the build stays reproducible.
 override_dh_auto_build:
-	$(MAKE) build VERSION=$(DEB_VERSION_UPSTREAM)
+	$(MAKE) build VERSION=$(DEB_VERSION_UPSTREAM) GO_LDFLAGS='-B gobuildid'
 
 override_dh_auto_test:
 	$(MAKE) test
 
 override_dh_auto_install:
 	$(MAKE) install DESTDIR=$(CURDIR)/debian/uxsm PREFIX=/usr VERSION=$(DEB_VERSION_UPSTREAM)
+
+# Go compresses its DWARF sections, which dwz cannot handle and fails on;
+# dh-golang skips dh_dwz too.
+override_dh_dwz:
 
 override_dh_auto_clean:
 	$(MAKE) clean

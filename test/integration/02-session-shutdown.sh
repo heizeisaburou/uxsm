@@ -32,8 +32,8 @@ start_session() {
 # expect_down CÓMO comprueba que no queda nada de la sesión tras cerrarla así.
 expect_down() {
     units="$desktop $session graphical-session.target uxsm-it-session.service"
-    # is-active con varias unidades termina bien si alguna está activa.
-    wait_for 15 sh -c "! systemctl --user is-active $units" ||
+    # shellcheck disable=SC2086
+    wait_stopped 15 $units ||
         fail "after $1 still active: $(systemctl --user is-active $units | tr '\n' ' ')"
     wait_for 5 sh -c '! pgrep -u "$(id -u)" -x bspwm' || fail "after $1 bspwm is still running"
     [ -z "$(systemctl --user list-units --plain --no-legend --state=active 'uxsm-bindpid@*')" ] ||

@@ -1,6 +1,8 @@
 [Unit]
 Description=uxsm: X11 desktop of %i
 Documentation=https://github.com/heizeisaburou/uxsm
+Requires=uxsm-env@%i.service
+After=uxsm-env@%i.service graphical-session-pre.target
 BindsTo=uxsm-session@%i.target
 Before=uxsm-session@%i.target graphical-session.target
 PropagatesStopTo=uxsm-session@%i.target graphical-session.target
