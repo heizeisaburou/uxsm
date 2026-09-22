@@ -57,7 +57,7 @@ Del resultado salen `XDG_CURRENT_DESKTOP`, `XDG_SESSION_DESKTOP`, `XDG_MENU_PREF
 | --- | --- |
 | `uxsm-bindpid@PID.service` | Espera con `pidfd` al proceso que abrió la sesión. |
 | `uxsm-env@ID.service` | Prepara el entorno antes del escritorio y lo restaura al parar. |
-| `uxsm-desktop@ID.service` | Ejecuta el escritorio como proceso principal. |
+| `uxsm-desktop@ID.service` | Ejecuta el escritorio como proceso principal y espera a su gestor de ventanas. |
 | `uxsm-session@ID.target` | Representa la sesión uxsm y arrastra `graphical-session.target`. |
 | `uxsm-shutdown.target` | Entra en conflicto con las unidades activas y coordina su cierre. |
 
@@ -68,6 +68,20 @@ La sesión se cierra por el mismo camino si:
 - alguien ejecuta `uxsm stop`.
 
 Los dos primeros casos activan `uxsm-shutdown.target` mediante `OnSuccess=` y `OnFailure=`. `uxsm stop` activa ese target directamente. Sus conflictos paran el escritorio, los targets gráficos y el servicio de entorno; el `ExecStopPost=` de este último siempre intenta restaurar el estado previo.
+
+### Cuándo la sesión está lista
+
+El escritorio no cuenta como arrancado en cuanto empieza a ejecutarse. `uxsm-desktop@ID.service` lleva un `ExecStartPost=` que ejecuta `uxsm aux wait-wm`, y systemd no da el servicio por arrancado hasta que esa orden termina. Como los targets de la sesión van detrás del servicio, `uxsm-session@ID.target` y `graphical-session.target` esperan con él, y lo que arranque con la sesión gráfica encuentra un escritorio donde colocarse.
+
+La espera es la comprobación de EWMH: la ventana raíz tiene `_NET_SUPPORTING_WM_CHECK` apuntando a una ventana del gestor de ventanas, y esa ventana tiene la misma propiedad apuntando a sí misma. Lo segundo distingue al gestor que está gobernando la pantalla de la marca que deja uno que murió de golpe. uxsm se lo pregunta al servidor X hablando el protocolo X11 desde `internal/x11`, sin libX11 ni `xprop`: es el saludo inicial y dos propiedades, y así la sesión no depende en tiempo de ejecución de ningún paquete de Xorg.
+
+Si no llega a haber gestor de ventanas, `TimeoutStartSec=60` corta la espera: el servicio falla, su `OnFailure=` apaga la sesión y el display manager vuelve a la pantalla de inicio. Una sesión que no es un escritorio ―un solo programa X11, por ejemplo― puede quitar la espera con un fichero de anulación de la unidad:
+
+```ini
+# ~/.config/systemd/user/uxsm-desktop@.service.d/no-wait-wm.conf
+[Service]
+ExecStartPost=
+```
 
 uxsm no activa actualmente `xdg-desktop-autostart.target`. Un escritorio con gestor de sesión puede ejecutar su propio autostart, pero una sesión de un gestor de ventanas independiente no recibe aún autostart XDG por parte de uxsm.
 
@@ -172,6 +186,7 @@ Las pruebas de `test/integration` usan Xvfb como servidor X y sustituyen al disp
 | `03-session-identity.sh` | `DesktopNames`, `-D`, `-e` y variables XDG. |
 | `04-session-environment.sh` | Carga de `env*` y restauración exacta por los tres cierres. |
 | `05-generated-entries.sh` | Instalación, sobrescritura, `check` y `setup`. |
+| `06-window-manager.sh` | Espera al gestor de ventanas y sesión que no llega a tenerlo. |
 
 Las distribuciones cubiertas son Ubuntu 24.04, Debian 13, Arch, Fedora 43 y openSUSE Tumbleweed. `quick` usa Ubuntu; `pair`, Ubuntu y Arch; `all`, las cinco.
 
@@ -189,6 +204,7 @@ El hook `pre-commit` ejecuta `gofmt`, `go vet`, las pruebas unitarias y `sh -n` 
 | `internal/systemd` | Operaciones contra `systemd --user` y D-Bus. |
 | `internal/dm` | Detección y configuración de display managers. |
 | `internal/pidwait` | Espera de procesos ajenos mediante `pidfd`. |
+| `internal/x11` | Conversación con el servidor X para saber si hay gestor de ventanas. |
 | `data/systemd/user` | Plantillas de unidades instaladas. |
 | `test` | Integración, VMs, paquetes y recogida de sesiones de distribuciones. |
 | `packaging` | Recetas de paquetes usadas por las pruebas de release. |

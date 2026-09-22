@@ -8,11 +8,13 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/heizeisaburou/uxsm/internal/desktopentry"
 	"github.com/heizeisaburou/uxsm/internal/pidwait"
 	"github.com/heizeisaburou/uxsm/internal/session"
 	"github.com/heizeisaburou/uxsm/internal/sessionenv"
+	"github.com/heizeisaburou/uxsm/internal/x11"
 )
 
 // auxCommands son las subórdenes internas, las que llaman las unidades de
@@ -24,6 +26,7 @@ var auxCommands = group{
 	commands: []command{
 		{"exec", "replace this process with the desktop of the session", runAuxExec, false},
 		{"waitpid", "wait until a process exits", runAuxWaitPID, false},
+		{"wait-wm", "wait until a window manager manages the X display", runAuxWaitWM, false},
 		{"prepare-env", "set up the session environment in the systemd user manager", runAuxPrepareEnv, false},
 		{"cleanup-env", "restore the systemd user manager environment from before the session", runAuxCleanupEnv, false},
 	},
@@ -119,6 +122,43 @@ func runAuxWaitPID(args []string) error {
 		return fmt.Errorf("invalid PID %q", fs.Arg(0))
 	}
 	return pidwait.Wait(pid)
+}
+
+// waitWMInterval es cada cuánto se le pregunta al servidor X si ya hay gestor
+// de ventanas. Es una pregunta barata ―dos propiedades por un socket de unix― y
+// medio segundo de escritorio parado se nota, así que se pregunta a menudo.
+const waitWMInterval = 100 * time.Millisecond
+
+// runAuxWaitWM espera a que el escritorio tenga gestor de ventanas:
+// `uxsm aux wait-wm`.
+//
+// Es el ExecStartPost= de uxsm-desktop@.service. systemd no da por arrancado el
+// servicio hasta que termina su ExecStartPost=, y detrás del servicio van
+// uxsm-session@.target y graphical-session.target: así lo que arranque con la
+// sesión encuentra un escritorio con gestor de ventanas, y no una pantalla
+// donde todavía no se puede colocar nada.
+//
+// La espera no tiene límite propio: lo pone TimeoutStartSec= en la unidad. Si
+// se acaba, systemd mata esta espera, el servicio falla y su OnFailure= apaga
+// la sesión, que es lo que devuelve el control al display manager.
+func runAuxWaitWM(args []string) error {
+	fs := newFlagSet("aux wait-wm", "",
+		"Wait until an EWMH window manager manages the X display of the session.")
+	timeout := fs.Duration("timeout", 0, "give up after this `duration`; zero waits with no limit of its own")
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		fs.Usage()
+		return errUsage
+	}
+
+	wm, err := x11.WaitForManager("", *timeout, waitWMInterval)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("window manager ready: %s\n", wm)
+	return nil
 }
 
 // runAuxPrepareEnv monta el entorno de la sesión en el gestor: `uxsm aux prepare-env`.

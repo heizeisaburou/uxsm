@@ -17,5 +17,10 @@ CollectMode=inactive-or-failed
 [Service]
 Type=exec
 ExecStart=@BINDIR@/uxsm aux exec %i
+# Hasta que hay gestor de ventanas, el servicio no cuenta como arrancado y la
+# sesión no sigue. Si no llega a haberlo, el servicio falla al agotarse
+# TimeoutStartSec= y OnFailure= apaga la sesión.
+ExecStartPost=@BINDIR@/uxsm aux wait-wm
+TimeoutStartSec=60
 Restart=no
 Slice=session.slice

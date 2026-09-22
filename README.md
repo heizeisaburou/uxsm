@@ -3,9 +3,9 @@
 Gestor de sesiones X11 para `systemd --user`: la versión X11 de
 [uwsm](https://github.com/Vladimir-csp/uwsm).
 
-Arranca el escritorio como servicio de `systemd --user`, le prepara el entorno y, al salir, apaga
-la sesión entera y deja el gestor como estaba. Se lanza desde la entrada de sesión que elige el
-display manager:
+Arranca el escritorio como servicio de `systemd --user`, le prepara el entorno, no da la sesión
+gráfica por arrancada hasta que hay gestor de ventanas y, al salir, apaga la sesión entera y deja
+el gestor como estaba. Se lanza desde la entrada de sesión que elige el display manager:
 
 - `uxsm start bspwm.desktop` o `uxsm start -- bspwm`: arranca la sesión, de una entrada o de un
   comando.
