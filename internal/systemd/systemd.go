@@ -34,6 +34,14 @@ func SessionTarget(id string) string {
 	return "uxsm-session@" + id + ".target"
 }
 
+// AutostartTarget es el target del autostart XDG de una sesión:
+// "uxsm-autostart@bspwm.desktop.target". Al arrancarlo arrastra el target
+// estándar de systemd, que es lo único que lo puede arrancar: ese target tiene
+// RefuseManualStart=.
+func AutostartTarget(id string) string {
+	return "uxsm-autostart@" + id + ".target"
+}
+
 // BindPIDUnit es la unidad que vigila el proceso pid de la sesión y la apaga
 // cuando termina: "uxsm-bindpid@1234.service".
 func BindPIDUnit(pid int) string {
@@ -171,7 +179,21 @@ func LiveUnits(patterns ...string) ([]string, error) {
 
 // Start arranca unit y espera a que systemd termine el arranque.
 func Start(unit string) error {
-	cmd := exec.Command("systemctl", "--user", "start", unit)
+	return systemctl("start", unit)
+}
+
+// StartNoBlock arranca unit sin esperar a que systemd acabe el trabajo. Es lo
+// que hay que usar desde dentro de otra unidad, como hace el ExecStartPost= del
+// escritorio: esperar allí a un trabajo de systemd puede dejar a los dos
+// esperándose.
+func StartNoBlock(unit string) error {
+	return systemctl("start", "--no-block", unit)
+}
+
+// systemctl ejecuta una orden de systemctl sobre el gestor del usuario y deja
+// lo que diga en la salida de uxsm.
+func systemctl(args ...string) error {
+	cmd := exec.Command("systemctl", append([]string{"--user"}, args...)...)
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	return cmd.Run()
 }

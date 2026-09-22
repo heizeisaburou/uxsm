@@ -10,6 +10,11 @@ type Known struct {
 	// pero sin ruta, para que valga en cualquier distribución. Vacío si no hay
 	// una que valga en todas: entonces FromTable no la puede usar.
 	Exec string
+	// WindowManager dice que la sesión es un gestor de ventanas suelto, sin
+	// gestor de sesión detrás. Eso decide quién lanza el autostart XDG: un
+	// escritorio lo lanza él mismo y uxsm no debe lanzarlo también; con un
+	// gestor de ventanas, si no lo lanza uxsm no lo lanza nadie.
+	WindowManager bool
 }
 
 // known son los escritorios conocidos, por ID de entrada.
@@ -147,97 +152,116 @@ var known = map[string]Known{
 	// Gestores de ventanas.
 	"awesome.desktop": {
 		Name: "awesome", Comment: "Highly configurable framework window manager",
-		DesktopNames: []string{"awesome"}, // ninguna
-		Exec:         "awesome",
+		DesktopNames:  []string{"awesome"}, // ninguna
+		Exec:          "awesome",
+		WindowManager: true,
 	},
 	"blackbox.desktop": {
 		Name: "blackbox", Comment: "This session logs you into Blackbox",
-		DesktopNames: []string{"blackbox"}, // ninguna
-		Exec:         "blackbox",
+		DesktopNames:  []string{"blackbox"}, // ninguna
+		Exec:          "blackbox",
+		WindowManager: true,
 	},
 	"bspwm.desktop": {
 		Name: "bspwm", Comment: "Binary space partitioning window manager",
-		DesktopNames: []string{"bspwm"}, // Arch, Debian
-		Exec:         "bspwm",
+		DesktopNames:  []string{"bspwm"}, // Arch, Debian
+		Exec:          "bspwm",
+		WindowManager: true,
 	},
 	"cwm.desktop": {
 		Name: "cwm", Comment: "Lightweight window manager for X11",
-		DesktopNames: []string{"cwm"}, // Fedora
-		Exec:         "cwm",
+		DesktopNames:  []string{"cwm"}, // Fedora
+		Exec:          "cwm",
+		WindowManager: true,
 	},
 	"dwm.desktop": {
 		Name: "dwm", Comment: "dynamic window manager",
-		DesktopNames: []string{"dwm"}, // Debian
-		Exec:         "dwm",
+		DesktopNames:  []string{"dwm"}, // Debian
+		Exec:          "dwm",
+		WindowManager: true,
 	},
 	"fluxbox.desktop": {
 		Name: "fluxbox", Comment: "Highly configurable and low resource X11 Window manager",
-		DesktopNames: []string{"fluxbox"}, // ninguna
-		Exec:         "startfluxbox",
+		DesktopNames:  []string{"fluxbox"}, // ninguna
+		Exec:          "startfluxbox",
+		WindowManager: true,
 	},
 	"fvwm3.desktop": {
 		Name: "FVWM3", Comment: "F? Virtual Window Manager",
-		DesktopNames: []string{"FVWM3", "FVWM"}, // Arch, Debian
-		Exec:         "fvwm3",
+		DesktopNames:  []string{"FVWM3", "FVWM"}, // Arch, Debian
+		Exec:          "fvwm3",
+		WindowManager: true,
 	},
 	"herbstluftwm.desktop": {
 		Name: "herbstluftwm", Comment: "Manual tiling window manager",
-		DesktopNames: []string{"herbstluftwm"}, // ninguna
-		Exec:         "herbstluftwm",
+		DesktopNames:  []string{"herbstluftwm"}, // ninguna
+		Exec:          "herbstluftwm",
+		WindowManager: true,
 	},
 	"i3.desktop": {
 		Name: "i3", Comment: "improved dynamic tiling window manager",
-		DesktopNames: []string{"i3"}, // todas
-		Exec:         "i3",
+		DesktopNames:  []string{"i3"}, // todas
+		Exec:          "i3",
+		WindowManager: true,
 	},
 	"icewm.desktop": {
 		Name: "IceWM", Comment: "Simple and fast window manager",
-		DesktopNames: []string{"ICEWM"}, // todas
-		Exec:         "icewm",
+		DesktopNames:  []string{"ICEWM"}, // todas
+		Exec:          "icewm",
+		WindowManager: true,
 	},
 	"icewm-session.desktop": {
 		Name: "IceWM Session", Comment: "This session logs you into IceWM",
-		DesktopNames: []string{"ICEWM"}, // todas
-		Exec:         "icewm-session",
+		DesktopNames:  []string{"ICEWM"}, // todas
+		Exec:          "icewm-session",
+		WindowManager: true,
 	},
 	"jwm.desktop": {
 		Name: "JWM", Comment: "Minimalistic pure X11 window manager with menu/tray support",
-		DesktopNames: []string{"jwm"}, // ninguna
-		Exec:         "jwm",
+		DesktopNames:  []string{"jwm"}, // ninguna
+		Exec:          "jwm",
+		WindowManager: true,
 	},
 	"openbox.desktop": {
 		Name: "Openbox", Comment: "Log in using the Openbox window manager (without a session manager)",
-		DesktopNames: []string{"openbox"}, // ninguna
-		Exec:         "openbox-session",
+		DesktopNames:  []string{"openbox"}, // ninguna
+		Exec:          "openbox-session",
+		WindowManager: true,
 	},
 	"pekwm.desktop": {
 		Name: "PekWM", Comment: "Tabbed X11 window manager",
-		DesktopNames: []string{"pekwm"}, // ninguna
-		Exec:         "pekwm",
+		DesktopNames:  []string{"pekwm"}, // ninguna
+		Exec:          "pekwm",
+		WindowManager: true,
 	},
 	"qtile.desktop": {
 		Name: "Qtile", Comment: "Qtile Session",
-		DesktopNames: []string{"qtile"}, // Arch
-		Exec:         "qtile start",
+		DesktopNames:  []string{"qtile"}, // Arch
+		Exec:          "qtile start",
+		WindowManager: true,
 	},
 	"spectrwm.desktop": {
 		Name: "spectrwm", Comment: "The spectrwm window manager",
-		DesktopNames: []string{"spectrwm"}, // Debian
-		Exec:         "spectrwm",
+		DesktopNames:  []string{"spectrwm"}, // Debian
+		Exec:          "spectrwm",
+		WindowManager: true,
 	},
 	"stumpwm.desktop": {
 		Name: "Stumpwm", Comment: "Tiling, keyboard driven Common Lisp window manager",
-		DesktopNames: []string{"stumpwm"}, // ninguna
-		Exec:         "stumpwm",
+		DesktopNames:  []string{"stumpwm"}, // ninguna
+		Exec:          "stumpwm",
+		WindowManager: true,
 	},
 	"wmaker.desktop": {
 		Name: "Window Maker", Comment: "This session logs you into Window Maker",
-		DesktopNames: []string{"WindowMaker"}, // todas
-		Exec:         "wmaker",
+		DesktopNames:  []string{"WindowMaker"}, // todas
+		Exec:          "wmaker",
+		WindowManager: true,
 	},
 	"xmonad.desktop": {
 		Name: "Xmonad", Comment: "Lightweight X11 tiled window manager written in Haskell",
-		DesktopNames: []string{"xmonad"}, // ninguna
-		Exec:         "xmonad",
+		DesktopNames:  []string{"xmonad"}, // ninguna
+		Exec:          "xmonad",
+		WindowManager: true,
 	},
 }

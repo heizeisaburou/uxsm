@@ -26,6 +26,11 @@ const (
 	// IdentityFile son las variables de identidad que ha calculado uxsm start:
 	// lo que devuelve IdentityVars (función en identity.go).
 	IdentityFile = "env_identity"
+	// AutostartFile es la marca de que esta sesión lanza el autostart XDG.
+	// La escribe uxsm start cuando le toca a uxsm lanzarlo y la mira
+	// `uxsm aux autostart`, que si no está no arranca nada. Su contenido es
+	// la razón de la decisión, para el diario.
+	AutostartFile = "autostart"
 	// CommandFile es la línea de órdenes del escritorio cuando la sesión se
 	// arranca con un comando (`uxsm start -- bspwm`) en vez de con una entrada:
 	// uxsm aux exec la lee de aquí. Va en el mismo formato que los entornos, un

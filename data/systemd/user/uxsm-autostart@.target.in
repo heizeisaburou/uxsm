@@ -1,0 +1,18 @@
+[Unit]
+Description=uxsm: XDG autostart of %i
+Documentation=https://github.com/heizeisaburou/uxsm
+# Ninguna unidad tira de este target: lo arranca `uxsm aux autostart`, desde el
+# ExecStartPost= del escritorio, y sólo en las sesiones en las que el autostart
+# le toca a uxsm. Al arrancarlo, arrastra el target estándar de systemd, que no
+# se puede arrancar a mano (RefuseManualStart=).
+PartOf=graphical-session.target
+After=uxsm-session@%i.target graphical-session.target
+BindsTo=xdg-desktop-autostart.target
+Before=xdg-desktop-autostart.target
+PropagatesStopTo=xdg-desktop-autostart.target
+Conflicts=uxsm-shutdown.target
+Before=uxsm-shutdown.target
+CollectMode=inactive-or-failed
+# Sin StopWhenUnneeded=: a este target no le tira nadie, lo arranca uxsm, así
+# que systemd lo pararía nada más arrancarlo por no hacerle falta a ninguna
+# unidad. Lo paran el PartOf= de la sesión gráfica y el Conflicts= del cierre.

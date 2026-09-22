@@ -59,6 +59,7 @@ Del resultado salen `XDG_CURRENT_DESKTOP`, `XDG_SESSION_DESKTOP`, `XDG_MENU_PREF
 | `uxsm-env@ID.service` | Prepara el entorno antes del escritorio y lo restaura al parar. |
 | `uxsm-desktop@ID.service` | Ejecuta el escritorio como proceso principal y espera a su gestor de ventanas. |
 | `uxsm-session@ID.target` | Representa la sesión uxsm y arrastra `graphical-session.target`. |
+| `uxsm-autostart@ID.target` | Arrastra `xdg-desktop-autostart.target` cuando el autostart le toca a uxsm. |
 | `uxsm-shutdown.target` | Entra en conflicto con las unidades activas y coordina su cierre. |
 
 La sesión se cierra por el mismo camino si:
@@ -83,7 +84,17 @@ Si no llega a haber gestor de ventanas, `TimeoutStartSec=60` corta la espera: el
 ExecStartPost=
 ```
 
-uxsm no activa actualmente `xdg-desktop-autostart.target`. Un escritorio con gestor de sesión puede ejecutar su propio autostart, pero una sesión de un gestor de ventanas independiente no recibe aún autostart XDG por parte de uxsm.
+### Autostart XDG
+
+Detrás de la espera al gestor de ventanas, el segundo `ExecStartPost=` del escritorio arranca `uxsm-autostart@ID.target`, que arrastra `xdg-desktop-autostart.target`. A partir de ahí el trabajo es de systemd: `systemd-xdg-autostart-generator` crea una `app-<nombre>@autostart.service` por cada entrada de autostart y las filtra por `OnlyShowIn=` y `NotShowIn=` con el `XDG_CURRENT_DESKTOP` del gestor. Las entradas arrancan, por tanto, con el escritorio ya en pantalla, y se paran con `graphical-session.target`.
+
+uxsm no lo activa siempre. Un escritorio con gestor de sesión lanza sus entradas de autostart él mismo, y ni él ni systemd comprueban si el otro ya las ha lanzado: en Xfce, cada entrada arranca dos veces. Así que `uxsm start` lo decide a partir de los nombres del escritorio y la tabla de escritorios conocidos:
+
+- todos los nombres son de gestores de ventanas sueltos, como `bspwm`: uxsm activa el autostart, porque si no lo lanza él no lo lanza nadie;
+- algún nombre es de un escritorio con gestor de sesión, como `XFCE`: no lo activa;
+- algún nombre no está en la tabla: tampoco lo activa, porque no puede saber si ese escritorio lanza el suyo.
+
+La decisión se escribe en `$XDG_RUNTIME_DIR/uxsm/autostart`, y quien la mira es `uxsm aux autostart`: con la marca arranca el target, y sin ella no hace nada. Los dos rodeos tienen motivo. La decisión no puede ir en un `Condition*=` de la unidad, porque las dependencias de una unidad se resuelven al montar el trabajo, antes de comprobar sus condiciones: el autostart arrancaría igual en las sesiones en las que la unidad se salta. Y el target estándar no se puede arrancar directamente, porque lleva `RefuseManualStart=`; tiene que arrastrarlo una unidad propia. El motivo va además a la salida de `uxsm start`, es decir al diario de la sesión. `uxsm start -a yes` y `-a no` deciden en lugar de la tabla.
 
 ## Entorno de la sesión
 
@@ -187,6 +198,7 @@ Las pruebas de `test/integration` usan Xvfb como servidor X y sustituyen al disp
 | `04-session-environment.sh` | Carga de `env*` y restauración exacta por los tres cierres. |
 | `05-generated-entries.sh` | Instalación, sobrescritura, `check` y `setup`. |
 | `06-window-manager.sh` | Espera al gestor de ventanas y sesión que no llega a tenerlo. |
+| `07-xdg-autostart.sh` | Autostart XDG: con gestor de ventanas, con escritorio y con `-a yes`. |
 
 Las distribuciones cubiertas son Ubuntu 24.04, Debian 13, Arch, Fedora 43 y openSUSE Tumbleweed. `quick` usa Ubuntu; `pair`, Ubuntu y Arch; `all`, las cinco.
 

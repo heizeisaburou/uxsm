@@ -21,6 +21,9 @@ ExecStart=@BINDIR@/uxsm aux exec %i
 # sesión no sigue. Si no llega a haberlo, el servicio falla al agotarse
 # TimeoutStartSec= y OnFailure= apaga la sesión.
 ExecStartPost=@BINDIR@/uxsm aux wait-wm
+# Y con el escritorio ya en pantalla, el autostart XDG, si le toca a uxsm. El "-"
+# es a propósito: una sesión no se cae porque falle el autostart.
+ExecStartPost=-@BINDIR@/uxsm aux autostart %i
 TimeoutStartSec=60
 Restart=no
 Slice=session.slice

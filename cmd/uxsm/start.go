@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/heizeisaburou/uxsm/internal/desktopentry"
 	"github.com/heizeisaburou/uxsm/internal/session"
+	"github.com/heizeisaburou/uxsm/internal/sessionentry"
 	"github.com/heizeisaburou/uxsm/internal/systemd"
 )
 
@@ -30,15 +32,16 @@ import (
 //  4. Guarda en $XDG_RUNTIME_DIR/uxsm el entorno que le ha dado el display
 //     manager y esa identidad, y con un comando, también el comando. Con eso,
 //     uxsm-env@.service monta el entorno de la sesión en el gestor antes de que
-//     arranque el escritorio, y lo limpia al cerrar.
+//     arranque el escritorio, y lo limpia al cerrar. Deja ahí también la marca
+//     que dice si esta sesión lanza el autostart XDG (markAutostart).
 //  5. Arranca uxsm-bindpid@<pid>.service con su propio PID, para que la sesión se
 //     apague si el display manager mata este proceso.
 //  6. Se sustituye por `systemctl --user start --wait uxsm-desktop@<id>.service`,
 //     que no vuelve hasta que el escritorio termina. Con exec el PID no cambia,
 //     así que el PID que vigila bindpid sigue siendo el de la sesión.
 func runStart(args []string) error {
-	fs := newFlagSet("start", "[-e] [-D names] <entry.desktop>\n"+
-		"       uxsm start [-e] [-D names] [--] <command> [args...]",
+	fs := newFlagSet("start", "[-e] [-D names] [-a auto|yes|no] <entry.desktop>\n"+
+		"       uxsm start [-e] [-D names] [-a auto|yes|no] [--] <command> [args...]",
 		"Start an X11 session, running its desktop as a systemd user service: the\n"+
 			"Exec= of a session entry from the xsessions directories, or a command.\n"+
 			"An argument ending in .desktop is an entry; anything else, or anything\n"+
@@ -46,11 +49,19 @@ func runStart(args []string) error {
 	namesFlag := fs.String("D", "", "desktop `names` for XDG_CURRENT_DESKTOP, separated by ':'")
 	exclusive := fs.Bool("e", false, "use only the names given with -D, discarding the existing\n"+
 		"XDG_CURRENT_DESKTOP and the entry's DesktopNames=")
+	autostart := fs.String("a", autoMode, "start the XDG autostart entries of the session: `mode` is auto,\n"+
+		"yes or no; auto starts them only for a known window manager")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if fs.NArg() == 0 {
 		fs.Usage()
+		return errUsage
+	}
+	switch *autostart {
+	case autoMode, "yes", "no":
+	default:
+		fmt.Fprintf(os.Stderr, "uxsm start: -a is %q, but it can only be auto, yes or no\n", *autostart)
 		return errUsage
 	}
 
@@ -100,11 +111,46 @@ func runStart(args []string) error {
 			return fmt.Errorf("saving the command: %w", err)
 		}
 	}
+	if err := markAutostart(dir, names, *autostart); err != nil {
+		return fmt.Errorf("deciding on the XDG autostart: %w", err)
+	}
 
 	if err := systemd.Start(systemd.BindPIDUnit(os.Getpid())); err != nil {
 		return fmt.Errorf("binding the session to its process: %w", err)
 	}
 	return systemd.ExecStartWait(systemd.DesktopUnit(target.id))
+}
+
+// autoMode es el valor de -a que deja decidir a uxsm.
+const autoMode = "auto"
+
+// markAutostart decide si esta sesión lanza el autostart XDG y lo deja escrito
+// en el directorio de runtime.
+//
+// uxsm-autostart@.target, que es lo que activa xdg-desktop-autostart.target,
+// tiene un ConditionPathExists= sobre esa marca: si no está, systemd salta el
+// target sin que falle nada. Con -a lo decide quien arranca la sesión.
+//
+// La decisión se escribe también por la salida estándar, que en una sesión de
+// verdad va al diario: es la explicación de por qué hay o no hay autostart.
+func markAutostart(dir string, names []string, mode string) error {
+	start, reason := sessionentry.Autostart(names)
+	switch mode {
+	case "yes":
+		start, reason = true, "uxsm start -a yes: starting the XDG autostart of the session"
+	case "no":
+		start, reason = false, "uxsm start -a no: not starting the XDG autostart of the session"
+	}
+	fmt.Println(reason)
+
+	path := filepath.Join(dir, session.AutostartFile)
+	if !start {
+		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		return nil
+	}
+	return os.WriteFile(path, []byte(reason+"\n"), 0o600)
 }
 
 // startTarget es lo que arranca uxsm start.

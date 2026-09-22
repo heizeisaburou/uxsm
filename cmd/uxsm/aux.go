@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,6 +15,7 @@ import (
 	"github.com/heizeisaburou/uxsm/internal/pidwait"
 	"github.com/heizeisaburou/uxsm/internal/session"
 	"github.com/heizeisaburou/uxsm/internal/sessionenv"
+	"github.com/heizeisaburou/uxsm/internal/systemd"
 	"github.com/heizeisaburou/uxsm/internal/x11"
 )
 
@@ -27,6 +29,7 @@ var auxCommands = group{
 		{"exec", "replace this process with the desktop of the session", runAuxExec, false},
 		{"waitpid", "wait until a process exits", runAuxWaitPID, false},
 		{"wait-wm", "wait until a window manager manages the X display", runAuxWaitWM, false},
+		{"autostart", "start the XDG autostart entries of the session", runAuxAutostart, false},
 		{"prepare-env", "set up the session environment in the systemd user manager", runAuxPrepareEnv, false},
 		{"cleanup-env", "restore the systemd user manager environment from before the session", runAuxCleanupEnv, false},
 	},
@@ -159,6 +162,49 @@ func runAuxWaitWM(args []string) error {
 	}
 	fmt.Printf("window manager ready: %s\n", wm)
 	return nil
+}
+
+// runAuxAutostart arranca el autostart XDG de la sesión, si le toca a uxsm:
+// `uxsm aux autostart bspwm.desktop`.
+//
+// Es el segundo ExecStartPost= de uxsm-desktop@.service, detrás de la espera al
+// gestor de ventanas, así que las aplicaciones de autostart arrancan con el
+// escritorio ya en pantalla.
+//
+// Sólo arranca el target si uxsm start dejó la marca que dice que el autostart
+// le toca a uxsm; si no está, no hace nada, que es lo que hay que hacer en un
+// escritorio que lanza el suyo. La decisión no puede ir en un Condition= de una
+// unidad: las dependencias de una unidad se resuelven al montar el trabajo,
+// antes de comprobar las condiciones, así que el autostart arrancaría igual
+// aunque la unidad se saltara.
+//
+// Y tiene que arrancarlo una unidad nuestra, no `systemctl start
+// xdg-desktop-autostart.target`: el target estándar lleva RefuseManualStart=,
+// así que sólo se puede arrancar como dependencia de otra unidad.
+func runAuxAutostart(args []string) error {
+	fs := newFlagSet("aux autostart", "<entry.desktop | command-name>",
+		"Start the XDG autostart entries of the session, if uxsm start decided\n"+
+			"that starting them is up to uxsm.")
+	if err := parseFlags(fs, args); err != nil {
+		return err
+	}
+	if fs.NArg() != 1 {
+		fs.Usage()
+		return errUsage
+	}
+
+	dir, err := session.RuntimeDir()
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(filepath.Join(dir, session.AutostartFile)); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	fmt.Println("Starting the XDG autostart entries of the session.")
+	return systemd.StartNoBlock(systemd.AutostartTarget(fs.Arg(0)))
 }
 
 // runAuxPrepareEnv monta el entorno de la sesión en el gestor: `uxsm aux prepare-env`.

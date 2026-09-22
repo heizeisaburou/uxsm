@@ -33,11 +33,13 @@ digraph systemd_lifecycle {
              label="uxsm-session@ID.target\n\nAgrupa todo lo que pertenece\na esta sesión de uxsm"];
     standards [shape=folder, fillcolor="#ede9fe", color="#7c3aed",
                label="Targets estándar de systemd\n\ngraphical-session-pre.target\ngraphical-session.target"];
+    autostart [shape=folder, fillcolor="#fef3c7", color="#ca8a04",
+               label="uxsm-autostart@ID.target\n\nArrastra xdg-desktop-autostart.target,\nque no se puede arrancar a mano"];
 
     desktop -> env [label=" Requires + After\nprimero el entorno "];
     desktop -> session [label=" BindsTo\nmisma vida "];
-    desktop -> standards [label=" Before\nla sesión gráfica espera\nal gestor de ventanas ", style=dashed];
     session -> standards [label=" activa la sesión gráfica "];
+    desktop -> autostart [label=" ExecStartPost\nsólo si el autostart\nle toca a uxsm "];
     env -> standards [label=" activa la fase previa "];
   }
 
