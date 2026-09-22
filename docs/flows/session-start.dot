@@ -1,6 +1,6 @@
 digraph session_start {
   graph [
-    label="Arranque de una sesión",
+    label="Arranque: desde Exec= hasta el escritorio",
     labelloc=t,
     fontsize=24,
     fontname="DejaVu Sans Bold",
@@ -14,39 +14,40 @@ digraph session_start {
         color="#2563eb", fillcolor="#eff6ff", fontcolor="#0f172a", margin="0.15,0.10"];
   edge [fontname="DejaVu Sans", fontsize=9, color="#64748b", fontcolor="#334155", arrowsize=0.75];
 
-  caller [shape=oval, fillcolor="#dbeafe", label="Display manager o terminal"];
-  start [label="uxsm start TARGET\ncmd/uxsm/start.go"];
-  kind [shape=diamond, label="¿TARGET es un único\nID terminado en .desktop?"];
+  caller [shape=oval, fillcolor="#dbeafe",
+          label="El display manager ejecuta Exec=\n(o se invoca uxsm desde un terminal)"];
+  start [label="uxsm start recibe qué sesión debe abrir"];
+  kind [shape=diamond, label="¿Ha recibido el ID de una entrada .desktop\no un comando para ejecutar directamente?"];
 
-  entry [label="desktopentry.Find\nBusca la entrada por XDG\ny lee Exec= y DesktopNames="];
-  command [label="Comando directo\nComprueba el ejecutable\nid = nombre del programa"];
+  entry [label="Entrada: uxsm start bspwm.desktop\n\nBusca la entrada original en los directorios XDG\ny obtiene Exec= y DesktopNames="];
+  command [label="Comando: uxsm start -D bspwm -- bspwm\n\nComprueba que el programa existe\ny conserva el comando completo"];
   resolved [shape=note, color="#64748b", fillcolor="#f1f5f9",
-            label="startTarget\nid · argv · DesktopNames\n¿entrada o comando?"];
+            label="Resultado común\nID de la sesión · comando · nombres del escritorio"];
 
-  identity [label="session.DesktopNames + IdentityVars\nCalcula XDG_CURRENT_DESKTOP,\nXDG_SESSION_DESKTOP, XDG_MENU_PREFIX\ny XDG_SESSION_TYPE=x11"];
+  identity [label="Construye la identidad que recibirá el escritorio\nXDG_CURRENT_DESKTOP · XDG_SESSION_DESKTOP\nXDG_MENU_PREFIX · XDG_SESSION_TYPE=x11"];
   wait [label="Espera a que termine cualquier\nsesión anterior que aún se apaga"];
   files [shape=folder, fillcolor="#fef3c7", color="#ca8a04",
          label="$XDG_RUNTIME_DIR/uxsm\nenv_login\nenv_identity\ncommand (sólo comando directo)"];
 
-  bind [label="systemctl --user start\nuxsm-bindpid@PID.service"];
-  replace [label="exec systemctl --user start --wait\nuxsm-desktop@ID.service\n\nEl PID que vigila el login no cambia"];
+  bind [label="systemd vigila el proceso del login\nuxsm-bindpid@PID.service\n\nSi el display manager lo mata, cierra la sesión"];
+  replace [label="uxsm se sustituye por systemctl --wait\ny espera a uxsm-desktop@ID.service\n\nAsí el proceso que vigila el login no cambia"];
 
   env [fillcolor="#ede9fe", color="#7c3aed",
-       label="uxsm-env@ID.service\nuxsm aux prepare-env\nPrepara el entorno antes del escritorio"];
+       label="Antes del escritorio\nuxsm-env@ID.service prepara\nel entorno de systemd --user"];
   aux [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
-       label="uxsm-desktop@ID.service\nuxsm aux exec ID"];
+       label="systemd arranca uxsm-desktop@ID.service\nLa plantilla sólo contiene el ID, no el comando"];
   source [shape=diamond, fillcolor="#f0fdf4", color="#15803d",
           label="¿ID termina en .desktop?"];
   reread [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
-          label="Vuelve a leer Exec=\nde la entrada original"];
+          label="Vuelve a abrir la entrada original\ny toma su Exec="];
   saved [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
          label="Lee el comando guardado\nen el directorio de runtime"];
   desktop [shape=oval, fillcolor="#bbf7d0", color="#15803d", fontcolor="#14532d",
-           label="exec ESCRITORIO\nEl escritorio es el proceso principal\ndel servicio de systemd"];
+           label="exec sustituye el auxiliar por el escritorio\n\nEl propio bspwm (u otro escritorio) queda como\nproceso principal del servicio de systemd"];
 
   caller -> start -> kind;
-  kind -> entry [label=" sí "];
-  kind -> command [label=" no "];
+  kind -> entry [label=" ID .desktop "];
+  kind -> command [label=" comando "];
   entry -> resolved;
   command -> resolved;
   resolved -> identity -> wait -> files;

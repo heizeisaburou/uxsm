@@ -1,78 +1,74 @@
 digraph build_tests {
   graph [
-    label="Compilación, pruebas y release",
+    label="Compilación y pruebas: qué hace cada orden",
     labelloc=t,
     fontsize=24,
     fontname="DejaVu Sans Bold",
     bgcolor="#f8fafc",
-    pad=0.28,
+    pad=0.30,
     nodesep=0.48,
-    ranksep=0.62,
+    ranksep=0.66,
     splines=polyline
   ];
   node [shape=box, style="rounded,filled", fontname="DejaVu Sans", fontsize=11,
-        color="#2563eb", fillcolor="#eff6ff", fontcolor="#0f172a", margin="0.15,0.10"];
+        color="#2563eb", fillcolor="#eff6ff", fontcolor="#0f172a", margin="0.16,0.11"];
   edge [fontname="DejaVu Sans", fontsize=9, color="#64748b", fontcolor="#334155", arrowsize=0.75];
 
-  source [shape=folder, fillcolor="#dbeafe", label="Árbol de trabajo"];
+  source [shape=folder, fillcolor="#dbeafe",
+          label="Código fuente\n(incluye cambios sin commit)"];
 
   subgraph cluster_local {
-    label="Comprobaciones rápidas locales";
+    label="En tu sistema · rápido · sin instalar uxsm";
     color="#93c5fd";
     style="rounded,filled";
     fillcolor="#ffffff";
     fontname="DejaVu Sans Bold";
 
-    build [label="make build"];
-    vet [label="go vet ./..."];
-    gobuild [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
-             label="go build\n→ bin/uxsm"];
-    test [label="make test\ngo test ./..."];
-    units [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
-           label="Pruebas unitarias\nCLI y resolución de targets\n.desktop y Exec=\ndisplay managers\nidentidad y runtime\nentorno\ngeneración de entradas\nsystemd y pidfd"];
-    hook [shape=note, fillcolor="#fef3c7", color="#ca8a04",
-          label="pre-commit\ngofmt + vet + unitarias\n+ sh -n de scripts"];
+    test [label="make test"];
+    gotest [label="go test ./...\nEjecuta pruebas Go aisladas"];
+    unit_scope [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
+                label="Comprueba la lógica\n\n• argumentos y entradas .desktop\n• identidad y entorno\n• generación de entradas\n• display managers\n• nombres de unidades y pidfd"];
+    unit_limit [shape=note, fillcolor="#fee2e2", color="#dc2626", fontcolor="#7f1d1d",
+                label="No crea un paquete\nNo arranca una sesión X\nNo prueba systemd --user de extremo a extremo"];
 
-    build -> vet -> gobuild;
-    test -> units;
-    hook -> vet [style=dashed];
-    hook -> test [style=dashed];
+    build [label="make build"];
+    compile [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
+             label="go vet ./...\n+\ngo build → bin/uxsm"];
+
+    test -> gotest -> unit_scope -> unit_limit;
+    build -> compile;
   }
 
   subgraph cluster_vm {
-    label="Paquetes y pruebas reales en máquinas desechables";
+    label="En VMs desechables · lento · prueba el producto instalado";
     color="#c4b5fd";
     style="rounded,filled";
     fillcolor="#ffffff";
     fontname="DejaVu Sans Bold";
 
-    testvm [label="make test-vm\ntest/release.sh DISTROS"];
-    version [label="test/version.sh\nVersión desde git"];
-    tarball [shape=folder, label="Tarball reproducible\ndel árbol actual"];
-    buildvm [label="VM de compilación por distro\nArch · Debian · Ubuntu\nFedora · openSUSE"];
+    testvm [label="make test-vm\nUbuntu por defecto"];
+    choose [shape=note, fillcolor="#ede9fe", color="#7c3aed",
+            label="DISTROS=quick  → Ubuntu\nDISTROS=pair   → Ubuntu + Arch\nDISTROS=all      → las cinco"];
     package [shape=folder, fillcolor="#ede9fe", color="#7c3aed",
-             label="Paquete nativo\n.pkg.tar.zst · .deb · .rpm"];
-    testvmclean [label="Otra VM limpia por distro\nInstala el paquete con su gestor"];
+             label="1. Empaquetado real\n\nCrea un tarball del árbol actual\nUna VM de la distribución compila\nsu paquete .deb, .rpm o .pkg.tar.zst"];
+    real_session [label="2. Instalación y sesión reales\n\nOtra VM limpia instala el paquete\ncon apt, dnf, zypper o pacman\nXvfb aporta una pantalla X virtual\nsystemd --user y bspwm son reales"];
     integration [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
-                 label="Pruebas de integración sobre Xvfb\n01 servicio y comando directo\n02 cierre por tres caminos\n03 identidad\n04 entorno y restauración\n05 entradas/check/setup"];
-    checksums [shape=folder, fillcolor="#fef3c7", color="#ca8a04",
-               label="build/release/<distro>\n+ SHA256SUMS"];
+                 label="Comprueba la integración completa\n\n• entrada y comando directo\n• tres formas de cerrar\n• identidad XDG\n• entorno y restauración\n• entry, check y setup"];
+    artifacts [shape=folder, fillcolor="#fef3c7", color="#ca8a04",
+               label="build/release/<distro>\npaquetes + SHA256SUMS"];
 
-    testvm -> version -> tarball -> buildvm -> package -> testvmclean -> integration -> checksums;
+    testvm -> package -> real_session -> integration -> artifacts;
+    choose -> testvm [style=dashed, arrowhead=none];
   }
 
-  release [shape=oval, fillcolor="#dbeafe", color="#2563eb",
-           label="make release\nEquivale a release.sh --publish"];
+  release [label="make release\nElige las cinco distribuciones"];
   latest [shape=folder, fillcolor="#bbf7d0", color="#15803d", fontcolor="#14532d",
-          label="releases/latest\nJuego completo ya probado"];
-  push [shape=note, fillcolor="#fef3c7", color="#ca8a04",
-        label="pre-push a main/master o vX.Y.Z\nExige un make release del mismo commit"];
+          label="Sólo si las cinco pasan:\npublica en releases/latest"];
 
-  source -> build;
   source -> test;
+  source -> build;
   source -> testvm;
   source -> release;
-  release -> testvm [label=" todas + publicar "];
-  checksums -> latest [label=" con --publish "];
-  push -> release [style=dashed];
+  release -> package [label=" mismo pipeline × 5 ", style=dashed];
+  artifacts -> latest [label=" publica "];
 }

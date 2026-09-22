@@ -1,6 +1,6 @@
 digraph session_entries {
   graph [
-    label="Generación e instalación de entradas de sesión",
+    label="Entradas .desktop: qué se genera y qué ocurre al elegirlas",
     labelloc=t,
     fontsize=24,
     fontname="DejaVu Sans Bold",
@@ -14,22 +14,23 @@ digraph session_entries {
         color="#2563eb", fillcolor="#eff6ff", fontcolor="#0f172a", margin="0.15,0.10"];
   edge [fontname="DejaVu Sans", fontsize=9, color="#64748b", fontcolor="#334155", arrowsize=0.75];
 
-  cli [shape=oval, fillcolor="#dbeafe", label="uxsm entry [opciones] FUENTE"];
+  cli [shape=oval, fillcolor="#dbeafe",
+       label="uxsm entry crea una entrada que verá el display manager"];
   mode [shape=diamond, label="¿Qué tipo se pide?"];
 
-  ref [label="Modo normal\nBusca FUENTE.desktop existente"];
-  direct [label="--exec\nEntrada existente, tabla known\no comando después de --"];
-  plain [label="--plain\nTabla known o comando\ndespués de --"];
+  ref [label="Normal: uxsm entry bspwm\nParte de bspwm.desktop ya instalada"];
+  direct [label="Directa: uxsm entry --exec bspwm\nObtiene el comando de una entrada,\nla base interna o lo escrito tras --"];
+  plain [label="Sin uxsm: uxsm entry --plain bspwm\nObtiene el comando de la base interna\no de lo escrito tras --"];
 
-  validate [label="Construye Source y rechaza:\n• algo que ya usa uxsm\n• systemctl --user start\n• metasesiones como default/xinit-compat"];
-  names [label="Combina DesktopNames conocidos con -D\n-e los sustituye (requiere --force-names\nsi descartaría nombres conocidos)"];
+  validate [label="Valida los datos y evita recursión o dobles gestores\n\nRechaza algo que ya usa uxsm, sesiones que ya\narrancan con systemd y metasesiones como xinit-compat"];
+  names [label="Completa nombre, comentario y DesktopNames\ncon la entrada original o la base de datos interna\nLas opciones -D y -e permiten ajustarlos"];
 
   out_ref [shape=note, fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
-           label="bspwm-uxsm.desktop\nExec=uxsm start bspwm.desktop\n\nReferencia la entrada original"];
+           label="bspwm-uxsm.desktop\nExec=uxsm start bspwm.desktop\n\nAl elegirla:\ndisplay manager → uxsm → entrada original → bspwm"];
   out_direct [shape=note, fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
-              label="bspwm-uxsm.desktop\nExec=uxsm start -D bspwm -- bspwm\n\nComando directo; no necesita la original"];
+              label="bspwm-uxsm.desktop\nExec=uxsm start -D bspwm -- bspwm\n\nAl elegirla:\ndisplay manager → uxsm → bspwm\nNo vuelve a necesitar la entrada original"];
   out_plain [shape=note, fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
-             label="bspwm.desktop\nExec=bspwm\n\nEntrada normal, sin uxsm"];
+             label="bspwm.desktop\nExec=bspwm\n\nAl elegirla:\ndisplay manager → bspwm\nuxsm no interviene"];
 
   destination [label="Comprueba el destino\nSi ya existe o taparía otra entrada,\nsin -f se rechaza"];
   preview [label="Sin -i\nEnseña la ruta y el contenido\nsin escribir nada"];
