@@ -1,34 +1,26 @@
 package sessionentry
 
-import (
-	"fmt"
-	"strings"
-)
+import "strings"
 
-// Autostart dice si uxsm tiene que lanzar el autostart XDG de una sesión cuyo
-// escritorio se llama names, y lo explica en una frase.
+// startsOwnAutostart dice si alguno de los nombres del escritorio es de un
+// escritorio conocido que lanza él mismo las entradas de autostart XDG, y cuál.
 //
-// Sólo lo lanza cuando la tabla dice que todos esos nombres son de gestores de
-// ventanas sueltos. Un escritorio con gestor de sesión lanza sus entradas de
-// autostart él mismo ―se comprobó con Xfce: ni xfce4-session ni systemd miran
-// si el otro ya las ha lanzado, así que cada una arranca dos veces―, y de un
-// escritorio que no conoce, uxsm no puede saber si lo hace.
+// Sirve para una sola cosa: que las entradas que genera uxsm lleven
+// `--no-autostart` en esos escritorios. Si lo lanzaran los dos, cada entrada
+// arrancaría dos veces; se comprobó con Xfce, donde ni xfce4-session ni systemd
+// miran si el otro ya la ha lanzado.
 //
-// Entre no lanzar el autostart y lanzarlo dos veces, lo primero se ve enseguida
-// y se arregla con `uxsm start -a yes`; lo segundo deja aplicaciones duplicadas
-// y scripts ejecutados dos veces.
-func Autostart(names []string) (bool, string) {
+// De un escritorio que la tabla no conoce, uxsm no supone nada: la entrada sale
+// sin la opción y el autostart se lanza, que es lo que se espera de una sesión
+// con systemd y lo que hace uwsm. Quien tenga uno que lance el suyo y vea las
+// entradas duplicadas, añade la opción.
+func startsOwnAutostart(names []string) (string, bool) {
 	for _, name := range names {
-		wm, ok := desktopIsWM[strings.ToLower(name)]
-		switch {
-		case !ok:
-			return false, fmt.Sprintf("uxsm does not know the desktop %q, so it does not start the XDG autostart: "+
-				"the desktop may be starting it already", name)
-		case !wm:
-			return false, fmt.Sprintf("%s starts its own XDG autostart entries, so uxsm does not start them too", name)
+		if wm, ok := desktopIsWM[strings.ToLower(name)]; ok && !wm {
+			return name, true
 		}
 	}
-	return true, fmt.Sprintf("%s is a window manager, so uxsm starts the XDG autostart of the session", names[0])
+	return "", false
 }
 
 // desktopIsWM dice, por cada nombre de escritorio conocido en minúsculas, si es

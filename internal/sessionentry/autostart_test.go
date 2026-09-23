@@ -5,28 +5,51 @@ import (
 	"testing"
 )
 
-func TestAutostart(t *testing.T) {
+func TestStartsOwnAutostart(t *testing.T) {
 	cases := []struct {
-		names  []string
-		start  bool
-		reason string
+		names []string
+		own   bool
 	}{
-		{names: []string{"bspwm"}, start: true, reason: "window manager"},
-		{names: []string{"i3"}, start: true, reason: "window manager"},
-		{names: []string{"XFCE"}, reason: "its own"},
-		{names: []string{"xfce"}, reason: "its own"},          // sin distinguir mayúsculas
-		{names: []string{"MATE"}, reason: "its own"},          // sawfish-mate acaba en mate-session
-		{names: []string{"bspwm", "XFCE"}, reason: "its own"}, // basta uno
-		{names: []string{"leftwm"}, reason: "does not know"},  // no está en la tabla
-		{names: []string{"bspwm", "Custom"}, reason: "does not know"},
+		{names: []string{"bspwm"}},                    // gestor de ventanas
+		{names: []string{"i3"}},                       //
+		{names: []string{"leftwm"}},                   // no está en la tabla: no se supone nada
+		{names: []string{"XFCE"}, own: true},          // escritorio con gestor de sesión
+		{names: []string{"xfce"}, own: true},          // sin distinguir mayúsculas
+		{names: []string{"MATE"}, own: true},          // sawfish-mate acaba en mate-session
+		{names: []string{"bspwm", "XFCE"}, own: true}, // basta uno
+		{names: []string{"bspwm", "Custom"}},          // el desconocido no cuenta
 	}
 	for _, c := range cases {
-		start, reason := Autostart(c.names)
-		if start != c.start {
-			t.Errorf("Autostart(%v) = %v, want %v (%s)", c.names, start, c.start, reason)
+		name, own := startsOwnAutostart(c.names)
+		if own != c.own {
+			t.Errorf("startsOwnAutostart(%v) = %q, %v; want %v", c.names, name, own, c.own)
 		}
-		if !strings.Contains(reason, c.reason) {
-			t.Errorf("Autostart(%v) said %q, want something about %q", c.names, reason, c.reason)
+	}
+}
+
+// TestUxsmEntryNoAutostart comprueba lo que se apoya en la tabla: la entrada de
+// un escritorio que lanza su propio autostart sale con --no-autostart, y la de
+// un gestor de ventanas, sin ella.
+func TestUxsmEntryNoAutostart(t *testing.T) {
+	for _, c := range []struct {
+		desktop string
+		flag    bool
+	}{
+		{desktop: "xfce", flag: true},
+		{desktop: "mate", flag: true},
+		{desktop: "bspwm"},
+		{desktop: "i3"},
+	} {
+		src, err := FromTable(c.desktop)
+		if err != nil {
+			t.Fatalf("FromTable(%q): %v", c.desktop, err)
+		}
+		entry, err := src.UxsmExec(Options{})
+		if err != nil {
+			t.Fatalf("UxsmExec(%q): %v", c.desktop, err)
+		}
+		if got := strings.Contains(entry.Exec, noAutostartFlag); got != c.flag {
+			t.Errorf("the entry of %s has Exec=%q; want --no-autostart: %v", c.desktop, entry.Exec, c.flag)
 		}
 	}
 }

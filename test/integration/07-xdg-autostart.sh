@@ -1,9 +1,9 @@
 #!/bin/sh
-# Paso 5: el autostart XDG. Con un gestor de ventanas, uxsm activa
-# xdg-desktop-autostart.target y las entradas de ~/.config/autostart arrancan
-# como app-<nombre>@autostart.service, una sola vez, y se paran con la sesión.
-# Con un escritorio que lanza el suyo, uxsm no lo lanza: arrancarían dos veces.
-# `uxsm start -a yes` fuerza que lo lance de todos modos.
+# Paso 5: el autostart XDG. uxsm activa xdg-desktop-autostart.target, y las
+# entradas de ~/.config/autostart arrancan como app-<nombre>@autostart.service,
+# una sola vez, y se paran con la sesión. Lo hace siempre, como uwsm, salvo que
+# se le diga que no con `uxsm start --no-autostart`, que es lo que llevan las
+# entradas que genera uxsm para los escritorios que lanzan el suyo.
 
 set -eu
 . "$(dirname "$0")/lib.sh"
@@ -74,26 +74,29 @@ stop_session
 wait_stopped 15 "$unit" xdg-desktop-autostart.target || fail "the autostart entry outlived the session"
 ok "and it stops with the session"
 
-# Un escritorio que lanza el suyo: uxsm no lo lanza. Aquí el escritorio sigue
-# siendo bspwm, pero la sesión se llama XFCE, que es lo que uxsm mira.
+# Con --no-autostart no lo lanza, que es lo que pide un escritorio que lanza el
+# suyo.
 rm -f "$log"
-run_session bspwm.desktop -- -D XFCE
+run_session bspwm.desktop -- --no-autostart
 sleep 3
 if systemctl --user is-active -q "$unit"; then
     diagnose
-    fail "uxsm started the XDG autostart of a desktop that starts its own"
+    fail "uxsm start --no-autostart started the XDG autostart"
 fi
-[ "$(runs)" = 0 ] || fail "the autostart entry ran $(runs) times in an XFCE session"
-ok "for a desktop that starts its own autostart, uxsm does not start it"
+[ "$(runs)" = 0 ] || fail "the autostart entry ran $(runs) times with --no-autostart"
+ok "uxsm start --no-autostart does not start it"
 stop_session
 
-# Y se puede forzar.
-run_session bspwm.desktop -- -a yes -D XFCE
-wait_for 15 systemctl --user is-active "$unit" || fail "uxsm start -a yes did not start the XDG autostart"
-ok "uxsm start -a yes starts it anyway"
-stop_session
-
-if uxsm start -a maybe bspwm.desktop 2>/dev/null; then
-    fail "uxsm start -a maybe did not fail"
-fi
-ok "a bad -a is a usage error"
+# Y esa opción la pone el generador de entradas, apoyándose en la tabla: la de
+# un escritorio que lanza su propio autostart la lleva, y la de un gestor de
+# ventanas, no.
+out=$(uxsm entry --exec xfce) || fail "uxsm entry --exec xfce failed: $out"
+case $out in
+*"Exec=uxsm start --no-autostart"*) ok "the generated entry of a desktop carries --no-autostart" ;;
+*) fail "the generated entry of xfce says: $out" ;;
+esac
+out=$(uxsm entry --exec bspwm) || fail "uxsm entry --exec bspwm failed: $out"
+case $out in
+*--no-autostart*) fail "the generated entry of bspwm carries --no-autostart: $out" ;;
+*) ok "and the one of a window manager does not" ;;
+esac

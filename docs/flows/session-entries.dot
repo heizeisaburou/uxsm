@@ -24,6 +24,8 @@ digraph session_entries {
 
   validate [label="Valida los datos y evita recursión o dobles gestores\n\nRechaza algo que ya usa uxsm, sesiones que ya\narrancan con systemd y metasesiones como xinit-compat"];
   names [label="Completa nombre, comentario y DesktopNames\ncon la entrada original o la base de datos interna\nLas opciones -D y -e permiten ajustarlos"];
+  ownautostart [shape=note, color="#64748b", fillcolor="#f1f5f9",
+                label="Si la base de datos dice que ese escritorio\nlanza su propio autostart XDG (Xfce, GNOME, Plasma…),\nel Exec= lleva además --no-autostart"];
 
   out_ref [shape=note, fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
            label="bspwm-uxsm.desktop\nExec=uxsm start bspwm.desktop\n\nAl elegirla:\ndisplay manager → uxsm → entrada original → bspwm"];
@@ -50,6 +52,7 @@ digraph session_entries {
   direct -> validate;
   plain -> validate;
   validate -> names;
+  names -> ownautostart [style=dashed, arrowhead=none];
   names -> out_ref [label=" normal "];
   names -> out_direct [label=" --exec "];
   names -> out_plain [label=" --plain "];

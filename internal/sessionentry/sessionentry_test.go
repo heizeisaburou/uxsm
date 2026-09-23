@@ -41,10 +41,12 @@ func TestUxsm(t *testing.T) {
 		// La misma sin DesktopNames=: salen de la tabla y van con -D.
 		{"ubuntu/bspwm.desktop", Options{}, "bspwm (uxsm)", "uxsm start -D bspwm bspwm.desktop", []string{"bspwm"}},
 		// Sin la tabla serían "cinnamon-session-cinnamon", no lo que pone Cinnamon.
-		{"arch/cinnamon.desktop", Options{}, "Cinnamon (uxsm)", "uxsm start -D X-Cinnamon cinnamon.desktop", []string{"X-Cinnamon"}},
+		// Y como Cinnamon lanza su propio autostart, la entrada lleva --no-autostart.
+		{"arch/cinnamon.desktop", Options{}, "Cinnamon (uxsm)", "uxsm start --no-autostart -D X-Cinnamon cinnamon.desktop", []string{"X-Cinnamon"}},
 		// Un gestor de ventanas dentro de un escritorio: el nombre es el del
-		// escritorio, no el del script sawfish-mate-session.
-		{"fedora/sawfish-mate.desktop", Options{}, "Sawfish/MATE (uxsm)", "uxsm start -D MATE sawfish-mate.desktop", []string{"MATE"}},
+		// escritorio, no el del script sawfish-mate-session, y el autostart lo
+		// lanza el escritorio.
+		{"fedora/sawfish-mate.desktop", Options{}, "Sawfish/MATE (uxsm)", "uxsm start --no-autostart -D MATE sawfish-mate.desktop", []string{"MATE"}},
 		// -D añade al final, y sólo lo que no trae la entrada va en el Exec=.
 		{"arch/bspwm.desktop", Options{Names: "Extra"}, "bspwm (uxsm)", "uxsm start -D Extra bspwm.desktop", []string{"bspwm", "Extra"}},
 		// -e con todos los conocidos: no tira nada.
@@ -74,6 +76,9 @@ func TestNames(t *testing.T) {
 		t.Errorf("-e dropping X-Cinnamon: %v, want ErrDropsNames", err)
 	}
 	e, err := fromFile(t, "arch/cinnamon.desktop").Uxsm(Options{Names: "Cinnamon", Exclusive: true, ForceNames: true})
+	// Con -e los nombres son sólo los de -D, y "Cinnamon" a secas no está en la
+	// tabla ―el de Cinnamon es "X-Cinnamon"―, así que no hay de dónde saber que
+	// lanza su propio autostart y la entrada sale sin --no-autostart.
 	if err != nil || e.Exec != "uxsm start -e -D Cinnamon cinnamon.desktop" {
 		t.Errorf("-e with --force-names: %+v, %v", e, err)
 	}

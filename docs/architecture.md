@@ -91,15 +91,23 @@ ExecStartPost=
 
 ### Autostart XDG
 
-Detrás de la espera al gestor de ventanas, el segundo `ExecStartPost=` del escritorio arranca `uxsm-autostart@ID.target`, que arrastra `xdg-desktop-autostart.target`. A partir de ahí el trabajo es de systemd: `systemd-xdg-autostart-generator` crea una `app-<nombre>@autostart.service` por cada entrada de autostart y las filtra por `OnlyShowIn=` y `NotShowIn=` con el `XDG_CURRENT_DESKTOP` del gestor. Las entradas arrancan, por tanto, con el escritorio ya en pantalla, y se paran con `graphical-session.target`.
+Detrás de la espera, el segundo `ExecStartPost=` del escritorio arranca `uxsm-autostart@ID.target`, que arrastra `xdg-desktop-autostart.target`. A partir de ahí el trabajo es de systemd: `systemd-xdg-autostart-generator` crea una `app-<nombre>@autostart.service` por cada entrada de autostart y las filtra por `OnlyShowIn=` y `NotShowIn=` con el `XDG_CURRENT_DESKTOP` del gestor. Las entradas arrancan, por tanto, con el escritorio ya en pantalla, y se paran con `graphical-session.target`.
 
-uxsm no lo activa siempre. Un escritorio con gestor de sesión lanza sus entradas de autostart él mismo, y ni él ni systemd comprueban si el otro ya las ha lanzado: en Xfce, cada entrada arranca dos veces. Así que `uxsm start` lo decide a partir de los nombres del escritorio y la tabla de escritorios conocidos:
+uxsm lo lanza siempre, como uwsm: de una sesión gestionada por systemd se espera que las entradas de autostart arranquen solas. Quien no lo quiera, lo dice al arrancar la sesión, y `uxsm start` no mira qué escritorio es:
 
-- todos los nombres son de gestores de ventanas sueltos, como `bspwm`: uxsm activa el autostart, porque si no lo lanza él no lo lanza nadie;
-- algún nombre es de un escritorio con gestor de sesión, como `XFCE`: no lo activa;
-- algún nombre no está en la tabla: tampoco lo activa, porque no puede saber si ese escritorio lanza el suyo.
+```sh
+uxsm start --no-autostart bspwm.desktop
+```
 
-La decisión se escribe en `$XDG_RUNTIME_DIR/uxsm/autostart`, y quien la mira es `uxsm aux autostart`: con la marca arranca el target, y sin ella no hace nada. Los dos rodeos tienen motivo. La decisión no puede ir en un `Condition*=` de la unidad, porque las dependencias de una unidad se resuelven al montar el trabajo, antes de comprobar sus condiciones: el autostart arrancaría igual en las sesiones en las que la unidad se salta. Y el target estándar no se puede arrancar directamente, porque lleva `RefuseManualStart=`; tiene que arrastrarlo una unidad propia. El motivo va además a la salida de `uxsm start`, es decir al diario de la sesión. `uxsm start -a yes` y `-a no` deciden en lugar de la tabla.
+Quien se apoya en la tabla de escritorios conocidos es `uxsm entry`. Al generar la entrada de un escritorio que lanza él mismo sus entradas de autostart ―Xfce, GNOME, Plasma, MATE…―, escribe la opción en el `Exec=`:
+
+```ini
+Exec=uxsm start --no-autostart -D XFCE -- startxfce4
+```
+
+Hace falta porque ni el gestor de sesión del escritorio ni systemd comprueban si el otro ya ha lanzado una entrada: en Xfce, con los dos, cada una arranca dos veces. De un escritorio que la tabla no conoce, uxsm no supone nada: la entrada sale sin la opción, el autostart se lanza, y quien vea entradas duplicadas la añade.
+
+La decisión se escribe en `$XDG_RUNTIME_DIR/uxsm/autostart`, y quien la mira es `uxsm aux autostart`: con la marca arranca el target, y sin ella no hace nada. Los dos rodeos tienen motivo. La decisión no puede ir en un `Condition*=` de la unidad, porque las dependencias de una unidad se resuelven al montar el trabajo, antes de comprobar sus condiciones: el autostart arrancaría igual en las sesiones en las que la unidad se salta. Y el target estándar no se puede arrancar directamente, porque lleva `RefuseManualStart=`; tiene que arrastrarlo una unidad propia.
 
 ## Entorno de la sesión
 
@@ -136,7 +144,7 @@ uxsm entry --exec -- mywm --flag    # variante uxsm para un comando explícito
 
 [Fuente DOT](flows/session-entries.dot) · Implementación: [`cmd/uxsm/entry.go`](../cmd/uxsm/entry.go) e `internal/sessionentry`.
 
-Una fuente puede ser una entrada existente, un comando o la tabla de escritorios conocidos. La tabla completa nombres, comentarios, `DesktopNames` y, cuando es portable entre distribuciones, el comando. El generador rechaza entradas que ya usan uxsm, sesiones que ya arrancan el escritorio mediante `systemd --user` y metasesiones que sólo ejecutan el script personal del usuario.
+Una fuente puede ser una entrada existente, un comando o la tabla de escritorios conocidos. La tabla completa nombres, comentarios, `DesktopNames` y, cuando es portable entre distribuciones, el comando; y dice también qué escritorios lanzan su propio autostart XDG, para escribir `--no-autostart` en su `Exec=`. El generador rechaza entradas que ya usan uxsm, sesiones que ya arrancan el escritorio mediante `systemd --user` y metasesiones que sólo ejecutan el script personal del usuario.
 
 Sin `-i`, la orden es una previsualización. Con `-i` escribe en `/usr/local/share/xsessions`; hace falta ejecutarla con permisos de root. No sobrescribe ni oculta otra entrada con el mismo ID sin `-f`.
 

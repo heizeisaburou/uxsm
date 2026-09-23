@@ -38,6 +38,10 @@ import (
 	"github.com/heizeisaburou/uxsm/internal/systemd"
 )
 
+// noAutostartFlag es la opción que se añade al Exec= de las entradas de los
+// escritorios que lanzan ellos mismos el autostart XDG (startsOwnAutostart).
+const noAutostartFlag = "--no-autostart"
+
 // Suffix termina el ID de toda entrada de uxsm: bspwm.desktop da
 // bspwm-uxsm.desktop.
 const Suffix = "-uxsm.desktop"
@@ -301,6 +305,9 @@ func (s *Source) Uxsm(o Options) (*Entry, error) {
 		return nil, err
 	}
 	exec := []string{"uxsm", "start"}
+	if _, own := startsOwnAutostart(names); own {
+		exec = append(exec, noAutostartFlag)
+	}
 	if o.Exclusive {
 		exec = append(exec, "-e", "-D", strings.Join(names, ":"))
 	} else {
@@ -329,11 +336,15 @@ func (s *Source) UxsmExec(o Options) (*Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	exec := "uxsm start -D " + strings.Join(names, ":")
-	if o.Exclusive {
-		exec = "uxsm start -e -D " + strings.Join(names, ":")
+	exec := []string{"uxsm", "start"}
+	if _, own := startsOwnAutostart(names); own {
+		exec = append(exec, noAutostartFlag)
 	}
-	return s.uxsmEntry(o, names, exec+" -- "+quoteExec(s.Argv)), nil
+	if o.Exclusive {
+		exec = append(exec, "-e")
+	}
+	exec = append(exec, "-D", strings.Join(names, ":"), "--", quoteExec(s.Argv))
+	return s.uxsmEntry(o, names, strings.Join(exec, " ")), nil
 }
 
 func (s *Source) uxsmEntry(o Options, names []string, exec string) *Entry {
