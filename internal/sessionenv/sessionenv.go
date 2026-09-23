@@ -139,7 +139,7 @@ func Cleanup() error {
 	}
 
 	for _, f := range []string{preFile, cleanupFile, session.LoginFile, session.IdentityFile,
-		session.CommandFile, session.AutostartFile} {
+		session.CommandFile, session.AutostartFile, session.ReadyFile} {
 		if err := os.Remove(filepath.Join(dir, f)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}

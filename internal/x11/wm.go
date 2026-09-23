@@ -1,9 +1,6 @@
 package x11
 
-import (
-	"fmt"
-	"time"
-)
+import "fmt"
 
 // WindowManager es el gestor de ventanas que gobierna la pantalla.
 type WindowManager struct {
@@ -93,39 +90,4 @@ func (c *Conn) windowName(w Window) (string, error) {
 		return "", err
 	}
 	return string(value), nil
-}
-
-// WaitForManager espera a que haya gestor de ventanas en display y devuelve
-// cuál es. Con timeout a cero espera sin límite.
-func WaitForManager(display string, timeout, interval time.Duration) (*WindowManager, error) {
-	c, err := Dial(display)
-	if err != nil {
-		return nil, err
-	}
-	defer c.Close()
-	return waitForManager(c, timeout, interval)
-}
-
-// waitForManager pregunta cada interval hasta que hay gestor de ventanas.
-//
-// La conexión se mantiene abierta entre intento e intento: preguntar dos veces
-// por segundo cuesta menos que volver a saludar al servidor cada vez.
-func waitForManager(c *Conn, timeout, interval time.Duration) (*WindowManager, error) {
-	var deadline time.Time
-	if timeout > 0 {
-		deadline = time.Now().Add(timeout)
-	}
-	for {
-		wm, err := c.Manager()
-		if err != nil {
-			return nil, err
-		}
-		if wm != nil {
-			return wm, nil
-		}
-		if !deadline.IsZero() && !time.Now().Add(interval).Before(deadline) {
-			return nil, fmt.Errorf("no EWMH window manager took over the X display after %s", timeout)
-		}
-		time.Sleep(interval)
-	}
 }

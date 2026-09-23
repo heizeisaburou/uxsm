@@ -11,6 +11,8 @@ como estaba. Se lanza desde la entrada de sesión que elige el display manager:
 - `uxsm start bspwm.desktop` o `uxsm start -- bspwm`: arranca la sesión, de una entrada o de un
   comando.
 - `uxsm stop`: la cierra.
+- `uxsm finalize`: lo ejecuta el escritorio, desde su configuración, para decir que ya está
+  arrancado. No hace falta si pone la marca de EWMH, que es lo que uxsm mira por su cuenta.
 - `uxsm entry bspwm`: genera la entrada de sesión de uxsm, `bspwm-uxsm.desktop`, y la instala en
   `/usr/local/share/xsessions`.
 - `uxsm check` y `uxsm setup xsessions-dir`: comprueban y arreglan que el display manager lea ese

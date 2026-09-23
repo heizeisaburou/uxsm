@@ -26,6 +26,14 @@ wait_stopped() {
     wait_for "$limit" sh -c '! systemctl --user is-active "$@" | grep -qvx -e inactive -e failed' sh "$@"
 }
 
+# wait_no_session SEGUNDOS: espera a que no quede viva ninguna unidad de una
+# sesión de uxsm. No basta con que se haya parado el escritorio: la limpieza del
+# entorno corre en el ExecStopPost= de uxsm-env@, y hasta que termina siguen ahí
+# los ficheros de la sesión.
+wait_no_session() {
+    wait_for "${1:-15}" sh -c 'test -z "$(systemctl --user list-units --state=active,activating,deactivating --no-legend "uxsm-desktop@*.service" "uxsm-env@*.service" "uxsm-session@*.target" "uxsm-bindpid@*.service" uxsm-shutdown.target)"'
+}
+
 # start_xvfb :N arranca un servidor X sin pantalla en el display :N, como unidad
 # pasajera de systemd --user, y espera a que acepte conexiones.
 start_xvfb() {

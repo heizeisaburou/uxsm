@@ -103,3 +103,42 @@ func TestRuntimeDir(t *testing.T) {
 		t.Error("RuntimeDir() without XDG_RUNTIME_DIR should fail")
 	}
 }
+
+// TestReadySignal comprueba lo que hace que la señal sea una sola: la enciende
+// quien llega primero, y quien llega después se la encuentra encendida.
+func TestReadySignal(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+
+	on, _, err := Ready()
+	if err != nil || on {
+		t.Fatalf("Ready with no session = %v, %v; want false, nil", on, err)
+	}
+
+	first, err := SignalReady("window manager ready: bspwm")
+	if err != nil || !first {
+		t.Fatalf("SignalReady = %v, %v; want true, nil", first, err)
+	}
+
+	second, err := SignalReady("the desktop ran uxsm finalize")
+	if err != nil || second {
+		t.Fatalf("the second SignalReady = %v, %v; want false, nil", second, err)
+	}
+
+	on, reason, err := Ready()
+	if err != nil || !on {
+		t.Fatalf("Ready = %v, %v; want true, nil", on, err)
+	}
+	if reason != "window manager ready: bspwm" {
+		t.Errorf("Ready says %q, want the reason of the first one", reason)
+	}
+
+	if err := ClearReady(); err != nil {
+		t.Fatalf("ClearReady: %v", err)
+	}
+	if on, _, _ := Ready(); on {
+		t.Error("the signal is still on after ClearReady")
+	}
+	if err := ClearReady(); err != nil {
+		t.Errorf("ClearReady on an already cleared signal: %v", err)
+	}
+}

@@ -17,13 +17,14 @@ CollectMode=inactive-or-failed
 [Service]
 Type=exec
 ExecStart=@BINDIR@/uxsm aux exec %i
-# Hasta que hay gestor de ventanas, el servicio no cuenta como arrancado y la
-# sesión no sigue. Si no llega a haberlo, el servicio falla al agotarse
-# TimeoutStartSec= y OnFailure= apaga la sesión.
-ExecStartPost=@BINDIR@/uxsm aux wait-wm
+# Hasta que la sesión está lista ―hay gestor de ventanas, o el escritorio ha
+# ejecutado uxsm finalize―, el servicio no cuenta como arrancado y la sesión no
+# sigue. Si no llega a estarlo, el servicio falla al agotarse TimeoutStartSec= y
+# OnFailure= apaga la sesión.
+ExecStartPost=@BINDIR@/uxsm aux wait-ready
 # Y con el escritorio ya en pantalla, el autostart XDG, si le toca a uxsm. El "-"
 # es a propósito: una sesión no se cae porque falle el autostart.
 ExecStartPost=-@BINDIR@/uxsm aux autostart %i
-TimeoutStartSec=60
+TimeoutStartSec=30
 Restart=no
 Slice=session.slice

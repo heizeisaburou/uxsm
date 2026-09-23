@@ -111,6 +111,11 @@ func runStart(args []string) error {
 			return fmt.Errorf("saving the command: %w", err)
 		}
 	}
+	// Por si quedara encendida de una sesión anterior que no llegó a limpiar:
+	// con ella encendida, ésta se daría por lista sin escritorio en pantalla.
+	if err := session.ClearReady(); err != nil {
+		return fmt.Errorf("clearing the ready signal of a previous session: %w", err)
+	}
 	if err := markAutostart(dir, names, *autostart); err != nil {
 		return fmt.Errorf("deciding on the XDG autostart: %w", err)
 	}

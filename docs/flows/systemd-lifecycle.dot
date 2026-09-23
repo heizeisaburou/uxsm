@@ -28,7 +28,7 @@ digraph systemd_lifecycle {
     env [fillcolor="#ede9fe", color="#7c3aed",
          label="uxsm-env@ID.service\n\nPrepara el entorno antes de arrancar\ny lo restaura cuando se detiene"];
     desktop [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
-             label="uxsm-desktop@ID.service\n\nSu proceso principal es el escritorio\nNo cuenta como arrancado hasta que\nuxsm aux wait-wm ve el gestor de ventanas"];
+             label="uxsm-desktop@ID.service\n\nSu proceso principal es el escritorio\nNo cuenta como arrancado hasta que la sesión\nestá lista: gestor de ventanas o uxsm finalize"];
     session [shape=folder,
              label="uxsm-session@ID.target\n\nAgrupa todo lo que pertenece\na esta sesión de uxsm"];
     standards [shape=folder, fillcolor="#ede9fe", color="#7c3aed",
@@ -51,7 +51,7 @@ digraph systemd_lifecycle {
     fontname="DejaVu Sans Bold";
 
     quit [shape=oval, color="#b91c1c", fillcolor="#fee2e2", fontcolor="#7f1d1d",
-          label="El escritorio termina, falla\no se queda sin gestor de ventanas"];
+          label="El escritorio termina, falla\no nunca llega a estar listo"];
     killed [shape=oval, color="#b91c1c", fillcolor="#fee2e2", fontcolor="#7f1d1d",
             label="Desaparece el proceso\ndel display manager"];
     stop [shape=oval, color="#b91c1c", fillcolor="#fee2e2", fontcolor="#7f1d1d",

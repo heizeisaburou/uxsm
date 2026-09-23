@@ -6,9 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
-	"strings"
 	"testing"
-	"time"
 )
 
 func TestParseDisplay(t *testing.T) {
@@ -154,23 +152,6 @@ func TestManagerSkipsEvents(t *testing.T) {
 	c := srv.start(t)
 	if got, err := c.Manager(); err != nil || got != nil {
 		t.Fatalf("Manager = %v, %v; want nil, nil", got, err)
-	}
-}
-
-func TestWaitForManagerTimeout(t *testing.T) {
-	srv := &fakeX{root: 0x111, atoms: map[string]uint32{}, props: map[propKey][]byte{}}
-	c := srv.start(t)
-
-	start := time.Now()
-	_, err := waitForManager(c, 150*time.Millisecond, 10*time.Millisecond)
-	if err == nil {
-		t.Fatal("waitForManager did not fail without a window manager")
-	}
-	if !strings.Contains(err.Error(), "no EWMH window manager") {
-		t.Errorf("waitForManager: %v", err)
-	}
-	if d := time.Since(start); d > time.Second {
-		t.Errorf("waitForManager waited %s, much longer than its timeout", d)
 	}
 }
 

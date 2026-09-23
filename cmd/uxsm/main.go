@@ -42,6 +42,7 @@ var rootCommands = group{
 	commands: []command{
 		{"start", "start an X11 session from a session entry or a command", runStart, false},
 		{"stop", "stop the running session", runStop, false},
+		{"finalize", "tell uxsm from the desktop that the session is ready", runFinalize, false},
 		{"entry", "generate a session entry and install it", runEntry, false},
 		{"check", "check that the system is ready for uxsm", runCheck, false},
 		{"setup", "change the system so that uxsm works fully", runSetup, false},

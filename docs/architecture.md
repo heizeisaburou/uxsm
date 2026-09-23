@@ -57,7 +57,7 @@ Del resultado salen `XDG_CURRENT_DESKTOP`, `XDG_SESSION_DESKTOP`, `XDG_MENU_PREF
 | --- | --- |
 | `uxsm-bindpid@PID.service` | Espera con `pidfd` al proceso que abrió la sesión. |
 | `uxsm-env@ID.service` | Prepara el entorno antes del escritorio y lo restaura al parar. |
-| `uxsm-desktop@ID.service` | Ejecuta el escritorio como proceso principal y espera a su gestor de ventanas. |
+| `uxsm-desktop@ID.service` | Ejecuta el escritorio como proceso principal y espera a que la sesión esté lista. |
 | `uxsm-session@ID.target` | Representa la sesión uxsm y arrastra `graphical-session.target`. |
 | `uxsm-autostart@ID.target` | Arrastra `xdg-desktop-autostart.target` cuando el autostart le toca a uxsm. |
 | `uxsm-shutdown.target` | Entra en conflicto con las unidades activas y coordina su cierre. |
@@ -72,14 +72,19 @@ Los dos primeros casos activan `uxsm-shutdown.target` mediante `OnSuccess=` y `O
 
 ### Cuándo la sesión está lista
 
-El escritorio no cuenta como arrancado en cuanto empieza a ejecutarse. `uxsm-desktop@ID.service` lleva un `ExecStartPost=` que ejecuta `uxsm aux wait-wm`, y systemd no da el servicio por arrancado hasta que esa orden termina. Como los targets de la sesión van detrás del servicio, `uxsm-session@ID.target` y `graphical-session.target` esperan con él, y lo que arranque con la sesión gráfica encuentra un escritorio donde colocarse.
+El escritorio no cuenta como arrancado en cuanto empieza a ejecutarse. `uxsm-desktop@ID.service` lleva un `ExecStartPost=` que ejecuta `uxsm aux wait-ready`, y systemd no da el servicio por arrancado hasta que esa orden termina. Como los targets de la sesión van detrás del servicio, `uxsm-session@ID.target` y `graphical-session.target` esperan con él, y lo que arranque con la sesión gráfica encuentra un escritorio donde colocarse.
 
-La espera es la comprobación de EWMH: la ventana raíz tiene `_NET_SUPPORTING_WM_CHECK` apuntando a una ventana del gestor de ventanas, y esa ventana tiene la misma propiedad apuntando a sí misma. Lo segundo distingue al gestor que está gobernando la pantalla de la marca que deja uno que murió de golpe. uxsm se lo pregunta al servidor X hablando el protocolo X11 desde `internal/x11`, sin libX11 ni `xprop`: es el saludo inicial y dos propiedades, y así la sesión no depende en tiempo de ejecución de ningún paquete de Xorg.
+Hay dos formas de que la sesión se dé por lista, y valen lo mismo:
 
-Si no llega a haber gestor de ventanas, `TimeoutStartSec=60` corta la espera: el servicio falla, su `OnFailure=` apaga la sesión y el display manager vuelve a la pantalla de inicio. Una sesión que no es un escritorio ―un solo programa X11, por ejemplo― puede quitar la espera con un fichero de anulación de la unidad:
+- **uxsm lo ve.** Es la comprobación de EWMH: la ventana raíz tiene `_NET_SUPPORTING_WM_CHECK` apuntando a una ventana del gestor de ventanas, y esa ventana tiene la misma propiedad apuntando a sí misma. Lo segundo distingue al gestor que está gobernando la pantalla de la marca que deja uno que murió de golpe. uxsm se lo pregunta al servidor X hablando el protocolo X11 desde `internal/x11`, sin libX11 ni `xprop`: es el saludo inicial y dos propiedades, y así la sesión no depende en tiempo de ejecución de ningún paquete de Xorg.
+- **El escritorio lo dice.** `uxsm finalize`, como el `uwsm finalize` de uwsm, ejecutado por el escritorio desde su propia configuración. Sirve para un escritorio que no deje la marca de EWMH, o que prefiera decirlo más tarde.
+
+Las dos encienden la misma señal, y sólo cuenta la primera: es un fichero en `$XDG_RUNTIME_DIR/uxsm/ready` creado con `O_EXCL`, así que encenderla es una sola operación del sistema y no hay dos arranques posibles. `uxsm finalize` con la señal ya encendida no es un error: lo dice y termina bien. La sesión que empieza la apaga primero, por si quedara encendida de una anterior que no llegó a limpiar.
+
+Si no llega ninguna de las dos, `TimeoutStartSec=30` corta la espera: el servicio falla, su `OnFailure=` apaga la sesión y el display manager vuelve a la pantalla de inicio. Una sesión que no es un escritorio ―un solo programa X11, por ejemplo― puede quitar la espera con un fichero de anulación de la unidad:
 
 ```ini
-# ~/.config/systemd/user/uxsm-desktop@.service.d/no-wait-wm.conf
+# ~/.config/systemd/user/uxsm-desktop@.service.d/no-wait-ready.conf
 [Service]
 ExecStartPost=
 ```
@@ -197,7 +202,7 @@ Las pruebas de `test/integration` usan Xvfb como servidor X y sustituyen al disp
 | `03-session-identity.sh` | `DesktopNames`, `-D`, `-e` y variables XDG. |
 | `04-session-environment.sh` | Carga de `env*` y restauración exacta por los tres cierres. |
 | `05-generated-entries.sh` | Instalación, sobrescritura, `check` y `setup`. |
-| `06-window-manager.sh` | Espera al gestor de ventanas y sesión que no llega a tenerlo. |
+| `06-session-ready.sh` | Las dos formas de estar lista, y la sesión que no llega a estarlo. |
 | `07-xdg-autostart.sh` | Autostart XDG: con gestor de ventanas, con escritorio y con `-a yes`. |
 
 Las distribuciones cubiertas son Ubuntu 24.04, Debian 13, Arch, Fedora 43 y openSUSE Tumbleweed. `quick` usa Ubuntu; `pair`, Ubuntu y Arch; `all`, las cinco.

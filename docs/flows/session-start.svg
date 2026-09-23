@@ -254,10 +254,10 @@
 <!-- waitwm -->
 <g id="node18" class="node">
 <title>waitwm</title>
-<path fill="#dcfce7" stroke="#15803d" d="M687.47,-232.97C687.47,-232.97 386.87,-232.97 386.87,-232.97 380.87,-232.97 374.87,-226.97 374.87,-220.97 374.87,-220.97 374.87,-170.32 374.87,-170.32 374.87,-164.32 380.87,-158.32 386.87,-158.32 386.87,-158.32 687.47,-158.32 687.47,-158.32 693.47,-158.32 699.47,-164.32 699.47,-170.32 699.47,-170.32 699.47,-220.97 699.47,-220.97 699.47,-226.97 693.47,-232.97 687.47,-232.97"/>
-<text xml:space="preserve" text-anchor="middle" x="537.17" y="-215.32" font-family="DejaVu Sans" font-size="11.00" fill="#14532d">ExecStartPost= ejecuta uxsm aux wait&#45;wm</text>
-<text xml:space="preserve" text-anchor="middle" x="537.17" y="-186.57" font-family="DejaVu Sans" font-size="11.00" fill="#14532d">Pregunta al servidor X por _NET_SUPPORTING_WM_CHECK</text>
-<text xml:space="preserve" text-anchor="middle" x="537.17" y="-170.82" font-family="DejaVu Sans" font-size="11.00" fill="#14532d">hasta que hay gestor de ventanas</text>
+<path fill="#dcfce7" stroke="#15803d" d="M693.47,-232.97C693.47,-232.97 380.87,-232.97 380.87,-232.97 374.87,-232.97 368.87,-226.97 368.87,-220.97 368.87,-220.97 368.87,-170.32 368.87,-170.32 368.87,-164.32 374.87,-158.32 380.87,-158.32 380.87,-158.32 693.47,-158.32 693.47,-158.32 699.47,-158.32 705.47,-164.32 705.47,-170.32 705.47,-170.32 705.47,-220.97 705.47,-220.97 705.47,-226.97 699.47,-232.97 693.47,-232.97"/>
+<text xml:space="preserve" text-anchor="middle" x="537.17" y="-215.32" font-family="DejaVu Sans" font-size="11.00" fill="#14532d">ExecStartPost= ejecuta uxsm aux wait&#45;ready</text>
+<text xml:space="preserve" text-anchor="middle" x="537.17" y="-186.57" font-family="DejaVu Sans" font-size="11.00" fill="#14532d">Espera a lo que llegue antes: la marca EWMH del gestor</text>
+<text xml:space="preserve" text-anchor="middle" x="537.17" y="-170.82" font-family="DejaVu Sans" font-size="11.00" fill="#14532d">de ventanas en el servidor X, o un uxsm finalize del escritorio</text>
 </g>
 <!-- desktop&#45;&gt;waitwm -->
 <g id="edge19" class="edge">
@@ -278,21 +278,21 @@
 <title>waitwm&#45;&gt;ready</title>
 <path fill="none" stroke="#64748b" d="M492.95,-158C474.3,-142.55 452.22,-124.25 431.81,-107.34"/>
 <polygon fill="#64748b" stroke="#64748b" points="433.57,-105.39 426.12,-102.63 430.22,-109.43 433.57,-105.39"/>
-<text xml:space="preserve" text-anchor="middle" x="533.03" y="-129.77" font-family="DejaVu Sans" font-size="9.00" fill="#334155"> aparece el gestor de ventanas </text>
+<text xml:space="preserve" text-anchor="middle" x="537.15" y="-129.77" font-family="DejaVu Sans" font-size="9.00" fill="#334155"> una de las dos enciende la señal </text>
 </g>
 <!-- nowm -->
 <g id="node20" class="node">
 <title>nowm</title>
 <ellipse fill="#fee2e2" stroke="#b91c1c" cx="707.17" cy="-52.79" rx="165.36" ry="32.46"/>
-<text xml:space="preserve" text-anchor="middle" x="707.17" y="-58.09" font-family="DejaVu Sans" font-size="11.00" fill="#7f1d1d">Sin gestor de ventanas, TimeoutStartSec=</text>
+<text xml:space="preserve" text-anchor="middle" x="707.17" y="-58.09" font-family="DejaVu Sans" font-size="11.00" fill="#7f1d1d">Sin ninguna de las dos, TimeoutStartSec=</text>
 <text xml:space="preserve" text-anchor="middle" x="707.17" y="-42.34" font-family="DejaVu Sans" font-size="11.00" fill="#7f1d1d">hace fallar el servicio y cierra la sesión</text>
 </g>
 <!-- waitwm&#45;&gt;nowm -->
 <g id="edge21" class="edge">
 <title>waitwm&#45;&gt;nowm</title>
-<path fill="none" stroke="#b91c1c" d="M581.39,-158.02C594.38,-147.26 605.17,-138.32 605.17,-138.32 605.17,-138.32 635.33,-113.33 662.85,-90.52"/>
-<polygon fill="#b91c1c" stroke="#b91c1c" points="664.51,-92.56 668.61,-85.75 661.16,-88.51 664.51,-92.56"/>
-<text xml:space="preserve" text-anchor="middle" x="660.86" y="-129.77" font-family="DejaVu Sans" font-size="9.00" fill="#7f1d1d"> se agota la espera </text>
+<path fill="none" stroke="#b91c1c" d="M587.24,-158.02C601.95,-147.26 614.17,-138.32 614.17,-138.32 614.17,-138.32 641.26,-113.7 666.2,-91.03"/>
+<polygon fill="#b91c1c" stroke="#b91c1c" points="667.91,-93.03 671.69,-86.04 664.37,-89.14 667.91,-93.03"/>
+<text xml:space="preserve" text-anchor="middle" x="668.55" y="-129.77" font-family="DejaVu Sans" font-size="9.00" fill="#7f1d1d"> se agota la espera </text>
 </g>
 </g>
 </svg>

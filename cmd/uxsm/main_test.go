@@ -5,6 +5,9 @@ import (
 	"os"
 	"reflect"
 	"testing"
+	"time"
+
+	"github.com/heizeisaburou/uxsm/internal/session"
 )
 
 // TestDispatch comprueba que un grupo reparte igual en cualquier nivel: la
@@ -136,5 +139,25 @@ func TestResolveTarget(t *testing.T) {
 		if _, err := resolveTarget(bad.args, bad.dashes); err == nil {
 			t.Errorf("resolveTarget(%q, %v) should fail", bad.args, bad.dashes)
 		}
+	}
+}
+
+// TestWaitReadyAlreadyOn comprueba el atajo de la espera: si el escritorio ya
+// ha ejecutado uxsm finalize, la sesión está lista y no hay nada que esperar.
+// Sin ese atajo, la espera intentaría hablar con el servidor X, que en esta
+// prueba no existe.
+func TestWaitReadyAlreadyOn(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	t.Setenv("DISPLAY", "")
+
+	if _, err := session.SignalReady("the desktop ran uxsm finalize"); err != nil {
+		t.Fatalf("SignalReady: %v", err)
+	}
+	reason, err := waitReady(time.Second)
+	if err != nil {
+		t.Fatalf("waitReady: %v", err)
+	}
+	if reason != "the desktop ran uxsm finalize" {
+		t.Errorf("waitReady says %q, want the reason of uxsm finalize", reason)
 	}
 }

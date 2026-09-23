@@ -45,11 +45,11 @@ digraph session_start {
   desktop [shape=oval, fillcolor="#bbf7d0", color="#15803d", fontcolor="#14532d",
            label="exec sustituye el auxiliar por el escritorio\n\nEl propio bspwm (u otro escritorio) queda como\nproceso principal del servicio de systemd"];
   waitwm [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
-          label="ExecStartPost= ejecuta uxsm aux wait-wm\n\nPregunta al servidor X por _NET_SUPPORTING_WM_CHECK\nhasta que hay gestor de ventanas"];
+          label="ExecStartPost= ejecuta uxsm aux wait-ready\n\nEspera a lo que llegue antes: la marca EWMH del gestor\nde ventanas en el servidor X, o un uxsm finalize del escritorio"];
   ready [shape=oval, fillcolor="#bbf7d0", color="#15803d", fontcolor="#14532d",
          label="El servicio cuenta como arrancado\n\nDetrás van uxsm-session@ID.target\ny graphical-session.target"];
   nowm [shape=oval, color="#b91c1c", fillcolor="#fee2e2", fontcolor="#7f1d1d",
-        label="Sin gestor de ventanas, TimeoutStartSec=\nhace fallar el servicio y cierra la sesión"];
+        label="Sin ninguna de las dos, TimeoutStartSec=\nhace fallar el servicio y cierra la sesión"];
 
   caller -> start -> kind;
   kind -> entry [label=" ID .desktop "];
@@ -67,7 +67,7 @@ digraph session_start {
   reread -> desktop;
   saved -> desktop;
   desktop -> waitwm;
-  waitwm -> ready [label=" aparece el gestor de ventanas "];
+  waitwm -> ready [label=" una de las dos enciende la señal "];
   waitwm -> nowm [label=" se agota la espera ", color="#b91c1c", fontcolor="#7f1d1d"];
 
   {rank=same; entry; command}

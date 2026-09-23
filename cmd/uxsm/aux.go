@@ -28,7 +28,7 @@ var auxCommands = group{
 	commands: []command{
 		{"exec", "replace this process with the desktop of the session", runAuxExec, false},
 		{"waitpid", "wait until a process exits", runAuxWaitPID, false},
-		{"wait-wm", "wait until a window manager manages the X display", runAuxWaitWM, false},
+		{"wait-ready", "wait until the session is ready", runAuxWaitReady, false},
 		{"autostart", "start the XDG autostart entries of the session", runAuxAutostart, false},
 		{"prepare-env", "set up the session environment in the systemd user manager", runAuxPrepareEnv, false},
 		{"cleanup-env", "restore the systemd user manager environment from before the session", runAuxCleanupEnv, false},
@@ -127,26 +127,26 @@ func runAuxWaitPID(args []string) error {
 	return pidwait.Wait(pid)
 }
 
-// waitWMInterval es cada cuánto se le pregunta al servidor X si ya hay gestor
-// de ventanas. Es una pregunta barata ―dos propiedades por un socket de unix― y
-// medio segundo de escritorio parado se nota, así que se pregunta a menudo.
-const waitWMInterval = 100 * time.Millisecond
+// readyInterval es cada cuánto se comprueba si la sesión ya está lista. Es una
+// comprobación barata ―dos propiedades por un socket de unix y un fichero― y
+// medio segundo de escritorio parado se nota, así que se mira a menudo.
+const readyInterval = 100 * time.Millisecond
 
-// runAuxWaitWM espera a que el escritorio tenga gestor de ventanas:
-// `uxsm aux wait-wm`.
+// runAuxWaitReady espera a que la sesión esté lista: `uxsm aux wait-ready`.
 //
 // Es el ExecStartPost= de uxsm-desktop@.service. systemd no da por arrancado el
 // servicio hasta que termina su ExecStartPost=, y detrás del servicio van
 // uxsm-session@.target y graphical-session.target: así lo que arranque con la
-// sesión encuentra un escritorio con gestor de ventanas, y no una pantalla
-// donde todavía no se puede colocar nada.
+// sesión encuentra un escritorio ya en pantalla, y no un sitio donde todavía no
+// se puede colocar nada.
 //
 // La espera no tiene límite propio: lo pone TimeoutStartSec= en la unidad. Si
 // se acaba, systemd mata esta espera, el servicio falla y su OnFailure= apaga
 // la sesión, que es lo que devuelve el control al display manager.
-func runAuxWaitWM(args []string) error {
-	fs := newFlagSet("aux wait-wm", "",
-		"Wait until an EWMH window manager manages the X display of the session.")
+func runAuxWaitReady(args []string) error {
+	fs := newFlagSet("aux wait-ready", "",
+		"Wait until the session is ready: either an EWMH window manager takes\n"+
+			"over the X display, or the desktop runs uxsm finalize.")
 	timeout := fs.Duration("timeout", 0, "give up after this `duration`; zero waits with no limit of its own")
 	if err := parseFlags(fs, args); err != nil {
 		return err
@@ -156,12 +156,61 @@ func runAuxWaitWM(args []string) error {
 		return errUsage
 	}
 
-	wm, err := x11.WaitForManager("", *timeout, waitWMInterval)
+	reason, err := waitReady(*timeout)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("window manager ready: %s\n", wm)
+	fmt.Println(reason)
 	return nil
+}
+
+// waitReady espera a que se encienda la señal de que la sesión está lista y
+// devuelve por qué se encendió.
+//
+// Son dos caminos a la vez, y vale el primero que llegue: el gestor de ventanas
+// EWMH, que uxsm ve mirando el servidor X, y `uxsm finalize`, que ejecuta el
+// escritorio. Encenderla es una sola operación del sistema (session.SignalReady),
+// así que si los dos llegan a la vez sólo cuenta uno.
+func waitReady(timeout time.Duration) (string, error) {
+	// El escritorio puede haber llamado a uxsm finalize antes incluso de que
+	// esta espera empiece: entonces no hay nada que esperar ni a qué conectarse.
+	if on, reason, err := session.Ready(); err != nil || on {
+		return reason, err
+	}
+
+	c, err := x11.Dial("")
+	if err != nil {
+		return "", err
+	}
+	defer c.Close()
+
+	var deadline time.Time
+	if timeout > 0 {
+		deadline = time.Now().Add(timeout)
+	}
+	for {
+		wm, err := c.Manager()
+		if err != nil {
+			return "", err
+		}
+		if wm != nil {
+			if _, err := session.SignalReady("window manager ready: " + wm.String()); err != nil {
+				return "", err
+			}
+			// Si uxsm finalize se adelantó por muy poco, la razón que vale es
+			// la suya, que es la que quedó escrita.
+			_, reason, err := session.Ready()
+			return reason, err
+		}
+		if on, reason, err := session.Ready(); err != nil || on {
+			return reason, err
+		}
+		if !deadline.IsZero() && !time.Now().Add(readyInterval).Before(deadline) {
+			return "", fmt.Errorf("the session was not ready after %s: no EWMH window manager took over "+
+				"the X display, and the desktop did not run uxsm finalize", timeout)
+		}
+		time.Sleep(readyInterval)
+	}
 }
 
 // runAuxAutostart arranca el autostart XDG de la sesión, si le toca a uxsm:
