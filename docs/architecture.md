@@ -201,7 +201,7 @@ make release           # todas las distribuciones y releases/latest
 1. una compila el paquete nativo con la receta real de `packaging/`;
 2. otra parte limpia, instala ese paquete con el gestor de la distribución y ejecuta las pruebas.
 
-Las pruebas de `test/integration` usan Xvfb como servidor X y sustituyen al display manager por una unidad transitoria:
+Las pruebas de `test/integration` usan Xvfb como servidor X y sustituyen al display manager por una unidad transitoria, salvo la última, que instala LightDM y abre la sesión con él:
 
 | Script | Recorrido representativo |
 | --- | --- |
@@ -211,7 +211,8 @@ Las pruebas de `test/integration` usan Xvfb como servidor X y sustituyen al disp
 | `04-session-environment.sh` | Carga de `env*` y restauración exacta por los tres cierres. |
 | `05-generated-entries.sh` | Instalación, sobrescritura, `check` y `setup`. |
 | `06-session-ready.sh` | Las dos formas de estar lista, y la sesión que no llega a estarlo. |
-| `07-xdg-autostart.sh` | Autostart XDG: con gestor de ventanas, con escritorio y con `-a yes`. |
+| `07-xdg-autostart.sh` | Autostart XDG: con gestor de ventanas, con `--no-autostart` y en la entrada generada. |
+| `08-display-manager.sh` | La sesión abierta por LightDM de verdad, con autologin sobre Xvfb. |
 
 Las distribuciones cubiertas son Ubuntu 24.04, Debian 13, Arch, Fedora 43 y openSUSE Tumbleweed. `quick` usa Ubuntu; `pair`, Ubuntu y Arch; `all`, las cinco.
 

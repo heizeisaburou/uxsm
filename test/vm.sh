@@ -12,6 +12,8 @@
 #
 # La orden recibe en UXSM_VM_DISTRO el nombre de la máquina: ubuntu, fedora…
 #
+# UXSM_VM_COMMAND_TIMEOUT=segundos es lo que se le da a la orden antes de darla
+# por colgada; por defecto, media hora.
 # UXSM_VM_UPLOAD=dir copia dir a ~/uxsm en cada máquina antes de la orden.
 # UXSM_VM_DOWNLOAD=dir trae ~/uxsm/out de cada máquina a dir si la orden termina
 # bien.
@@ -28,6 +30,8 @@ set -eu
 CACHE=${XDG_CACHE_HOME:-$HOME/.cache}/uxsm/vm
 SSH_PORT=${UXSM_VM_SSH_PORT:-2222}
 BOOT_TIMEOUT=${UXSM_VM_BOOT_TIMEOUT:-300}
+# Lo que se le da a la orden dentro de la máquina antes de darla por colgada.
+COMMAND_TIMEOUT=${UXSM_VM_COMMAND_TIMEOUT:-1800}
 VM_USER=uxsm
 
 DEFAULT_COMMAND='. /etc/os-release; echo "$PRETTY_NAME, kernel $(uname -r)"; id; sudo -n true && echo "sudo: ok"; echo "system: $(systemctl is-system-running --wait)"'
@@ -59,9 +63,15 @@ for tool in qemu-system-x86_64 qemu-img cloud-localds ssh ssh-keygen curl; do
     command -v "$tool" >/dev/null 2>&1 || { echo "vm.sh: $tool not found" >&2; exit 1; }
 done
 
+# Con KVM, el procesador que ve la máquina es el de verdad. Antes era "max", que
+# es todo lo que QEMU sabe emular, y con él una máquina de Ubuntu se llevó por
+# delante su propio núcleo nada más arrancar ("Attempted to kill the idle
+# task!"). Sin KVM no hay procesador real que pasar, así que queda "max".
 accel=tcg
+cpu=max
 if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
     accel=kvm
+    cpu=host
 else
     echo "vm.sh: /dev/kvm not usable, falling back to emulation (slow)" >&2
 fi
@@ -83,8 +93,19 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 
+# vm_ssh [--timeout SEGUNDOS] ORDEN…: ejecuta la orden dentro de la máquina.
+#
+# El límite hace falta porque una máquina que se cuelga ―un kernel panic del
+# invitado, por ejemplo― deja la conexión abierta y callada: sin él, la tanda se
+# queda esperando una respuesta que no va a llegar nunca.
 vm_ssh() {
-    ssh -i "$work/key" -p "$SSH_PORT" \
+    limit=
+    if [ "${1:-}" = --timeout ]; then
+        limit="timeout $2"
+        shift 2
+    fi
+    # shellcheck disable=SC2086
+    $limit ssh -i "$work/key" -p "$SSH_PORT" \
         -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
         -o LogLevel=ERROR -o ConnectTimeout=3 -o BatchMode=yes \
         "$VM_USER@127.0.0.1" "$@"
@@ -123,7 +144,7 @@ EOF
     cloud-localds "$work/seed.img" "$work/user-data" "$work/meta-data"
 
     qemu-system-x86_64 \
-        -machine q35,accel="$accel" -cpu max -smp 2 -m 2048 \
+        -machine q35,accel="$accel" -cpu "$cpu" -smp 2 -m 2048 \
         -drive file="$work/disk.qcow2",if=virtio,format=qcow2 \
         -drive file="$work/seed.img",if=virtio,format=raw \
         -netdev user,id=net0,hostfwd=tcp:127.0.0.1:"$SSH_PORT"-:22 \
@@ -151,9 +172,22 @@ EOF
     fi
 
     # El código de salida de la orden, no el de sed.
-    { vm_ssh "export UXSM_VM_DISTRO=$distro; $command" 2>&1; echo $? > "$work/status"; } | sed -u "s/^/[$distro] /"
+    { vm_ssh --timeout "$COMMAND_TIMEOUT" "export UXSM_VM_DISTRO=$distro; $command" 2>&1
+      echo $? > "$work/status"
+    } | sed -u "s/^/[$distro] /"
     rc=$(cat "$work/status")
-    [ "$rc" -eq 0 ] || return "$rc"
+    if [ "$rc" -ne 0 ]; then
+        # 124 es lo que devuelve timeout; y con la máquina caída, la causa está
+        # en la consola, no en la salida de la orden.
+        if [ "$rc" -eq 124 ]; then
+            echo "vm.sh[$distro]: the command did not finish in ${COMMAND_TIMEOUT}s" >&2
+        fi
+        if grep -q "Kernel panic" "$work/console.log" 2>/dev/null; then
+            echo "vm.sh[$distro]: the guest kernel panicked; last console lines:" >&2
+            tail -n 20 "$work/console.log" >&2
+        fi
+        return "$rc"
+    fi
 
     # UXSM_VM_DOWNLOAD: lo que la orden haya dejado en ~/uxsm/out.
     if [ -n "${UXSM_VM_DOWNLOAD:-}" ]; then
