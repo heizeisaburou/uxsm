@@ -19,7 +19,7 @@ En ambos casos uxsm:
 
 1. decide el ID de la instancia (`bspwm.desktop` para una entrada, `bspwm` para el comando);
 2. calcula la identidad XDG de la sesión;
-3. espera a que una sesión anterior de uxsm haya terminado también su limpieza; sólo mira las unidades de uxsm, porque `graphical-session.target` lo puede haber encendido otro ―el envoltorio de sesión de NixOS lo activa antes de ejecutar el `Exec=` de la entrada―;
+3. espera a que otra sesión gráfica haya terminado también su limpieza, mirando las unidades de uxsm y las de uwsm por su nombre, y no `graphical-session.target`, que es de systemd y lo enciende cualquiera ―el envoltorio de sesión de NixOS lo activa antes de ejecutar el `Exec=` de la entrada―. Dos sesiones gráficas de un mismo usuario no encajan: el gestor de systemd es uno por usuario, así que compartirían ese target y el entorno;
 4. guarda el entorno de login, la identidad y, si procede, el comando en `$XDG_RUNTIME_DIR/uxsm`;
 5. arranca una unidad que vigila el PID entregado al display manager;
 6. se sustituye por `systemctl --user start --wait uxsm-desktop@ID.service`.

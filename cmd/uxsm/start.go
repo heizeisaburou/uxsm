@@ -192,22 +192,30 @@ func afterDashes(args []string, n int) bool {
 // limpieza; si pasado este tiempo sigue ahí, es que hay otra sesión en marcha.
 const previousSessionTimeout = 10 * time.Second
 
-// sessionUnits son las unidades de uxsm: si alguna sigue viva, hay una sesión
-// suya arrancada o apagándose.
+// sessionUnits son las unidades de una sesión gráfica de este usuario: las de
+// uxsm y las de uwsm, que es el otro que hace esto. Si alguna sigue viva, hay
+// una sesión arrancada o todavía apagándose.
 //
-// No están aquí graphical-session.target ni graphical-session-pre.target, que
-// son de systemd y las enciende cualquiera: el envoltorio de sesión de NixOS
-// las activa antes de ejecutar el Exec= de la entrada, así que uxsm tomaba por
-// sesión anterior la suya propia y se negaba a arrancar. Lo que hay que
-// detectar es la limpieza de una sesión de uxsm todavía en marcha, y eso lo
-// dicen sus unidades.
+// Dos sesiones gráficas de un mismo usuario no encajan, las gestione quien las
+// gestione: el gestor de systemd es uno por usuario, así que comparten
+// graphical-session.target y el entorno. Cerrar una apagaría el target de la
+// otra, y la limpieza del entorno de una borraría lo que la otra acaba de
+// poner.
+//
+// Aquí van nombres concretos y no graphical-session.target, que es de systemd y
+// lo enciende cualquiera: el envoltorio de sesión de NixOS lo activa antes de
+// ejecutar el Exec= de la entrada, así que mirarlo hacía que uxsm se tomara a
+// sí mismo por una sesión anterior y se negara a arrancar.
 var sessionUnits = []string{
 	"uxsm-shutdown.target",
 	"uxsm-desktop@*.service", "uxsm-env@*.service", "uxsm-session@*.target", "uxsm-bindpid@*.service",
+	// Las de uwsm, que gestiona así las sesiones de Wayland.
+	"wayland-session-shutdown.target", "wayland-wm@*.service", "wayland-wm-env@*.service",
+	"wayland-session@*.target", "wayland-session-pre@*.target", "wayland-session-bindpid@*.service",
 }
 
 // waitForPreviousSession espera hasta timeout a que no quede viva ninguna unidad
-// de una sesión de uxsm.
+// de otra sesión gráfica.
 //
 // Hace falta porque el cierre de una sesión no es instantáneo: su servicio de
 // entorno limpia el gestor y borra los ficheros de $XDG_RUNTIME_DIR/uxsm mientras
@@ -224,7 +232,7 @@ func waitForPreviousSession(timeout time.Duration) error {
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("another uxsm session is still running: %s", strings.Join(live, ", "))
+			return fmt.Errorf("another graphical session is still running: %s", strings.Join(live, ", "))
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
