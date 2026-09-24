@@ -18,8 +18,8 @@ la entrada de sesión que elige el display manager:
   arrancado. No hace falta si pone la marca de EWMH, que es lo que uxsm mira por su cuenta.
 - `uxsm entry bspwm`: genera la entrada de sesión de uxsm, `bspwm-uxsm.desktop`, y la instala en
   `/usr/local/share/xsessions`.
-- `uxsm check` y `uxsm setup xsessions-dir`: comprueban y arreglan que el display manager lea ese
-  directorio.
+- `uxsm check` y `uxsm setup sessions-dir`: comprueban y arreglan que el display manager lea los
+  directorios locales de sesiones, el de X11 y el de Wayland.
 
 Arquitectura, interacción con systemd y pruebas: [`docs/architecture.md`](docs/architecture.md).
 

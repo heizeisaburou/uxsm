@@ -159,7 +159,7 @@ func warnDisplayManager() {
 		return
 	}
 	fmt.Fprintf(os.Stderr, "uxsm: warning: %s, the display manager in use, does not read %s,\n"+
-		"so this entry will not show on the login screen; to fix it: uxsm setup xsessions-dir\n",
+		"so this entry will not show on the login screen; to fix it: uxsm setup sessions-dir\n",
 		r.Name, dm.LocalXSessions)
 }
 

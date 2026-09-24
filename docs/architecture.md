@@ -176,10 +176,10 @@ Una fuente puede ser una entrada existente, un comando o la tabla de escritorios
 
 Sin `-i`, la orden es una previsualización. Con `-i` escribe en `/usr/local/share/xsessions`; hace falta ejecutarla con permisos de root. No sobrescribe ni oculta otra entrada con el mismo ID sin `-f`.
 
-No todos los display managers leen ese directorio:
+No todos los display managers leen ese directorio, ni el de Wayland que le hace pareja, `/usr/local/share/wayland-sessions`, donde van las entradas que se escriben a mano ―la de uwsm para su compositor, por ejemplo―. uxsm deja leídos los dos: en LightDM son la misma lista, y arreglar sólo uno dejaría la máquina a medias.
 
 - `uxsm check` identifica el display manager activo y enseña de dónde obtiene su lista;
-- `uxsm setup xsessions-dir` calcula el cambio para LightDM y SDDM, y sólo lo aplica con `-i`;
+- `uxsm setup sessions-dir` calcula el cambio para LightDM y SDDM, y sólo lo aplica con `-i`;
 - para GDM explica el cambio necesario en `XDG_DATA_DIRS`, pero no modifica su unidad.
 
 Este código está aislado en `internal/dm` y se prueba contra árboles de configuración falsos, sin modificar el sistema que ejecuta las pruebas unitarias.

@@ -20,6 +20,15 @@ import (
 	"strings"
 )
 
+// LocalWaylandSessions es el directorio local de entradas de sesión de Wayland.
+// uxsm no genera ninguna ―es cosa de X11―, pero es el sitio donde las pone quien
+// las escribe a mano, y el display manager tiene que leerlo por el mismo motivo
+// que el de X11: si no, están y no salen.
+const LocalWaylandSessions = "/usr/local/share/wayland-sessions"
+
+// LocalSessions son los dos directorios locales que uxsm deja leídos.
+var LocalSessions = []string{LocalXSessions, LocalWaylandSessions}
+
 // LocalXSessions es el directorio donde uxsm instala las entradas de sesión
 // que genera: el de las entradas locales del sistema, fuera de los paquetes.
 const LocalXSessions = "/usr/local/share/xsessions"
@@ -45,7 +54,7 @@ func path(p string) string {
 type Report struct {
 	// Name es el nombre para las personas: "LightDM".
 	Name string
-	// ID es el nombre para uxsm setup xsessions-dir: "lightdm".
+	// ID es el nombre para uxsm setup sessions-dir: "lightdm".
 	ID string
 	// Dirs son sus directorios de xsessions, en el orden en que los recorre.
 	Dirs []string
@@ -60,6 +69,17 @@ type Report struct {
 // Reads dice si el display manager busca entradas en dir.
 func (r *Report) Reads(dir string) bool {
 	return slices.Contains(r.Dirs, strings.TrimSuffix(dir, "/"))
+}
+
+// Missing son los directorios locales que el display manager no lee.
+func (r *Report) Missing() []string {
+	var missing []string
+	for _, dir := range LocalSessions {
+		if !r.Reads(dir) {
+			missing = append(missing, dir)
+		}
+	}
+	return missing
 }
 
 // adapter sabe leer los directorios de xsessions de un display manager.
@@ -87,7 +107,7 @@ type UnknownError struct {
 }
 
 func (e *UnknownError) Error() string {
-	return fmt.Sprintf("the display manager %s is not one uxsm knows (LightDM, SDDM or GDM), so its xsessions directories cannot be determined", e.Unit)
+	return fmt.Sprintf("the display manager %s is not one uxsm knows (LightDM, SDDM or GDM), so its session directories cannot be determined", e.Unit)
 }
 
 // Active devuelve los directorios de xsessions del display manager que arranca

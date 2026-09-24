@@ -23,7 +23,7 @@ var checks = []struct {
 	name string
 	run  func() checkResult
 }{
-	{"xsessions dir", checkXSessionsDir},
+	{"sessions dirs", checkSessionsDirs},
 }
 
 // errWarnings es el error de uxsm check cuando alguna comprobación da aviso:
@@ -46,8 +46,8 @@ func runCheck(args []string) error {
 			"ok, warning, or unknown when it cannot be determined. Exits with 1 if\n"+
 			"any check gives a warning.\n\n"+
 			"Checks:\n"+
-			"  xsessions dir  whether the display manager in use reads "+dm.LocalXSessions+",\n"+
-			"                 where uxsm installs the session entries it generates\n\n"+
+			"  sessions dirs  whether the display manager in use reads the local session\n"+
+			"                 directories, where uxsm installs the entries it generates\n\n"+
 			"Subcommand:\n"+
 			"  is-active      exit with 0 if a uxsm session is running, 1 if not")
 	if err := parseFlags(fs, args); err != nil {
@@ -73,10 +73,10 @@ func runCheck(args []string) error {
 	return nil
 }
 
-// checkXSessionsDir comprueba si el display manager en uso lee
+// checkSessionsDirs comprueba si el display manager en uso lee
 // dm.LocalXSessions: si no, las entradas que instala uxsm entry no salen en la
 // pantalla de inicio.
-func checkXSessionsDir() checkResult {
+func checkSessionsDirs() checkResult {
 	r, err := dm.Active()
 	if errors.Is(err, dm.ErrNoDisplayManager) {
 		return checkResult{status: "unknown", summary: err.Error(),
@@ -90,11 +90,14 @@ func checkXSessionsDir() checkResult {
 		"it reads: " + strings.Join(r.Dirs, ", "),
 		"from: " + r.Origin,
 	}
-	if r.Reads(dm.LocalXSessions) {
-		return checkResult{status: "ok", summary: r.Name + " (in use) reads " + dm.LocalXSessions, details: details}
+	missing := r.Missing()
+	if len(missing) == 0 {
+		return checkResult{status: "ok",
+			summary: r.Name + " (in use) reads " + strings.Join(dm.LocalSessions, " and "), details: details}
 	}
 	details = append(details,
-		"the session entries uxsm installs there will not show on the login screen",
-		"to fix it: uxsm setup xsessions-dir")
-	return checkResult{status: "warning", summary: r.Name + " (in use) does not read " + dm.LocalXSessions, details: details}
+		"session entries installed there will not show on the login screen",
+		"to fix it: uxsm setup sessions-dir")
+	return checkResult{status: "warning",
+		summary: r.Name + " (in use) does not read " + strings.Join(missing, " or "), details: details}
 }

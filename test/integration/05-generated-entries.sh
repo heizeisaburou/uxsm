@@ -1,7 +1,7 @@
 #!/bin/sh
 # uxsm entry: las entradas que genera arrancan la sesión, con los nombres del
 # escritorio bien puestos, y no pisa ni tapa otras entradas sin -f. Y uxsm
-# check y uxsm setup xsessions-dir en una máquina sin display manager.
+# check y uxsm setup sessions-dir en una máquina sin display manager.
 #
 # El display manager se sustituye, como en las demás pruebas, por una unidad
 # pasajera que ejecuta el Exec= de la entrada generada. Lo hace sin
@@ -40,13 +40,13 @@ quit_session() {
 
 out=$(uxsm check) || fail "uxsm check without a display manager failed: $out"
 case $out in
-*"xsessions dir: unknown: no display manager"*) ok "uxsm check says it cannot tell without a display manager" ;;
+*"sessions dirs: unknown: no display manager"*) ok "uxsm check says it cannot tell without a display manager" ;;
 *) fail "uxsm check: $out" ;;
 esac
-if uxsm setup xsessions-dir lightdm >/dev/null 2>&1; then
-    fail "uxsm setup xsessions-dir lightdm worked without LightDM installed"
+if uxsm setup sessions-dir lightdm >/dev/null 2>&1; then
+    fail "uxsm setup sessions-dir lightdm worked without LightDM installed"
 fi
-ok "uxsm setup xsessions-dir refuses a display manager that is not installed"
+ok "uxsm setup sessions-dir refuses a display manager that is not installed"
 
 # Sin -i sólo enseña lo que escribiría.
 sudo uxsm entry bspwm 2>/dev/null | grep -q "^Would write $dir/bspwm-uxsm.desktop:" ||

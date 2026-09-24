@@ -15,7 +15,7 @@ var setupCommands = group{
 	name:        "uxsm setup",
 	description: "Change the system so that uxsm works fully. Without -i, each command\nonly explains what it would do.",
 	commands: []command{
-		{"xsessions-dir", "make the display manager read " + dm.LocalXSessions, runSetupXSessionsDir, false},
+		{"sessions-dir", "make the display manager read the local session directories", runSetupSessionsDir, false},
 	},
 }
 
@@ -23,16 +23,22 @@ func runSetup(args []string) error {
 	return setupCommands.dispatch(args)
 }
 
-// runSetupXSessionsDir hace que el display manager lea dm.LocalXSessions, donde
-// uxsm entry instala las entradas: `uxsm setup xsessions-dir [-i] [lightdm|sddm|gdm]`.
+// runSetupSessionsDir hace que el display manager lea los directorios locales
+// de sesiones: `uxsm setup sessions-dir [-i] [lightdm|sddm|gdm]`.
+//
+// Son dos, el de X11 y el de Wayland. uxsm sólo genera entradas de X11, pero
+// arreglar sólo ese sería dejar la máquina a medias: en LightDM es la misma
+// lista para los dos, y quien escriba a mano una entrada de Wayland ―como pide
+// el README de uwsm para su compositor― se encontraría con que no sale.
 //
 // Sin display manager, usa el que está en uso. Sin -i sólo explica qué haría.
 // Con GDM nunca escribe nada: su lista sale de su XDG_DATA_DIRS, que también
 // decide dónde busca todo lo demás, y eso es mejor que lo cambie una persona.
-func runSetupXSessionsDir(args []string) error {
-	fs := newFlagSet("setup xsessions-dir", "[-i] [lightdm | sddm | gdm]",
-		"Make the display manager read "+dm.LocalXSessions+", where uxsm installs the\n"+
-			"session entries it generates, so that they show on the login screen.\n"+
+func runSetupSessionsDir(args []string) error {
+	fs := newFlagSet("setup sessions-dir", "[-i] [lightdm | sddm | gdm]",
+		"Make the display manager read "+strings.Join(dm.LocalSessions, " and ")+",\n"+
+			"where session entries installed by hand live, the ones uxsm generates\n"+
+			"among them, so that they show on the login screen.\n"+
 			"Without a display manager, it uses the one in use. Without -i, it only\n"+
 			"explains what it would change. For GDM it never changes anything: it only\n"+
 			"explains how to do it.")
@@ -62,38 +68,54 @@ func runSetupXSessionsDir(args []string) error {
 		return nil
 	}
 
-	c, err := dm.SetupXSessionsDir(r.ID)
+	changes, err := dm.SetupSessionsDir(r.ID)
 	if err != nil {
 		return err
 	}
-	if c == nil {
-		fmt.Printf("It already reads %s: nothing to do.\n", dm.LocalXSessions)
+	if len(changes) == 0 {
+		fmt.Printf("It already reads %s: nothing to do.\n", strings.Join(dm.LocalSessions, " and "))
 		return nil
 	}
 
-	action := "change"
-	if c.Old == "" {
-		action = "create"
+	for i := range changes {
+		c := &changes[i]
+		action := "change"
+		if c.Old == "" {
+			action = "create"
+		}
+		if *install {
+			fmt.Printf("\nGoing to %s %s:\n", action, c.File)
+		} else {
+			fmt.Printf("\nWould %s %s:\n", action, c.File)
+		}
+		printChange(c)
 	}
-	if *install {
-		fmt.Printf("\nGoing to %s %s:\n", action, c.File)
-	} else {
-		fmt.Printf("\nWould %s %s:\n", action, c.File)
-	}
-	printChange(c)
 
 	if !*install {
 		fmt.Printf("\nRun it again with -i to do it (as root). %s reads it when it starts.\n", r.Name)
 		return nil
 	}
-	if err := c.Apply(); err != nil {
-		if errors.Is(err, os.ErrPermission) {
-			return fmt.Errorf("writing %s: %w (run it as root)", c.File, err)
+	for i := range changes {
+		c := &changes[i]
+		if err := c.Apply(); err != nil {
+			if errors.Is(err, os.ErrPermission) {
+				return fmt.Errorf("writing %s: %w (run it as root)", c.File, err)
+			}
+			return fmt.Errorf("writing %s: %w", c.File, err)
 		}
-		return fmt.Errorf("writing %s: %w", c.File, err)
 	}
-	fmt.Printf("\nDone. %s will read %s the next time it starts.\n", r.Name, dm.LocalXSessions)
+	fmt.Printf("\nDone. %s will read %s the next time it starts.\n",
+		r.Name, strings.Join(missingOr(r), " and "))
 	return nil
+}
+
+// missingOr son los directorios que le faltaban al display manager, para
+// decirlo al terminar; si ya los leía todos, los dos.
+func missingOr(r *dm.Report) []string {
+	if missing := r.Missing(); len(missing) > 0 {
+		return missing
+	}
+	return dm.LocalSessions
 }
 
 // printChange enseña un cambio: la línea que cambia, si sólo cambia una, o el

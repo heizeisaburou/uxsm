@@ -119,48 +119,79 @@ func TestGDM(t *testing.T) {
 	}
 }
 
-func TestSetupXSessionsDir(t *testing.T) {
-	// Nadie pone la opción: se crea el fichero propio, con la lista de serie
-	// y /usr/local delante de /usr/share.
+func TestSetupSessionsDir(t *testing.T) {
+	// Nadie pone la opción: se crea el fichero propio, con la lista de serie y
+	// cada directorio local delante de su hermano de /usr/share.
 	fakeSystem(t, nil, nil)
-	c, err := SetupXSessionsDir("lightdm")
+	changes, err := SetupSessionsDir("lightdm")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.File != "/etc/lightdm/lightdm.conf.d/99-uxsm.conf" || c.Old != "" ||
-		!strings.Contains(c.New, "[LightDM]\nsessions-directory=/usr/share/lightdm/sessions:/usr/local/share/xsessions:/usr/share/xsessions:/usr/share/wayland-sessions\n") {
+	if len(changes) != 1 {
+		t.Fatalf("LightDM gave %d changes, want one", len(changes))
+	}
+	c := changes[0]
+	want := "[LightDM]\nsessions-directory=/usr/share/lightdm/sessions:/usr/local/share/xsessions:" +
+		"/usr/share/xsessions:/usr/local/share/wayland-sessions:/usr/share/wayland-sessions\n"
+	if c.File != "/etc/lightdm/lightdm.conf.d/99-uxsm.conf" || c.Old != "" || !strings.Contains(c.New, want) {
 		t.Errorf("new file: %+v", c)
 	}
 	if err := c.Apply(); err != nil {
 		t.Fatal(err)
 	}
-	if r, _ := lightdm.read(); !r.Reads(LocalXSessions) {
-		t.Errorf("after Apply LightDM does not read %s: %+v", LocalXSessions, r)
+	r, _ := lightdm.read()
+	if len(r.Missing()) != 0 {
+		t.Errorf("after Apply LightDM still misses %v: %+v", r.Missing(), r)
 	}
-	if c, _ := SetupXSessionsDir("lightdm"); c != nil {
-		t.Errorf("second run should change nothing: %+v", c)
+	if changes, _ := SetupSessionsDir("lightdm"); len(changes) != 0 {
+		t.Errorf("second run should change nothing: %+v", changes)
 	}
 
-	// Un fichero del usuario la pone: se cambia en ese mismo fichero, sin
-	// tocar las demás líneas.
+	// SDDM tiene una opción por tipo de sesión, y sus valores de serie ya
+	// traen los dos directorios locales.
+	fakeSystem(t, nil, nil)
+	if changes, _ := SetupSessionsDir("sddm"); len(changes) != 0 {
+		t.Errorf("SDDM with its defaults should change nothing: %+v", changes)
+	}
+
+	// Un fichero del usuario pone una de las dos: se cambia en ese mismo
+	// fichero, sin tocar las demás líneas, y la otra se queda como está.
 	user := "/etc/sddm.conf.d/10-mine.conf"
 	fakeSystem(t, map[string]string{user: "[Theme]\nCurrent=x\n\n[X11]\nSessionDir=/opt/sessions\nMinimumVT=1\n"}, nil)
-	c, err = SetupXSessionsDir("sddm")
+	changes, err = SetupSessionsDir("sddm")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.File != user || c.New != "[Theme]\nCurrent=x\n\n[X11]\nSessionDir=/opt/sessions,/usr/local/share/xsessions\nMinimumVT=1\n" {
-		t.Errorf("user file: %+v", c)
+	if len(changes) != 1 || changes[0].File != user ||
+		changes[0].New != "[Theme]\nCurrent=x\n\n[X11]\nSessionDir=/opt/sessions,/usr/local/share/xsessions\nMinimumVT=1\n" {
+		t.Errorf("user file: %+v", changes)
 	}
 
-	// Un fichero de un paquete la pone: no se toca, se crea el propio.
+	// Un fichero de un paquete la pone: no se toca, se escribe el propio.
 	fakeSystem(t, map[string]string{"/usr/lib/sddm/sddm.conf.d/10-distro.conf": "[X11]\nSessionDir=/usr/share/xsessions\n"}, nil)
-	if c, _ := SetupXSessionsDir("sddm"); c == nil || c.File != "/etc/sddm.conf.d/99-uxsm.conf" ||
-		!strings.Contains(c.New, "SessionDir=/usr/local/share/xsessions,/usr/share/xsessions\n") {
-		t.Errorf("package file: %+v", c)
+	changes, _ = SetupSessionsDir("sddm")
+	if len(changes) != 1 || changes[0].File != "/etc/sddm.conf.d/99-uxsm.conf" ||
+		!strings.Contains(changes[0].New, "SessionDir=/usr/local/share/xsessions,/usr/share/xsessions\n") {
+		t.Errorf("package file: %+v", changes)
 	}
 
-	if _, err := SetupXSessionsDir("gdm"); err == nil {
+	// Y si faltan las dos, salen en el mismo fichero, cada una en su grupo.
+	fakeSystem(t, map[string]string{
+		"/usr/lib/sddm/sddm.conf.d/10-distro.conf": "[X11]\nSessionDir=/usr/share/xsessions\n" +
+			"[Wayland]\nWaylandSessionDir=/usr/share/wayland-sessions\n",
+	}, nil)
+	changes, _ = SetupSessionsDir("sddm")
+	if len(changes) != 1 {
+		t.Fatalf("SDDM missing both gave %d changes, want one file: %+v", len(changes), changes)
+	}
+	for _, want := range []string{"[X11]", "SessionDir=/usr/local/share/xsessions,/usr/share/xsessions",
+		"[Wayland]", "WaylandSessionDir=/usr/local/share/wayland-sessions,/usr/share/wayland-sessions"} {
+		if !strings.Contains(changes[0].New, want) {
+			t.Errorf("the file written does not have %q:\n%s", want, changes[0].New)
+		}
+	}
+
+	if _, err := SetupSessionsDir("gdm"); err == nil {
 		t.Error("GDM cannot be set up")
 	}
 }
