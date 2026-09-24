@@ -17,13 +17,15 @@ jobs:
     name: gofmt, vet, pruebas unitarias y sintaxis de los scripts
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # La Go de go.mod, que es la mínima que uxsm admite: así se compila aquí
       # con la misma que en Ubuntu 24.04 (docs/go-version.md).
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          cache: true
+          # uxsm sólo usa la biblioteca estándar, así que no hay go.sum y no hay
+          # dependencias que guardar en caché.
+          cache: false
       - run: make check
       - run: make build
 
@@ -33,7 +35,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # Las máquinas van con KVM o no van: sin él, QEMU emula y esto tarda horas.
       - name: comprobar KVM
         run: |
