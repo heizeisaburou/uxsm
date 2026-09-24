@@ -20,5 +20,14 @@
           src = self;
         };
       });
+
+      # A NixOS machine that logs into a uxsm session through LightDM. Run it
+      # with `make test-nixos`, or `nix build .#checks.<system>.session -L`.
+      checks = forAllSystems (pkgs: {
+        session = import ./test/nixos/session.nix {
+          inherit pkgs;
+          uxsm = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
+        };
+      });
     };
 }

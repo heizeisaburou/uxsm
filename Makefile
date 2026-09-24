@@ -28,7 +28,7 @@ BIN := bin/uxsm
 SRC := go.mod $(shell find . \( -name '*.go' -o -name '*.sh' \) -path './internal/*' -o -name '*.go' -path './cmd/*')
 UNITS := $(wildcard data/systemd/user/*.in)
 
-.PHONY: all build check test vet fmt install uninstall test-vm release hooks dist clean
+.PHONY: all build check test vet fmt install uninstall test-vm test-nixos release hooks dist clean
 
 all: build
 
@@ -88,6 +88,19 @@ uninstall:
 DISTROS ?= quick
 test-vm:
 	test/release.sh $(DISTROS)
+
+# La prueba de NixOS: una máquina declarada entera ―LightDM, autologin, bspwm y
+# la entrada de sesión― que levanta el sistema de pruebas de nixpkgs. Necesita
+# Nix instalado y su demonio en marcha; nixpkgs queda fijada en flake.lock, así
+# que sale lo mismo en cualquier máquina.
+NIX ?= nix
+test-nixos:
+	@command -v $(NIX) >/dev/null || { \
+		echo "make test-nixos needs nix: install it and enable its daemon" >&2; \
+		exit 1; \
+	}
+	$(NIX) build --extra-experimental-features "nix-command flakes" \
+		'.#checks.$(shell $(NIX) eval --extra-experimental-features "nix-command flakes" --impure --raw --expr builtins.currentSystem).session' -L
 
 # Lo mismo en todas las distribuciones y, si todo pasa, build/release queda como
 # releases/latest.

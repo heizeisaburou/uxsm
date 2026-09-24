@@ -19,7 +19,7 @@ En ambos casos uxsm:
 
 1. decide el ID de la instancia (`bspwm.desktop` para una entrada, `bspwm` para el comando);
 2. calcula la identidad XDG de la sesión;
-3. espera a que una sesión anterior haya terminado también su limpieza;
+3. espera a que una sesión anterior de uxsm haya terminado también su limpieza; sólo mira las unidades de uxsm, porque `graphical-session.target` lo puede haber encendido otro ―el envoltorio de sesión de NixOS lo activa antes de ejecutar el `Exec=` de la entrada―;
 4. guarda el entorno de login, la identidad y, si procede, el comando en `$XDG_RUNTIME_DIR/uxsm`;
 5. arranca una unidad que vigila el PID entregado al display manager;
 6. se sustituye por `systemctl --user start --wait uxsm-desktop@ID.service`.
@@ -180,6 +180,7 @@ make test-vm           # Ubuntu por defecto
 make test-vm DISTROS=pair
 make test-vm DISTROS=all
 make release           # todas las distribuciones y releases/latest
+make test-nixos        # la máquina NixOS del flake
 ```
 
 ### Pruebas unitarias
@@ -215,6 +216,12 @@ Las pruebas de `test/integration` usan Xvfb como servidor X y sustituyen al disp
 | `08-display-manager.sh` | La sesión abierta por LightDM de verdad, con autologin sobre Xvfb. |
 
 Las distribuciones cubiertas son Ubuntu 24.04, Debian 13, Arch, Fedora 43 y openSUSE Tumbleweed. `quick` usa Ubuntu; `pair`, Ubuntu y Arch; `all`, las cinco.
+
+### NixOS
+
+`make test-nixos` levanta una máquina NixOS declarada entera ―LightDM, autologin, bspwm y la entrada de sesión― con el sistema de pruebas de nixpkgs, y comprueba lo mismo que la prueba del display manager: que la sesión de uxsm arranca, que el proceso principal del servicio es el escritorio, que la identidad llega y que al parar el display manager se apaga todo. La fuente está en [`test/nixos/session.nix`](../test/nixos/session.nix) y se expone como `checks` del flake.
+
+Hace falta Nix con su demonio en marcha, igual que las otras pruebas de máquinas necesitan QEMU. La versión de nixpkgs queda fijada en `flake.lock`, así que la máquina de prueba es la misma en cualquier sitio. Esta prueba sirve para lo que las demás no pueden: en NixOS nada está donde lo ponen las otras distribuciones, y el paquete de Nix instala las unidades por su cuenta.
 
 El hook `pre-commit` ejecuta `gofmt`, `go vet`, las pruebas unitarias y `sh -n` sobre los scripts. El hook `pre-push` exige que los pushes a `main`, `master` o una etiqueta `vX.Y.Z` tengan un `make release` satisfactorio del mismo commit. Se activan con `make hooks`.
 

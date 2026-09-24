@@ -192,15 +192,22 @@ func afterDashes(args []string, n int) bool {
 // limpieza; si pasado este tiempo sigue ahí, es que hay otra sesión en marcha.
 const previousSessionTimeout = 10 * time.Second
 
-// sessionUnits son las unidades de una sesión gráfica, de uxsm o de cualquier
-// otro gestor: si alguna sigue viva, hay una sesión arrancada o apagándose.
+// sessionUnits son las unidades de uxsm: si alguna sigue viva, hay una sesión
+// suya arrancada o apagándose.
+//
+// No están aquí graphical-session.target ni graphical-session-pre.target, que
+// son de systemd y las enciende cualquiera: el envoltorio de sesión de NixOS
+// las activa antes de ejecutar el Exec= de la entrada, así que uxsm tomaba por
+// sesión anterior la suya propia y se negaba a arrancar. Lo que hay que
+// detectar es la limpieza de una sesión de uxsm todavía en marcha, y eso lo
+// dicen sus unidades.
 var sessionUnits = []string{
-	"graphical-session.target", "graphical-session-pre.target", "uxsm-shutdown.target",
+	"uxsm-shutdown.target",
 	"uxsm-desktop@*.service", "uxsm-env@*.service", "uxsm-session@*.target", "uxsm-bindpid@*.service",
 }
 
 // waitForPreviousSession espera hasta timeout a que no quede viva ninguna unidad
-// de sesión.
+// de una sesión de uxsm.
 //
 // Hace falta porque el cierre de una sesión no es instantáneo: su servicio de
 // entorno limpia el gestor y borra los ficheros de $XDG_RUNTIME_DIR/uxsm mientras
@@ -217,7 +224,7 @@ func waitForPreviousSession(timeout time.Duration) error {
 			return nil
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("another graphical session is still running: %s", strings.Join(live, ", "))
+			return fmt.Errorf("another uxsm session is still running: %s", strings.Join(live, ", "))
 		}
 		time.Sleep(100 * time.Millisecond)
 	}

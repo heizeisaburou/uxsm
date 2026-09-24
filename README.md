@@ -29,7 +29,7 @@ data/                lo que se instala además del binario: unidades de systemd
 docs/                documentación técnica
 test/                compilación de los paquetes, pruebas de integración y recogida
                      de las entradas de sesión de cada distribución, en máquinas
-                     virtuales
+                     virtuales; test/nixos, la máquina NixOS del flake
 packaging/arch/      PKGBUILD para el AUR
 packaging/debian/    directorio debian/ para Debian y Ubuntu
 packaging/fedora/    .spec para Fedora
