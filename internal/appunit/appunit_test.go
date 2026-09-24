@@ -139,6 +139,29 @@ func TestRunArgs(t *testing.T) {
 		t.Errorf("RunArgs for a service asked for a scope: %q", line)
 	}
 
+	// Las propiedades del usuario pasan tal cual, delante del comando.
+	o = Options{Argv: []string{"discord"}, Slice: AppSlice,
+		Properties: []string{"TimeoutStopSec=5", "MemoryMax=2G"}}
+	args, err = o.RunArgs()
+	if err != nil {
+		t.Fatalf("RunArgs with properties: %v", err)
+	}
+	line = strings.Join(args, " ")
+	for _, want := range []string{"--property=TimeoutStopSec=5", "--property=MemoryMax=2G"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("RunArgs gave %q, without %q", line, want)
+		}
+	}
+	if i, j := indexOf(args, "--property=MemoryMax=2G"), indexOf(args, "--"); i > j {
+		t.Errorf("a property ended up behind the command: %q", args)
+	}
+	for _, bad := range []string{"TimeoutStopSec", "=5", ""} {
+		o.Properties = []string{bad}
+		if _, err := o.RunArgs(); err == nil {
+			t.Errorf("RunArgs accepted %q as a property", bad)
+		}
+	}
+
 	if _, err := (Options{Argv: []string{"kitty"}, Silent: "yes"}).RunArgs(); err == nil {
 		t.Error("an invalid -S value was accepted")
 	}

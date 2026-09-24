@@ -64,6 +64,11 @@ type Options struct {
 	// un scope hereda la del proceso que lo lanza, que es quien la puede
 	// redirigir.
 	Silent string
+	// Properties son directivas de systemd para la unidad, "Clave=Valor", tal
+	// como las toma systemd-run: TimeoutStopSec, MemoryMax, CPUQuota… Un scope
+	// admite las de control de recursos y los plazos; las propias de un
+	// servicio necesitan Service.
+	Properties []string
 	// WorkingDir es el Path= de la entrada, si lo trae.
 	WorkingDir string
 }
@@ -145,6 +150,13 @@ func (o Options) RunArgs() ([]string, error) {
 	}
 	if o.WorkingDir != "" {
 		args = append(args, "--working-directory="+o.WorkingDir)
+	}
+	for _, p := range o.Properties {
+		key, _, ok := strings.Cut(p, "=")
+		if !ok || key == "" {
+			return nil, fmt.Errorf("%q is not a unit property: they go as Key=Value", p)
+		}
+		args = append(args, "--property="+p)
 	}
 	switch o.Silent {
 	case "":

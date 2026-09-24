@@ -24,7 +24,7 @@ import (
 // en systemctl, se le pueden poner límites, su registro va al diario con su
 // nombre y se para con la sesión.
 func runApp(args []string) error {
-	fs := newFlagSet("app", "[-s slice] [-t scope|service] [options] [--] <command> [args...]\n"+
+	fs := newFlagSet("app", "[-s slice] [-t scope|service] [-p Key=Value] [options] [--] <command> [args...]\n"+
 		"       uxsm app [options] <entry.desktop>[:action] [files or URLs...]",
 		"Run an application in its own systemd unit, inside the graphical slices of\n"+
 			"the session: it shows up on its own and stops with the session.\n"+
@@ -38,6 +38,9 @@ func runApp(args []string) error {
 	description := fs.String("d", "", "unit `description`")
 	silent := fs.String("S", "", "throw away the application's `output`: out, err or both;\n"+
 		"only for a service, a scope inherits the output of its caller")
+	var properties stringList
+	fs.Var(&properties, "p", "systemd `property` of the unit, as Key=Value, like systemd-run\n"+
+		"takes them: TimeoutStopSec=5, MemoryMax=2G… Can be repeated")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
@@ -47,6 +50,7 @@ func runApp(args []string) error {
 	}
 
 	o := appunit.Options{
+		Properties:  properties,
 		AppName:     *appName,
 		UnitName:    *unitName,
 		Description: *description,
@@ -143,6 +147,13 @@ func resolveApp(o *appunit.Options, args []string, dashes bool) error {
 	}
 	return nil
 }
+
+// stringList es una opción que se puede repetir, como el -p de systemd-run: cada
+// vez que aparece, añade su valor a la lista.
+type stringList []string
+
+func (l *stringList) String() string     { return strings.Join(*l, " ") }
+func (l *stringList) Set(v string) error { *l = append(*l, v); return nil }
 
 // first devuelve el primer valor que no está vacío.
 func first(values ...string) string {

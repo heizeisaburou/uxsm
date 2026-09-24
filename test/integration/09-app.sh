@@ -75,6 +75,25 @@ unit=$(unit_of 'app-uxsm-background@*.service')
     fail "with -s b the unit is in $(slice_of "$unit"), not background-uxsm.slice"
 ok "-s b puts it in the background slice"
 
+# -p pasa propiedades de systemd a la unidad, como systemd-run.
+uxsm app -t service -a props -p MemoryMax=512M -p TimeoutStopSec=5 -- sleep 3000 ||
+    fail "uxsm app -p failed"
+unit=$(unit_of 'app-uxsm-props@*.service')
+[ -n "$unit" ] || fail "no unit was created with -p"
+[ "$(systemctl --user show -p MemoryMax --value "$unit")" = 536870912 ] ||
+    fail "MemoryMax is $(systemctl --user show -p MemoryMax --value "$unit"), not 512M"
+[ "$(systemctl --user show -p TimeoutStopUSec --value "$unit")" = 5s ] ||
+    fail "TimeoutStopSec is $(systemctl --user show -p TimeoutStopUSec --value "$unit"), not 5s"
+ok "-p passes the properties to the unit"
+
+if err=$(uxsm app -t service -p MemoryMax -- sleep 3000 2>&1); then
+    fail "a property without a value was accepted"
+fi
+case $err in
+*"Key=Value"*) ok "and a property that is not Key=Value says so" ;;
+*) fail "uxsm app -p MemoryMax: $err" ;;
+esac
+
 # Una entrada de aplicación: el nombre de la unidad sale de ella, y el Exec=
 # se lanza con sus códigos de campo resueltos.
 uxsm app -t service uxsm-it-app.desktop || fail "uxsm app with a desktop entry failed"
@@ -112,10 +131,13 @@ case $err in
 esac
 
 # Un scope, que es lo de serie: la aplicación cuelga de quien la lanza.
-uxsm app -a scoped -- sleep 3000 &
+uxsm app -a scoped -p TimeoutStopSec=5 -- sleep 3000 &
 wait_for 10 sh -c 'systemctl --user list-units --state=active --no-legend "app-uxsm-scoped-*.scope" | grep -q .' ||
     fail "no scope was created"
 ok "without -t, the application runs in a scope"
+[ "$(systemctl --user show -p TimeoutStopUSec --value "$(unit_of 'app-uxsm-scoped-*.scope')")" = 5s ] ||
+    fail "a scope did not take the TimeoutStopSec of -p"
+ok "and a scope takes properties too"
 
 # Y lo que da sentido a todo esto: se paran con la sesión.
 stop_session

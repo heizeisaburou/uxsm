@@ -117,11 +117,14 @@ uxsm app -- kitty                             # un comando
 uxsm app firefox.desktop                      # una entrada de aplicación
 uxsm app firefox.desktop:new-private-window   # una de sus acciones
 uxsm app -s b -t service -- fcitx5            # en segundo plano y como servicio
+uxsm app -p TimeoutStopSec=5 -- discord       # con un plazo para morir
 ```
 
 Sin esto, todo lo que arranca un escritorio cuelga del escritorio y se ve junto. `uxsm app` le da a cada aplicación su propia unidad, dentro de uno de los slices de la sesión: se ve por separado en `systemctl --user`, se le pueden poner límites, su registro va al diario con su nombre, y se para con la sesión. Es lo mismo que hace `uwsm app` en Wayland.
 
 El nombre de la unidad es el que pide systemd para las aplicaciones, `app-<quien la lanza>-<qué aplicación>-<algo que la distingue>`: `app-uxsm-kitty-3f2a1b0c.scope`, o con `@` antes de la parte de azar si es un servicio. De serie es un scope ―la aplicación cuelga de quien la lanzó― y con `-t service` la arranca el gestor. Las opciones son las de uwsm: `-s` elige el slice, `-a`, `-u` y `-d` los nombres y la descripción, y `-S` tira la salida de un servicio.
+
+Y una que uwsm no tiene, `-p Clave=Valor`, que pasa propiedades de systemd a la unidad tal como las toma `systemd-run` y se puede repetir: `-p TimeoutStopSec=5` para lo que tarda en morir, `-p MemoryMax=2G` o `-p CPUQuota=50%` para ponerle límites. Un scope admite las de control de recursos y los plazos; las que son propias de un servicio, como `Restart=`, necesitan además `-t service`. uxsm sólo comprueba que la propiedad tenga la forma `Clave=Valor`; de lo demás se queja systemd, que es quien sabe.
 
 Los slices son tres, uno por clase de aplicación, y llevan `PartOf=graphical-session.target`, que es lo que las para con la sesión:
 
