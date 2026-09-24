@@ -38,6 +38,15 @@ wait_no_session() {
 # pasajera de systemd --user, y espera a que acepte conexiones.
 start_xvfb() {
     n=${1#:}
+    # El nombre lleva xvfb a propósito: en shell las variables de una función
+    # son las de todos, y las pruebas ya usan "unit" para lo suyo.
+    xvfb_unit=uxsm-it-xvfb-$n.service
+    # La prueba anterior lo paró hace un instante, y hasta que systemd lo suelta
+    # del todo sigue conociendo ese nombre: systemd-run se negaría a usarlo.
+    systemctl --user stop "$xvfb_unit" 2>/dev/null || true
+    systemctl --user reset-failed "$xvfb_unit" 2>/dev/null || true
+    wait_for 15 sh -c "[ \"\$(systemctl --user show -p LoadState --value $xvfb_unit)\" = not-found ]" ||
+        fail "$xvfb_unit is still known to systemd: $(systemctl --user show -p LoadState -p ActiveState --value "$xvfb_unit" | tr '\n' ' ')"
     systemd-run --user --quiet --collect --unit="uxsm-it-xvfb-$n" Xvfb ":$n" -screen 0 1280x800x24
     wait_for 10 test -S "/tmp/.X11-unix/X$n" || fail "Xvfb :$n did not start"
 }
