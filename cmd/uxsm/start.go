@@ -206,12 +206,16 @@ const previousSessionTimeout = 10 * time.Second
 // lo enciende cualquiera: el envoltorio de sesión de NixOS lo activa antes de
 // ejecutar el Exec= de la entrada, así que mirarlo hacía que uxsm se tomara a
 // sí mismo por una sesión anterior y se negara a arrancar.
-var sessionUnits = []string{
-	"uxsm-shutdown.target",
-	"uxsm-desktop@*.service", "uxsm-env@*.service", "uxsm-session@*.target", "uxsm-bindpid@*.service",
+var sessionUnits = append(uxsmUnits,
 	// Las de uwsm, que gestiona así las sesiones de Wayland.
 	"wayland-session-shutdown.target", "wayland-wm@*.service", "wayland-wm-env@*.service",
 	"wayland-session@*.target", "wayland-session-pre@*.target", "wayland-session-bindpid@*.service",
+)
+
+// uxsmUnits son las de una sesión de uxsm, las que dice `uxsm is-active`.
+var uxsmUnits = []string{
+	"uxsm-shutdown.target",
+	"uxsm-desktop@*.service", "uxsm-env@*.service", "uxsm-session@*.target", "uxsm-bindpid@*.service",
 }
 
 // waitForPreviousSession espera hasta timeout a que no quede viva ninguna unidad

@@ -16,9 +16,12 @@ import (
 	"github.com/heizeisaburou/uxsm/internal/xdg"
 )
 
-// XSessions es el subdirectorio de cada directorio de datos XDG donde están las
-// entradas de sesión X11: /usr/share/xsessions.
-const XSessions = "xsessions"
+// Los subdirectorios de cada directorio de datos XDG donde hay entradas: las de
+// sesión X11 y las de aplicación.
+const (
+	XSessions    = "xsessions"
+	Applications = "applications"
+)
 
 // Entry es una entrada de sesión ya leída.
 type Entry struct {
@@ -34,6 +37,26 @@ type Entry struct {
 	Exec string
 	// DesktopNames es la lista de DesktopNames=.
 	DesktopNames []string
+	// Icon es la clave Icon=, que es lo que pone %i en el Exec=.
+	Icon string
+	// WorkingDir es la clave Path=: el directorio desde el que se ejecuta la
+	// aplicación. Se llama así para no confundirlo con Path, que es dónde está
+	// la entrada.
+	WorkingDir string
+	// Terminal dice si la entrada pide ejecutarse dentro de un terminal.
+	Terminal bool
+	// Actions son las acciones de la entrada, los grupos [Desktop Action X],
+	// por su identificador.
+	Actions map[string]Action
+}
+
+// Action es una acción de una entrada: otra cosa que se puede lanzar desde
+// ella, como "abrir una ventana privada".
+type Action struct {
+	// ID es lo que va detrás de ":" al pedirla: "new-private-window".
+	ID string
+	// Name es su nombre, y Exec lo que ejecuta.
+	Name, Exec string
 }
 
 // Find busca la entrada id en el subdirectorio subdir ("xsessions") de cada
@@ -47,14 +70,38 @@ func Find(subdir, id string) (*Entry, error) {
 	}
 
 	for _, dir := range xdg.DataDirs() {
-		e, err := Read(filepath.Join(dir, subdir, id))
-		if errors.Is(err, fs.ErrNotExist) {
-			continue
+		for _, rel := range idPaths(id) {
+			e, err := Read(filepath.Join(dir, subdir, rel))
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			// El ID es el que se pidió, aunque el fichero esté en un
+			// subdirectorio: es como lo nombra todo el mundo.
+			e.ID = id
+			return e, nil
 		}
-		return e, err
 	}
 
-	return nil, fmt.Errorf("session entry %q not found in any %s directory", id, subdir)
+	return nil, fmt.Errorf("desktop entry %q not found in any %s directory", id, subdir)
+}
+
+// idPaths son las rutas relativas donde puede estar la entrada id, por orden.
+//
+// Lo normal es un fichero con ese nombre, pero la especificación dice que el ID
+// de una aplicación es su ruta dentro del directorio con las barras cambiadas
+// por guiones, así que "kde4-konsole.desktop" puede estar en "kde4/konsole.desktop".
+func idPaths(id string) []string {
+	paths := []string{id}
+	for i, c := range id {
+		if c != '-' {
+			continue
+		}
+		paths = append(paths, id[:i]+"/"+id[i+1:])
+	}
+	return paths
 }
 
 // Read lee la entrada del fichero path. Su ID es el nombre del fichero.
@@ -88,14 +135,15 @@ func checkID(id string) error {
 	return nil
 }
 
-// parse lee el grupo [Desktop Entry] y se queda con las claves que usa uxsm.
+// parse lee el grupo [Desktop Entry], y de los demás grupos, las acciones.
 //
-// Las claves traducidas (Name[es]=) y los demás grupos (acciones) se ignoran.
-// Exec= tiene que estar: una entrada de sesión sin él no se puede arrancar.
+// Las claves traducidas (Name[es]=) se ignoran. Exec= tiene que estar: una
+// entrada sin él no se puede lanzar.
 func parse(r io.Reader) (*Entry, error) {
 	var e Entry
 	inMain := false
 	seenExec := false
+	action := ""
 
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {
@@ -105,9 +153,13 @@ func parse(r io.Reader) (*Entry, error) {
 		}
 		if strings.HasPrefix(line, "[") {
 			inMain = line == "[Desktop Entry]"
+			action = ""
+			if id, ok := strings.CutPrefix(strings.TrimSuffix(line, "]"), "[Desktop Action "); ok {
+				action = strings.TrimSpace(id)
+			}
 			continue
 		}
-		if !inMain {
+		if !inMain && action == "" {
 			continue
 		}
 
@@ -117,6 +169,22 @@ func parse(r io.Reader) (*Entry, error) {
 		}
 		key = strings.TrimSpace(key)
 		value = strings.TrimSpace(value)
+
+		if action != "" {
+			a := e.Actions[action]
+			a.ID = action
+			switch key {
+			case "Name":
+				a.Name = unescape(value)
+			case "Exec":
+				a.Exec = value
+			}
+			if e.Actions == nil {
+				e.Actions = map[string]Action{}
+			}
+			e.Actions[action] = a
+			continue
+		}
 
 		switch key {
 		case "Name":
@@ -128,6 +196,12 @@ func parse(r io.Reader) (*Entry, error) {
 			seenExec = true
 		case "DesktopNames":
 			e.DesktopNames = splitList(value)
+		case "Icon":
+			e.Icon = unescape(value)
+		case "Path":
+			e.WorkingDir = unescape(value)
+		case "Terminal":
+			e.Terminal = value == "true"
 		}
 	}
 	if err := sc.Err(); err != nil {

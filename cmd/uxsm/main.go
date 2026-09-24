@@ -43,6 +43,8 @@ var rootCommands = group{
 		{"start", "start an X11 session from a session entry or a command", runStart, false},
 		{"stop", "stop the running session", runStop, false},
 		{"finalize", "tell uxsm from the desktop that the session is ready", runFinalize, false},
+		{"app", "run an application in its own unit, inside the session", runApp, false},
+		{"is-active", "tell whether a uxsm session is running", runIsActive, false},
 		{"entry", "generate a session entry and install it", runEntry, false},
 		{"check", "check that the system is ready for uxsm", runCheck, false},
 		{"setup", "change the system so that uxsm works fully", runSetup, false},
@@ -96,6 +98,10 @@ func (g group) usage(w io.Writer) {
 // errUsage marca los errores de argumentos, que ya han enseñado su ayuda.
 var errUsage = errors.New("usage")
 
+// errNo es la respuesta "no" de una orden que pregunta algo, como is-active:
+// acaba con código 1, como un error, pero sin escribir nada.
+var errNo = errors.New("no")
+
 // exitCode traduce el resultado de una suborden a código de salida: 0 si va
 // bien o se ha pedido ayuda, 2 si los argumentos están mal y 1 con cualquier
 // otro error, que además se escribe.
@@ -103,6 +109,8 @@ func exitCode(err error) int {
 	switch {
 	case err == nil, errors.Is(err, flag.ErrHelp):
 		return 0
+	case errors.Is(err, errNo):
+		return 1
 	case errors.Is(err, errUsage):
 		return 2
 	default:

@@ -50,6 +50,7 @@ make test
 %license LICENSE
 %{_bindir}/uxsm
 %{_prefix}/lib/systemd/user/uxsm-*
+%{_prefix}/lib/systemd/user/*-uxsm.slice
 
 # openSUSE keeps the changelog in uxsm.changes, not here.
 %changelog

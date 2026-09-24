@@ -1,0 +1,9 @@
+[Unit]
+Description=User Graphical Application Slice of uxsm
+Documentation=https://github.com/heizeisaburou/uxsm
+# Lo que hace que las aplicaciones se paren con la sesión. El guion es jerarquía
+# en systemd, así que este slice cuelga del app.slice estándar.
+PartOf=graphical-session.target
+After=graphical-session.target
+Conflicts=uxsm-shutdown.target
+Before=uxsm-shutdown.target

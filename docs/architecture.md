@@ -60,6 +60,7 @@ Del resultado salen `XDG_CURRENT_DESKTOP`, `XDG_SESSION_DESKTOP`, `XDG_MENU_PREF
 | `uxsm-desktop@ID.service` | Ejecuta el escritorio como proceso principal y espera a que la sesión esté lista. |
 | `uxsm-session@ID.target` | Representa la sesión uxsm y arrastra `graphical-session.target`. |
 | `uxsm-autostart@ID.target` | Arrastra `xdg-desktop-autostart.target` cuando el autostart le toca a uxsm. |
+| `app-uxsm.slice` y sus hermanas | Donde van las aplicaciones que lanza `uxsm app`. |
 | `uxsm-shutdown.target` | Entra en conflicto con las unidades activas y coordina su cierre. |
 
 La sesión se cierra por el mismo camino si:
@@ -108,6 +109,33 @@ Exec=uxsm start --no-autostart -D XFCE -- startxfce4
 Hace falta porque ni el gestor de sesión del escritorio ni systemd comprueban si el otro ya ha lanzado una entrada: en Xfce, con los dos, cada una arranca dos veces. De un escritorio que la tabla no conoce, uxsm no supone nada: la entrada sale sin la opción, el autostart se lanza, y quien vea entradas duplicadas la añade.
 
 La decisión se escribe en `$XDG_RUNTIME_DIR/uxsm/autostart`, y quien la mira es `uxsm aux autostart`: con la marca arranca el target, y sin ella no hace nada. Los dos rodeos tienen motivo. La decisión no puede ir en un `Condition*=` de la unidad, porque las dependencias de una unidad se resuelven al montar el trabajo, antes de comprobar sus condiciones: el autostart arrancaría igual en las sesiones en las que la unidad se salta. Y el target estándar no se puede arrancar directamente, porque lleva `RefuseManualStart=`; tiene que arrastrarlo una unidad propia.
+
+## Aplicaciones
+
+```sh
+uxsm app -- kitty                             # un comando
+uxsm app firefox.desktop                      # una entrada de aplicación
+uxsm app firefox.desktop:new-private-window   # una de sus acciones
+uxsm app -s b -t service -- fcitx5            # en segundo plano y como servicio
+```
+
+Sin esto, todo lo que arranca un escritorio cuelga del escritorio y se ve junto. `uxsm app` le da a cada aplicación su propia unidad, dentro de uno de los slices de la sesión: se ve por separado en `systemctl --user`, se le pueden poner límites, su registro va al diario con su nombre, y se para con la sesión. Es lo mismo que hace `uwsm app` en Wayland.
+
+El nombre de la unidad es el que pide systemd para las aplicaciones, `app-<quien la lanza>-<qué aplicación>-<algo que la distingue>`: `app-uxsm-kitty-3f2a1b0c.scope`, o con `@` antes de la parte de azar si es un servicio. De serie es un scope ―la aplicación cuelga de quien la lanzó― y con `-t service` la arranca el gestor. Las opciones son las de uwsm: `-s` elige el slice, `-a`, `-u` y `-d` los nombres y la descripción, y `-S` tira la salida de un servicio.
+
+Los slices son tres, uno por clase de aplicación, y llevan `PartOf=graphical-session.target`, que es lo que las para con la sesión:
+
+| Slice | Para qué |
+| --- | --- |
+| `app-uxsm.slice` | Las aplicaciones, lo de serie. |
+| `background-uxsm.slice` | Lo que corre detrás, como un método de entrada. |
+| `session-uxsm.slice` | Lo que forma parte de la sesión, como un panel. |
+
+El guion es jerarquía en systemd, así que cuelgan de los `app.slice`, `background.slice` y `session.slice` estándar. Llevan `uxsm` en el nombre porque los instala el paquete y dos paquetes no pueden traer el mismo fichero: los de uwsm, que hace esto mismo en Wayland, se llaman `app-graphical.slice` y compañía. Como dos sesiones gráficas de un mismo usuario no conviven, compartir los nombres no aportaba nada.
+
+De una entrada de aplicación se lee su `Exec=` ―o el de la acción que se pida detrás de `:`―, se sustituyen los códigos de campo con los ficheros o URLs que se le pasen, y se respeta su `Path=`. Una entrada con `Terminal=true` se rechaza por ahora, en vez de lanzarla fuera de un terminal.
+
+`uxsm is-active` contesta con el código de salida si hay una sesión de uxsm en marcha, y con `-v` dice qué unidades la forman. Es lo que permite a un script saber dónde está. No va dentro de `uxsm check`, que es otra cosa: aquélla comprueba si el sistema está listo para uxsm y escribe un informe.
 
 ## Entorno de la sesión
 
@@ -214,6 +242,7 @@ Las pruebas de `test/integration` usan Xvfb como servidor X y sustituyen al disp
 | `06-session-ready.sh` | Las dos formas de estar lista, y la sesión que no llega a estarlo. |
 | `07-xdg-autostart.sh` | Autostart XDG: con gestor de ventanas, con `--no-autostart` y en la entrada generada. |
 | `08-display-manager.sh` | La sesión abierta por LightDM de verdad, con autologin sobre Xvfb. |
+| `09-app.sh` | `uxsm app`: unidades, slices, entradas y acciones, y que se paran con la sesión. |
 
 Las distribuciones cubiertas son Ubuntu 24.04, Debian 13, Arch, Fedora 43 y openSUSE Tumbleweed. `quick` usa Ubuntu; `pair`, Ubuntu y Arch; `all`, las cinco.
 
