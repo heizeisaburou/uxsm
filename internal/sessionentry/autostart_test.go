@@ -54,22 +54,25 @@ func TestUxsmEntryNoAutostart(t *testing.T) {
 	}
 }
 
-// TestAutostartTable comprueba que la tabla distingue las dos clases: los
-// gestores de ventanas la llevan puesta y los escritorios no.
+// TestAutostartTable comprueba la marca de la tabla, que dice lo que la sesión
+// hace y no lo que es: la llevan las que lanzan ellas mismas el autostart XDG,
+// incluida Enlightenment, que es un gestor de ventanas; y no la llevan las que
+// no lo lanzan, incluida icewm-session, que es una sesión con su script.
 func TestAutostartTable(t *testing.T) {
 	for id, k := range known {
-		if k.WindowManager && len(k.DesktopNames) == 0 {
-			t.Errorf("%s is marked as a window manager but has no DesktopNames", id)
+		if k.OwnAutostart && len(k.DesktopNames) == 0 {
+			t.Errorf("%s starts its own XDG autostart but has no DesktopNames to recognise it by", id)
+		}
+	}
+	for _, id := range []string{"xfce.desktop", "plasmax11.desktop", "gnome-xorg.desktop",
+		"sawfish-mate.desktop", "enlightenment.desktop"} {
+		if !known[id].OwnAutostart {
+			t.Errorf("%s should be marked as starting its own XDG autostart", id)
 		}
 	}
 	for _, id := range []string{"bspwm.desktop", "i3.desktop", "icewm-session.desktop"} {
-		if !known[id].WindowManager {
-			t.Errorf("%s should be a window manager", id)
-		}
-	}
-	for _, id := range []string{"xfce.desktop", "plasmax11.desktop", "gnome-xorg.desktop", "sawfish-mate.desktop"} {
-		if known[id].WindowManager {
-			t.Errorf("%s should not be a window manager: it runs a session manager", id)
+		if known[id].OwnAutostart {
+			t.Errorf("%s should not be marked as starting its own XDG autostart", id)
 		}
 	}
 }

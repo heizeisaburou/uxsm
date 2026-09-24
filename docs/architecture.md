@@ -99,7 +99,7 @@ uxsm lo lanza siempre, como uwsm: de una sesión gestionada por systemd se esper
 uxsm start --no-autostart bspwm.desktop
 ```
 
-Quien se apoya en la tabla de escritorios conocidos es `uxsm entry`. Al generar la entrada de un escritorio que lanza él mismo sus entradas de autostart ―Xfce, GNOME, Plasma, MATE…―, escribe la opción en el `Exec=`:
+Quien se apoya en la tabla de escritorios conocidos es `uxsm entry`. La tabla dice, de cada sesión conocida, si lanza ella misma sus entradas de autostart, que es una cosa distinta de tener gestor de sesión: Xfce, GNOME, Plasma o MATE lo lanzan, y también Enlightenment, que es un gestor de ventanas; `icewm-session`, que es una sesión con su propio script, no. Cuando la tabla dice que sí, la opción va en el `Exec=` de la entrada generada:
 
 ```ini
 Exec=uxsm start --no-autostart -D XFCE -- startxfce4
@@ -144,7 +144,7 @@ uxsm entry --exec -- mywm --flag    # variante uxsm para un comando explícito
 
 [Fuente DOT](flows/session-entries.dot) · Implementación: [`cmd/uxsm/entry.go`](../cmd/uxsm/entry.go) e `internal/sessionentry`.
 
-Una fuente puede ser una entrada existente, un comando o la tabla de escritorios conocidos. La tabla completa nombres, comentarios, `DesktopNames` y, cuando es portable entre distribuciones, el comando; y dice también qué escritorios lanzan su propio autostart XDG, para escribir `--no-autostart` en su `Exec=`. El generador rechaza entradas que ya usan uxsm, sesiones que ya arrancan el escritorio mediante `systemd --user` y metasesiones que sólo ejecutan el script personal del usuario.
+Una fuente puede ser una entrada existente, un comando o la tabla de escritorios conocidos. La tabla completa nombres, comentarios, `DesktopNames` y, cuando es portable entre distribuciones, el comando; y dice también qué sesiones lanzan su propio autostart XDG, para escribir `--no-autostart` en su `Exec=`. El generador rechaza entradas que ya usan uxsm, sesiones que ya arrancan el escritorio mediante `systemd --user` y metasesiones que sólo ejecutan el script personal del usuario.
 
 Sin `-i`, la orden es una previsualización. Con `-i` escribe en `/usr/local/share/xsessions`; hace falta ejecutarla con permisos de root. No sobrescribe ni oculta otra entrada con el mismo ID sin `-f`.
 
