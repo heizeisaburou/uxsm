@@ -13,6 +13,12 @@
 #   test/release.sh [distros]
 #   test/release.sh --publish
 #
+# Con FAST=1 los pasos 2 y 3 van en la misma máquina, que tarda bastante menos:
+# se ahorra un arranque y una instalación de dependencias por distribución. A
+# cambio se pierde lo que da la máquina limpia: allí sólo está el paquete y lo
+# que piden las pruebas, así que una dependencia de ejecución sin declarar salta.
+# Por eso vale para trabajar y no para publicar: --publish siempre usa las dos.
+#
 #   distros    quick  ubuntu (por defecto)
 #              pair   ubuntu y arch, las dos más distintas
 #              all    todas: ubuntu, debian, arch, fedora y opensuse
@@ -26,11 +32,13 @@
 set -eu
 cd "$(dirname "$0")/.."
 
+fast=${FAST:-}
 publish=
 if [ "${1:-}" = --publish ]; then
     publish=1
     shift
     [ $# -eq 0 ] || { echo "release.sh: --publish always tests every distro" >&2; exit 2; }
+    [ -z "$fast" ] || { echo "release.sh: --publish always builds and tests on separate machines" >&2; exit 2; }
     set -- all
 fi
 
@@ -63,7 +71,11 @@ rm -rf "$out" build/vm
 mkdir -p "$out" build/vm
 echo "$version" >"$out/version"
 
-echo "== uxsm $version: building and testing on $distros" >&2
+if [ -n "$fast" ]; then
+    echo "== uxsm $version: building and testing on $distros, one machine each" >&2
+else
+    echo "== uxsm $version: building and testing on $distros" >&2
+fi
 
 # El tarball: los ficheros que git conoce o que no ignora, sin los borrados.
 tarball=uxsm-$version.tar.gz
@@ -79,19 +91,34 @@ for d in $distros; do
     mkdir -p "$stage"
     cp "$out/version" "$out/$tarball" "$stage/"
     cp "test/package/$(recipe "$d").sh" "$stage/package.sh"
-    UXSM_VM_UPLOAD=$stage UXSM_VM_DOWNLOAD=$out/$d \
-        test/vm.sh "$d" 'sh ~/uxsm/package.sh'
+    # Con FAST, la misma máquina compila el paquete y ejecuta las pruebas con
+    # él instalado: package.sh lo deja en ~/uxsm/out, que es de donde lo toma
+    # run.sh, y de donde lo baja vm.sh al terminar.
+    if [ -n "$fast" ]; then
+        cp -r test/integration "$stage/integration"
+        UXSM_VM_UPLOAD=$stage UXSM_VM_DOWNLOAD=$out/$d \
+            test/vm.sh "$d" "sh ~/uxsm/package.sh &&
+                mkdir -p ~/uxsm/packages &&
+                cp -r ~/uxsm/out ~/uxsm/packages/$d &&
+                sh ~/uxsm/integration/run.sh"
+    else
+        UXSM_VM_UPLOAD=$stage UXSM_VM_DOWNLOAD=$out/$d \
+            test/vm.sh "$d" 'sh ~/uxsm/package.sh'
+    fi
 done
 
-# La máquina de cada distribución instala lo que hay en packages/<distro>.
-stage=build/vm/test
-mkdir -p "$stage/packages"
-cp -r test/integration "$stage/integration"
-cp "$out/version" "$stage/"
-for d in $distros; do
-    cp -r "$out/$d" "$stage/packages/$d"
-done
-UXSM_VM_UPLOAD=$stage test/vm.sh "$(echo $distros | tr ' ' ',')" 'sh ~/uxsm/integration/run.sh'
+# Sin FAST, una máquina limpia de cada distribución instala lo que hay en
+# packages/<distro> y ejecuta las pruebas.
+if [ -z "$fast" ]; then
+    stage=build/vm/test
+    mkdir -p "$stage/packages"
+    cp -r test/integration "$stage/integration"
+    cp "$out/version" "$stage/"
+    for d in $distros; do
+        cp -r "$out/$d" "$stage/packages/$d"
+    done
+    UXSM_VM_UPLOAD=$stage test/vm.sh "$(echo $distros | tr ' ' ',')" 'sh ~/uxsm/integration/run.sh'
+fi
 
 (cd "$out" && find . -type f ! -name version ! -name SHA256SUMS -printf '%P\n' | LC_ALL=C sort | xargs sha256sum >SHA256SUMS)
 

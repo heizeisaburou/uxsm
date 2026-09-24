@@ -54,9 +54,9 @@ unit_of() {
 slice_of() { systemctl --user show -p Slice --value "$1"; }
 
 # Dentro de la sesión, is-active lo dice; fuera, ya se comprueba al final.
-uxsm is-active || fail "uxsm is-active says there is no session, inside one"
-uxsm is-active -v | grep -q "uxsm-desktop@" || fail "uxsm is-active -v does not list the desktop unit"
-ok "uxsm is-active says there is a session, and -v says which units"
+uxsm check is-active || fail "uxsm check is-active says there is no session, inside one"
+uxsm check is-active -v | grep -q "uxsm-desktop@" || fail "uxsm check is-active -v does not list the desktop unit"
+ok "uxsm check is-active says there is a session, and -v says which units"
 
 # Un comando suelto, como servicio para que la prueba no se quede esperando.
 uxsm app -t service -- sleep 3000 || fail "uxsm app with a command failed"
@@ -123,7 +123,7 @@ wait_for 15 sh -c '! systemctl --user list-units --state=active --no-legend "app
     fail "the applications outlived the session: $(systemctl --user list-units --state=active --no-legend 'app-uxsm-*')"
 ok "the applications stop with the session"
 
-if uxsm is-active; then
-    fail "uxsm is-active says there is a session after it stopped"
+if uxsm check is-active; then
+    fail "uxsm check is-active says there is a session after it stopped"
 fi
 ok "and is-active says there is no session any more"

@@ -85,9 +85,13 @@ uninstall:
 # de esa distribución, lo trae a build/release y lo instala en una máquina limpia
 # para ejecutar test/integration/run.sh. DISTROS es quick, pair, all o una lista con
 # comas; sólo se compilan los paquetes de esas distribuciones.
+# FAST=1 compila y prueba en la misma máquina: bastante más rápido, pero deja de
+# comprobar que el paquete declare sus dependencias de ejecución, porque las de
+# compilación ya están ahí. Para trabajar, no para publicar.
 DISTROS ?= quick
+FAST ?=
 test-vm:
-	test/release.sh $(DISTROS)
+	FAST=$(FAST) test/release.sh $(DISTROS)
 
 # La prueba de NixOS: una máquina declarada entera ―LightDM, autologin, bspwm y
 # la entrada de sesión― que levanta el sistema de pruebas de nixpkgs. Necesita

@@ -135,7 +135,7 @@ El guion es jerarquía en systemd, así que cuelgan de los `app.slice`, `backgro
 
 De una entrada de aplicación se lee su `Exec=` ―o el de la acción que se pida detrás de `:`―, se sustituyen los códigos de campo con los ficheros o URLs que se le pasen, y se respeta su `Path=`. Una entrada con `Terminal=true` se rechaza por ahora, en vez de lanzarla fuera de un terminal.
 
-`uxsm is-active` contesta con el código de salida si hay una sesión de uxsm en marcha, y con `-v` dice qué unidades la forman. Es lo que permite a un script saber dónde está. No va dentro de `uxsm check`, que es otra cosa: aquélla comprueba si el sistema está listo para uxsm y escribe un informe.
+`uxsm check is-active` contesta con el código de salida si hay una sesión de uxsm en marcha, y con `-v` dice qué unidades la forman. Es lo que permite a un script saber dónde está. No va dentro de `uxsm check`, que es otra cosa: aquélla comprueba si el sistema está listo para uxsm y escribe un informe.
 
 ## Entorno de la sesión
 
@@ -208,6 +208,7 @@ make test-vm           # Ubuntu por defecto
 make test-vm DISTROS=pair
 make test-vm DISTROS=all
 make release           # todas las distribuciones y releases/latest
+make test-vm FAST=1    # compilando y probando en la misma máquina
 make test-nixos        # la máquina NixOS del flake
 ```
 
@@ -245,6 +246,8 @@ Las pruebas de `test/integration` usan Xvfb como servidor X y sustituyen al disp
 | `09-app.sh` | `uxsm app`: unidades, slices, entradas y acciones, y que se paran con la sesión. |
 
 Las distribuciones cubiertas son Ubuntu 24.04, Debian 13, Arch, Fedora 43 y openSUSE Tumbleweed. `quick` usa Ubuntu; `pair`, Ubuntu y Arch; `all`, las cinco.
+
+Con `FAST=1`, la misma máquina compila el paquete y ejecuta las pruebas con él instalado, lo que ahorra un arranque y una instalación de dependencias por distribución: medido en Ubuntu, 3:37 en vez de 4:07. A cambio se pierde lo que da la máquina limpia, que es donde se nota que a un paquete le falte declarar una dependencia de ejecución: allí sólo está instalado el paquete y lo que piden las pruebas. Por eso vale para trabajar y no para publicar; `make release` siempre usa las dos máquinas.
 
 ### NixOS
 

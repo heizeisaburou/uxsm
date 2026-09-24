@@ -13,7 +13,7 @@ la entrada de sesión que elige el display manager:
 - `uxsm stop`: la cierra.
 - `uxsm app -- kitty` o `uxsm app firefox.desktop`: lanza una aplicación en su propia unidad,
   dentro de los slices de la sesión, como hace `uwsm app` en Wayland.
-- `uxsm is-active`: dice con el código de salida si hay una sesión de uxsm en marcha.
+- `uxsm check is-active`: dice con el código de salida si hay una sesión de uxsm en marcha.
 - `uxsm finalize`: lo ejecuta el escritorio, desde su configuración, para decir que ya está
   arrancado. No hace falta si pone la marca de EWMH, que es lo que uxsm mira por su cuenta.
 - `uxsm entry bspwm`: genera la entrada de sesión de uxsm, `bspwm-uxsm.desktop`, y la instala en

@@ -30,17 +30,26 @@ var checks = []struct {
 // sale con código 1, para poder usarlo en scripts.
 var errWarnings = errors.New("some checks gave warnings")
 
-// runCheck ejecuta todas las comprobaciones: `uxsm check`. No tiene
-// subórdenes: siempre las ejecuta todas, y cada línea dice qué ha comprobado y
-// con qué resultado.
+// runCheck ejecuta todas las comprobaciones: `uxsm check`. Sin suborden las
+// ejecuta todas, y cada línea dice qué ha comprobado y con qué resultado.
+//
+// La única suborden es `is-active`, que no es una comprobación del sistema sino
+// una pregunta sobre la sesión de ahora mismo. Está aquí porque es donde la
+// busca quien viene de uwsm, que la tiene igual.
 func runCheck(args []string) error {
+	if len(args) > 0 && args[0] == "is-active" {
+		return runIsActive(args[1:])
+	}
+
 	fs := newFlagSet("check", "",
 		"Run every uxsm check and show what each one checked and its result:\n"+
 			"ok, warning, or unknown when it cannot be determined. Exits with 1 if\n"+
 			"any check gives a warning.\n\n"+
 			"Checks:\n"+
 			"  xsessions dir  whether the display manager in use reads "+dm.LocalXSessions+",\n"+
-			"                 where uxsm installs the session entries it generates")
+			"                 where uxsm installs the session entries it generates\n\n"+
+			"Subcommand:\n"+
+			"  is-active      exit with 0 if a uxsm session is running, 1 if not")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}

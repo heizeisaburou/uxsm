@@ -212,7 +212,7 @@ var sessionUnits = append(uxsmUnits,
 	"wayland-session@*.target", "wayland-session-pre@*.target", "wayland-session-bindpid@*.service",
 )
 
-// uxsmUnits son las de una sesión de uxsm, las que dice `uxsm is-active`.
+// uxsmUnits son las de una sesión de uxsm, las que dice `uxsm check is-active`.
 var uxsmUnits = []string{
 	"uxsm-shutdown.target",
 	"uxsm-desktop@*.service", "uxsm-env@*.service", "uxsm-session@*.target", "uxsm-bindpid@*.service",
