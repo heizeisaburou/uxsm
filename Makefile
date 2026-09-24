@@ -28,7 +28,7 @@ BIN := bin/uxsm
 SRC := go.mod $(shell find . \( -name '*.go' -o -name '*.sh' \) -path './internal/*' -o -name '*.go' -path './cmd/*')
 UNITS := $(wildcard data/systemd/user/*.in)
 
-.PHONY: all build test vet fmt install uninstall test-vm release hooks dist clean
+.PHONY: all build check test vet fmt install uninstall test-vm release hooks dist clean
 
 all: build
 
@@ -41,6 +41,21 @@ build: $(BIN)
 $(BIN): $(SRC)
 	$(GO) vet ./...
 	$(GO) build -ldflags "-X main.version=$(VERSION) $(GO_LDFLAGS)" -o $(BIN) ./cmd/uxsm
+
+# Las comprobaciones baratas, en un solo sitio: las ejecutan el hook pre-commit
+# y el workflow de GitHub, para que no haya dos listas que mantener.
+check:
+	@unformatted=$$(gofmt -l cmd internal); \
+	if [ -n "$$unformatted" ]; then \
+		echo "not gofmt'ed (make fmt):" >&2; \
+		echo "$$unformatted" | sed 's/^/  /' >&2; \
+		exit 1; \
+	fi
+	$(GO) vet ./...
+	$(GO) test ./...
+	@for f in $$(git ls-files --cached --others --exclude-standard '*.sh' .githooks 2>/dev/null); do \
+		sh -n "$$f" || exit 1; \
+	done
 
 test:
 	$(GO) test ./...

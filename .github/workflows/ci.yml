@@ -1,0 +1,50 @@
+# Las mismas comprobaciones que el hook pre-commit, en cada push, más las de
+# máquinas virtuales a petición: ésas tardan minutos y necesitan KVM, así que no
+# se ejecutan solas.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      distros:
+        description: "Distribuciones de make test-vm: quick, pair, all o una lista"
+        default: quick
+
+jobs:
+  check:
+    name: gofmt, vet, pruebas unitarias y sintaxis de los scripts
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      # La Go de go.mod, que es la mínima que uxsm admite: así se compila aquí
+      # con la misma que en Ubuntu 24.04 (docs/go-version.md).
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: make check
+      - run: make build
+
+  vm:
+    name: paquetes y pruebas de integración en máquinas virtuales
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      # Las máquinas van con KVM o no van: sin él, QEMU emula y esto tarda horas.
+      - name: comprobar KVM
+        run: |
+          test -e /dev/kvm || { echo "este runner no tiene /dev/kvm"; exit 1; }
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+      - name: dependencias
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-system-x86 qemu-utils cloud-image-utils
+      - run: make test-vm DISTROS=${{ inputs.distros }}

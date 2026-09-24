@@ -1,6 +1,7 @@
 #!/bin/sh
 # Antes de cada commit, lo que tarda segundos: formato, go vet, pruebas unitarias
-# y la sintaxis de los scripts. Las máquinas virtuales van en pre-push.
+# y la sintaxis de los scripts, que es lo que hace `make check`. Las máquinas
+# virtuales van en pre-push.
 #
 # Mira el árbol de trabajo, no sólo lo preparado para el commit.
 # `git commit --no-verify` se lo salta.
@@ -8,16 +9,4 @@
 set -eu
 cd "$(git rev-parse --show-toplevel)"
 
-unformatted=$(gofmt -l cmd internal)
-if [ -n "$unformatted" ]; then
-    echo "pre-commit: not gofmt'ed (make fmt):" >&2
-    echo "$unformatted" | sed 's/^/  /' >&2
-    exit 1
-fi
-
-go vet ./...
-go test ./... >/dev/null || { go test ./...; exit 1; }
-
-git ls-files --cached --others --exclude-standard '*.sh' .githooks | while IFS= read -r f; do
-    sh -n "$f"
-done
+exec make check
