@@ -62,7 +62,8 @@ func runSetupSessionsDir(args []string) error {
 		return err
 	}
 
-	fmt.Printf("%s reads session entries from: %s\n  from: %s\n", r.Name, strings.Join(r.Dirs, ", "), r.Origin)
+	fmt.Printf("%s reads session entries from\n  %s\nas set in\n  %s\n",
+		r.Name, strings.Join(r.Dirs, ", "), r.Origin)
 	if r.ID == "gdm" {
 		explainGDM(r)
 		return nil
@@ -73,7 +74,7 @@ func runSetupSessionsDir(args []string) error {
 		return err
 	}
 	if len(changes) == 0 {
-		fmt.Printf("It already reads %s: nothing to do.\n", strings.Join(dm.LocalSessions, " and "))
+		fmt.Printf("It already reads them, nothing to do\n")
 		return nil
 	}
 
@@ -83,10 +84,12 @@ func runSetupSessionsDir(args []string) error {
 		if c.Old == "" {
 			action = "create"
 		}
+		// Sin dos puntos detrás de la ruta: así se copia de la terminal con
+		// dos clics, sin arrastrar el signo.
 		if *install {
-			fmt.Printf("\nGoing to %s %s:\n", action, c.File)
+			fmt.Printf("\nGoing to %s this file\n  %s\n", action, c.File)
 		} else {
-			fmt.Printf("\nWould %s %s:\n", action, c.File)
+			fmt.Printf("\nWould %s this file\n  %s\n", action, c.File)
 		}
 		printChange(c)
 	}
@@ -143,14 +146,14 @@ func printChange(c *dm.Change) {
 // explainGDM explica cómo decide GDM sus directorios y cómo cambiarlos, sin
 // cambiar nada.
 func explainGDM(r *dm.Report) {
-	if r.Reads(dm.LocalXSessions) {
-		fmt.Printf("It already reads %s: nothing to do.\n", dm.LocalXSessions)
+	if len(r.Missing()) == 0 {
+		fmt.Printf("It already reads them, nothing to do\n")
 		return
 	}
 	fmt.Printf(`
 GDM looks for session entries in the xsessions subdirectory of every
 directory in its XDG_DATA_DIRS, and in /usr/share/xsessions. To make it read
-%s, add /usr/local/share to XDG_DATA_DIRS in its unit:
+%s, add /usr/local/share to XDG_DATA_DIRS in its unit with
 
   systemctl edit %s
 

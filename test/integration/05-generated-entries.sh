@@ -49,7 +49,7 @@ fi
 ok "uxsm setup sessions-dir refuses a display manager that is not installed"
 
 # Sin -i sólo enseña lo que escribiría.
-sudo uxsm entry bspwm 2>/dev/null | grep -q "^Would write $dir/bspwm-uxsm.desktop:" ||
+sudo uxsm entry bspwm 2>/dev/null | grep -q "^  $dir/bspwm-uxsm.desktop$" ||
     fail "uxsm entry without -i did not show what it would write"
 [ ! -e "$dir/bspwm-uxsm.desktop" ] || fail "uxsm entry without -i wrote the entry"
 ok "without -i, uxsm entry only shows the entry"

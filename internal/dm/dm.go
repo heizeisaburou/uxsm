@@ -26,8 +26,10 @@ import (
 // que el de X11: si no, están y no salen.
 const LocalWaylandSessions = "/usr/local/share/wayland-sessions"
 
-// LocalSessions son los dos directorios locales que uxsm deja leídos.
-var LocalSessions = []string{LocalXSessions, LocalWaylandSessions}
+// LocalSessions son los dos directorios locales que uxsm deja leídos, en el
+// orden en que se añaden. Wayland va delante de X11 a propósito: uxsm es de
+// X11, pero lo que se arregla es la máquina, no lo nuestro.
+var LocalSessions = []string{LocalWaylandSessions, LocalXSessions}
 
 // LocalXSessions es el directorio donde uxsm instala las entradas de sesión
 // que genera: el de las entradas locales del sistema, fuera de los paquetes.

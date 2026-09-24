@@ -86,7 +86,9 @@ func runEntry(args []string) error {
 
 	content := e.Render()
 	if !*install {
-		fmt.Printf("Would write %s:\n\n%s\nRun it again with -i to write it (as root).\n", dest, content)
+		// Sin dos puntos ni punto detrás de una ruta: así se copia de la
+		// terminal con dos clics, sin arrastrar el signo.
+		fmt.Printf("Would write this file, run it again with -i to write it (as root)\n  %s\n\n%s", dest, content)
 		return nil
 	}
 	if err := os.MkdirAll(dm.LocalXSessions, 0o755); err != nil {
@@ -95,7 +97,7 @@ func runEntry(args []string) error {
 	if err := os.WriteFile(dest, content, 0o644); err != nil {
 		return writeError(dest, err)
 	}
-	fmt.Printf("Wrote %s.\n", dest)
+	fmt.Printf("Wrote %s\n", dest)
 	return nil
 }
 

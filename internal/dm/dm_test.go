@@ -131,8 +131,8 @@ func TestSetupSessionsDir(t *testing.T) {
 		t.Fatalf("LightDM gave %d changes, want one", len(changes))
 	}
 	c := changes[0]
-	want := "[LightDM]\nsessions-directory=/usr/share/lightdm/sessions:/usr/local/share/xsessions:" +
-		"/usr/share/xsessions:/usr/local/share/wayland-sessions:/usr/share/wayland-sessions\n"
+	want := "[LightDM]\nsessions-directory=/usr/local/share/wayland-sessions:/usr/local/share/xsessions:" +
+		"/usr/share/lightdm/sessions:/usr/share/xsessions:/usr/share/wayland-sessions\n"
 	if c.File != "/etc/lightdm/lightdm.conf.d/99-uxsm.conf" || c.Old != "" || !strings.Contains(c.New, want) {
 		t.Errorf("new file: %+v", c)
 	}
@@ -163,7 +163,7 @@ func TestSetupSessionsDir(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(changes) != 1 || changes[0].File != user ||
-		changes[0].New != "[Theme]\nCurrent=x\n\n[X11]\nSessionDir=/opt/sessions,/usr/local/share/xsessions\nMinimumVT=1\n" {
+		changes[0].New != "[Theme]\nCurrent=x\n\n[X11]\nSessionDir=/usr/local/share/xsessions,/opt/sessions\nMinimumVT=1\n" {
 		t.Errorf("user file: %+v", changes)
 	}
 

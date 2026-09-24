@@ -147,9 +147,11 @@ func (c *Change) Apply() error {
 // que se lee después. Como una opción puede venir de un fichero y otra de otro,
 // puede salir más de un cambio.
 //
-// Cada directorio local va delante de su hermano de /usr/share si está, como en
-// XDG_DATA_DIRS y en los valores de serie de SDDM: así una entrada local tapa a
-// la del paquete con el mismo nombre, igual que en todos los demás sitios.
+// Los directorios locales van delante de todo, como en XDG_DATA_DIRS, donde
+// /usr/local/share va antes que /usr/share: así una entrada local tapa a la del
+// paquete con el mismo nombre, igual que en todos los demás sitios. Y entre
+// ellos, el de Wayland delante del de X11, para no inclinar la máquina hacia
+// X11 sólo porque uxsm sea de X11.
 func SetupSessionsDir(id string) ([]Change, error) {
 	var k keyfileDM
 	switch id {
@@ -206,22 +208,17 @@ func SetupSessionsDir(id string) ([]Change, error) {
 	return changes, nil
 }
 
-// addLocals añade a dirs los directorios locales que falten, cada uno delante
-// de su hermano de /usr/share si está.
+// addLocals pone delante de dirs los directorios locales que falten, en el
+// orden de locals. Los que ya estén se quedan donde estén: si alguien los puso
+// en otro sitio a propósito, no somos quién para moverlos.
 func addLocals(dirs, locals []string) []string {
-	out := slices.Clone(dirs)
+	var add []string
 	for _, local := range locals {
-		if slices.Contains(out, local) {
-			continue
-		}
-		system := strings.Replace(local, "/usr/local/share/", "/usr/share/", 1)
-		if i := slices.Index(out, system); i >= 0 {
-			out = slices.Insert(out, i, local)
-		} else {
-			out = append(out, local)
+		if !slices.Contains(dirs, local) {
+			add = append(add, local)
 		}
 	}
-	return out
+	return slices.Concat(add, dirs)
 }
 
 // readGDM calcula los directorios de xsessions de GDM a partir de cómo lo
