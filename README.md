@@ -22,6 +22,7 @@ la entrada de sesión que elige el display manager:
   directorios locales de sesiones, el de X11 y el de Wayland.
 
 Arquitectura, interacción con systemd y pruebas: [`docs/architecture.md`](docs/architecture.md).
+Qué hacer cuando algo no va: [`docs/troubleshooting.md`](docs/troubleshooting.md).
 
 ## Estructura
 
