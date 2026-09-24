@@ -56,8 +56,8 @@ func TestUxsmEntryNoAutostart(t *testing.T) {
 
 // TestAutostartTable comprueba la marca de la tabla, que dice lo que la sesión
 // hace y no lo que es: la llevan las que lanzan ellas mismas el autostart XDG,
-// incluida Enlightenment, que es un gestor de ventanas; y no la llevan las que
-// no lo lanzan, incluida icewm-session, que es una sesión con su script.
+// y no la llevan las demás, aunque tengan su propio fichero de arranque, como
+// icewm-session, o sean un escritorio entero, como Enlightenment.
 func TestAutostartTable(t *testing.T) {
 	for id, k := range known {
 		if k.OwnAutostart && len(k.DesktopNames) == 0 {
@@ -65,12 +65,13 @@ func TestAutostartTable(t *testing.T) {
 		}
 	}
 	for _, id := range []string{"xfce.desktop", "plasmax11.desktop", "gnome-xorg.desktop",
-		"sawfish-mate.desktop", "enlightenment.desktop"} {
+		"sawfish-mate.desktop"} {
 		if !known[id].OwnAutostart {
 			t.Errorf("%s should be marked as starting its own XDG autostart", id)
 		}
 	}
-	for _, id := range []string{"bspwm.desktop", "i3.desktop", "icewm-session.desktop"} {
+	for _, id := range []string{"bspwm.desktop", "i3.desktop", "icewm-session.desktop",
+		"enlightenment.desktop"} {
 		if known[id].OwnAutostart {
 			t.Errorf("%s should not be marked as starting its own XDG autostart", id)
 		}

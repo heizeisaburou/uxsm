@@ -66,14 +66,15 @@ var known = map[string]Known{
 		Exec:         "dde-session",
 		OwnAutostart: true,
 	},
-	// Enlightenment es gestor de ventanas y escritorio a la vez, y lanza el
-	// autostart desde sus «aplicaciones de inicio». Sin comprobar en una sesión
-	// de verdad; si no lo lanzara, su entrada se quedaría sin autostart.
+	// Enlightenment (0.27) no lanza las entradas de autostart XDG: probado en
+	// Arch y en Ubuntu, con él ya en pantalla y hasta treinta segundos de
+	// margen, no ejecutó ninguna. Su código sí las conoce ―el módulo de
+	// «aplicaciones de inicio» las lee para dejarte elegirlas―, así que puede
+	// que lance las que le añadas desde ahí, pero no el directorio entero.
 	"enlightenment.desktop": {
 		Name: "Enlightenment", Comment: "Log in using Enlightenment",
 		DesktopNames: []string{"Enlightenment"}, // todas
 		Exec:         "enlightenment_start",
-		OwnAutostart: true,
 	},
 	// Sin Exec: la orden es "env GNOME_SHELL_SESSION_MODE=classic gnome-session",
 	// y con un comando la instancia sería "env".
@@ -227,9 +228,10 @@ var known = map[string]Known{
 		DesktopNames: []string{"ICEWM"}, // todas
 		Exec:         "icewm",
 	},
-	// icewm-session es un script que arranca las piezas de IceWM ―el gestor de
-	// ventanas, el fondo y la bandeja―, no un gestor de sesión: lo suyo es
-	// ~/.icewm/startup, no el autostart XDG. Sin comprobar.
+	// icewm-session arranca las piezas de IceWM ―el gestor de ventanas, el
+	// fondo y la bandeja― y no toca el autostart XDG: probado en Arch (4.1.0) y
+	// en Ubuntu (3.4.5). Lo que tenga el usuario en ~/.icewm/startup es suyo,
+	// como el bspwmrc de bspwm, y no tiene nada que ver con estas entradas.
 	"icewm-session.desktop": {
 		Name: "IceWM Session", Comment: "This session logs you into IceWM",
 		DesktopNames: []string{"ICEWM"}, // todas

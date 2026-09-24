@@ -99,7 +99,7 @@ uxsm lo lanza siempre, como uwsm: de una sesión gestionada por systemd se esper
 uxsm start --no-autostart bspwm.desktop
 ```
 
-Quien se apoya en la tabla de escritorios conocidos es `uxsm entry`. La tabla dice, de cada sesión conocida, si lanza ella misma sus entradas de autostart, que es una cosa distinta de tener gestor de sesión: Xfce, GNOME, Plasma o MATE lo lanzan, y también Enlightenment, que es un gestor de ventanas; `icewm-session`, que es una sesión con su propio script, no. Cuando la tabla dice que sí, la opción va en el `Exec=` de la entrada generada:
+Quien se apoya en la tabla de escritorios conocidos es `uxsm entry`. La tabla dice, de cada sesión conocida, si lanza ella misma sus entradas de autostart. Es una pregunta sobre lo que hace, no sobre lo que es: la lanzan Xfce, GNOME, Plasma o MATE, por su gestor de sesión, y no la lanzan ni un gestor de ventanas ni una sesión con su propio fichero de arranque, como `icewm-session` con `~/.icewm/startup`, que es cosa aparte y no toca estas entradas. Cuando la tabla dice que sí, la opción va en el `Exec=` de la entrada generada:
 
 ```ini
 Exec=uxsm start --no-autostart -D XFCE -- startxfce4
