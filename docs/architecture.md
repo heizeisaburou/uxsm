@@ -223,6 +223,10 @@ Las distribuciones cubiertas son Ubuntu 24.04, Debian 13, Arch, Fedora 43 y open
 
 Hace falta Nix con su demonio en marcha, igual que las otras pruebas de máquinas necesitan QEMU. La versión de nixpkgs queda fijada en `flake.lock`, así que la máquina de prueba es la misma en cualquier sitio. Esta prueba sirve para lo que las demás no pueden: en NixOS nada está donde lo ponen las otras distribuciones, y el paquete de Nix instala las unidades por su cuenta.
 
+### Integración continua
+
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) ejecuta `make check` y `make build` en cada push, que es la misma lista que el hook `pre-commit`, y deja `make test-vm` a petición (`workflow_dispatch`), con las distribuciones como parámetro. Los runners de GitHub traen `/dev/kvm`, así que la tanda completa de una distribución ―compilar el paquete en una máquina e instalarlo en otra limpia, con las ocho pruebas de integración― tarda allí unos cuatro minutos.
+
 El hook `pre-commit` ejecuta `gofmt`, `go vet`, las pruebas unitarias y `sh -n` sobre los scripts. El hook `pre-push` exige que los pushes a `main`, `master` o una etiqueta `vX.Y.Z` tengan un `make release` satisfactorio del mismo commit. Se activan con `make hooks`.
 
 ## Mapa del código
