@@ -63,8 +63,8 @@ type Report struct {
 	// Origin dice de dónde sale Dirs, para enseñarlo: el fichero que lo pone,
 	// "compiled default" o "as systemd launches it".
 	Origin string
-	// Unit es su unidad de systemd, si hace falta nombrarla: la de GDM, que
-	// cambia con la distribución.
+	// Unit es su unidad de systemd, para nombrarla al decir cómo reiniciarlo;
+	// la de GDM cambia con la distribución.
 	Unit string
 }
 

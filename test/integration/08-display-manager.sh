@@ -19,6 +19,7 @@ set -eu
 . "$(dirname "$0")/lib.sh"
 
 dropin=/etc/lightdm/lightdm.conf.d/99-uxsm-test.conf
+ours=/etc/lightdm/lightdm.conf.d/99-uxsm.conf
 xserver=/usr/local/bin/uxsm-it-xserver
 entry=/usr/local/share/xsessions/bspwm-uxsm.desktop
 desktop=uxsm-desktop@bspwm.desktop.service
@@ -26,7 +27,7 @@ desktop=uxsm-desktop@bspwm.desktop.service
 cleanup() {
     sudo systemctl stop lightdm.service 2>/dev/null || true
     uxsm stop 2>/dev/null || true
-    sudo rm -f "$entry" "$dropin" "$xserver"
+    sudo rm -f "$entry" "$dropin" "$ours" "$xserver"
 }
 trap cleanup EXIT
 
@@ -112,6 +113,23 @@ autologin-user-timeout=0
 autologin-session=bspwm-uxsm
 user-session=bspwm-uxsm
 CONF
+
+# Y el directorio de Wayland lo deja leído uxsm setup, contra un LightDM de
+# verdad: cambia la línea del fichero que pone la opción, que aquí es el de la
+# prueba, y la sesión sigue arrancando igual. Lo que no hace es reiniciarlo.
+out=$(sudo uxsm setup sessions-dir -i lightdm) || fail "uxsm setup sessions-dir -i failed: $out"
+case $out in
+*"systemctl restart lightdm.service"*) ok "uxsm setup sessions-dir -i says how to restart LightDM" ;;
+*) fail "uxsm setup sessions-dir -i did not say how to restart it: $out" ;;
+esac
+if systemctl is-active --quiet lightdm.service; then
+    fail "uxsm restarted the display manager by itself"
+fi
+ok "and does not restart it by itself"
+case $(uxsm setup sessions-dir lightdm) in
+*"nothing to do"*) ok "and leaves both local directories read" ;;
+*) fail "after setup, LightDM still does not read them: $(uxsm setup sessions-dir lightdm)" ;;
+esac
 
 # La entrada que arranca la sesión es la que genera uxsm, en el directorio que
 # sólo trae /usr/local: el camino entero de uxsm entry.

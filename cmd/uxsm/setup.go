@@ -109,7 +109,31 @@ func runSetupSessionsDir(args []string) error {
 	}
 	fmt.Printf("\nDone. %s will read %s the next time it starts.\n",
 		r.Name, strings.Join(missingOr(r), " and "))
+	explainRestart(r)
 	return nil
+}
+
+// explainRestart dice que hay que reiniciar el display manager y cómo, sin
+// hacerlo: reiniciarlo se lleva por delante la sesión gráfica desde la que se
+// está ejecutando esto, y eso lo decide quien está delante, no uxsm.
+//
+// No es un detalle: su greeter lee los directorios por su cuenta, así que
+// ofrece la sesión nueva antes de que el display manager sepa arrancarla, y al
+// elegirla cierra el greeter, falla, y deja el asiento en negro.
+func explainRestart(r *dm.Report) {
+	unit := r.Unit
+	if unit == "" {
+		unit = "display-manager.service"
+	}
+	fmt.Printf(`
+The %s that is running still does not know them: restart it, or the machine,
+before logging out. Until then its login screen can offer the session and then
+fail to launch it, leaving the screen black. From another console (Ctrl+Alt+F2)
+
+  sudo systemctl restart %s
+
+uxsm does not do it: it would take down the graphical session you are in.
+`, r.Name, unit)
 }
 
 // missingOr son los directorios que le faltaban al display manager, para

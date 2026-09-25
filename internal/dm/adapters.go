@@ -33,6 +33,8 @@ type keyfileDM struct {
 	// own es el fichero que crea uxsm setup sessions-dir cuando no puede
 	// cambiar el que pone la opción.
 	own string
+	// unit es su unidad de systemd, para decir cómo reiniciarlo.
+	unit string
 }
 
 // lightdm guarda una sola lista, para las sesiones de X11 y las de Wayland, en
@@ -58,6 +60,7 @@ var lightdm = keyfileDM{
 	},
 	main: "/etc/lightdm/lightdm.conf",
 	own:  "/etc/lightdm/lightdm.conf.d/99-uxsm.conf",
+	unit: "lightdm.service",
 }
 
 // sddm guarda una lista por tipo de sesión: SessionDir en [X11] y
@@ -82,6 +85,7 @@ var sddm = keyfileDM{
 	dirs: []string{"/usr/lib/sddm/sddm.conf.d", "/etc/sddm.conf.d"},
 	main: "/etc/sddm.conf",
 	own:  "/etc/sddm.conf.d/99-uxsm.conf",
+	unit: "sddm.service",
 }
 
 func readLightDM() (*Report, error) { return lightdm.read() }
@@ -90,7 +94,7 @@ func readSDDM() (*Report, error)    { return sddm.read() }
 // read lee las listas en vigor: de cada opción, la del último fichero que la
 // pone o, si ninguno la pone, la de serie.
 func (k keyfileDM) read() (*Report, error) {
-	r := &Report{Name: k.name, ID: k.id}
+	r := &Report{Name: k.name, ID: k.id, Unit: k.unit}
 	var origins []string
 	for _, l := range k.lists {
 		s, err := k.lookup(l)
