@@ -1,76 +1,89 @@
 digraph environment {
   graph [
-    label="Entorno de la sesión: preparar y restaurar",
+    label="Session environment: prepare, share, and restore",
     labelloc=t,
     fontsize=24,
     fontname="DejaVu Sans Bold",
     bgcolor="#f8fafc",
     pad=0.28,
-    nodesep=0.55,
+    nodesep=0.52,
     ranksep=0.62,
-    splines=polyline
+    splines=polyline,
+    newrank=true
   ];
   node [shape=box, style="rounded,filled", fontname="DejaVu Sans", fontsize=11,
-        color="#2563eb", fillcolor="#eff6ff", fontcolor="#0f172a", margin="0.15,0.10"];
+        color="#2563eb", fillcolor="#eff6ff", fontcolor="#0f172a", margin="0.16,0.11"];
   edge [fontname="DejaVu Sans", fontsize=9, color="#64748b", fontcolor="#334155", arrowsize=0.75];
 
+  subgraph cluster_inputs {
+    label="Inputs";
+    color="#fde68a";
+    style="rounded,filled";
+    fillcolor="#ffffff";
+    fontname="DejaVu Sans Bold";
+
+    manager [shape=cylinder, fillcolor="#ede9fe", color="#7c3aed",
+             label="Current environment of\nsystemd --user"];
+    login [shape=folder, fillcolor="#fef3c7", color="#ca8a04",
+           label="env_login\nEnvironment received from\nthe display manager"];
+    identity [shape=folder, fillcolor="#fef3c7", color="#ca8a04",
+              label="env_identity\nComputed XDG variables"];
+    config [shape=folder, fillcolor="#fef3c7", color="#ca8a04",
+            label="Profile and uxsm environment files\n/etc/profile · ~/.profile\nuxsm/env · uxsm/env-<desktop> · .d"];
+  }
+
   subgraph cluster_prepare {
-    label="Antes del escritorio · uxsm-env@ prepara el entorno";
+    label="Startup · uxsm-env@ prepares one shared session environment";
     color="#93c5fd";
     style="rounded,filled";
     fillcolor="#ffffff";
     fontname="DejaVu Sans Bold";
 
-    login [shape=folder, fillcolor="#fef3c7", color="#ca8a04",
-           label="env_login\nEntorno recibido del display manager"];
-    identity [shape=folder, fillcolor="#fef3c7", color="#ca8a04",
-              label="env_identity\nVariables XDG calculadas"];
-    manager [shape=cylinder, fillcolor="#ede9fe", color="#7c3aed",
-             label="Entorno actual de\nsystemd --user"];
     snapshot [shape=folder, fillcolor="#fef3c7", color="#ca8a04",
-              label="env_pre\nFoto para restaurar al final"];
-    merge [label="Base = entorno del gestor\n+ entorno del login por encima"];
-    loader [label="Un shell carga, en este orden\n1. /etc/profile y ~/.profile\n2. identidad XDG\n3. uxsm/env y env-<desktop>\n   con sus directorios .d"];
-    diff [label="Compara el resultado con el entorno actual\ny decide qué variables poner o quitar"];
+              label="env_pre\nFiltered snapshot used for restoration"];
+    merge [label="Overlay the login environment\non the manager snapshot"];
+    loader [label="Run the embedded /bin/sh loader\nand apply XDG identity + config files"];
+    diff [label="Compare the result with the current manager\nCompute variables to set and unset"];
     marked [shape=folder, fillcolor="#fef3c7", color="#ca8a04",
-            label="env_cleanup\nNombres que pertenecen a la sesión"];
+            label="env_cleanup\nNames owned by this session"];
     apply [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
-           label="Actualiza el entorno compartido\nde systemd --user"];
+           label="Update systemd --user"];
     dbus [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
-          label="dbus-daemon solamente\nUpdateActivationEnvironment\n(dbus-broker delega en systemd)"];
-    process [shape=oval, fillcolor="#bbf7d0", color="#15803d", fontcolor="#14532d",
-             label="El escritorio y los servicios activados\nreciben el entorno de la sesión"];
+          label="With dbus-daemon only\nUpdateActivationEnvironment\n(dbus-broker already delegates to systemd)"];
+    processes [shape=oval, fillcolor="#bbf7d0", color="#15803d", fontcolor="#14532d",
+               label="Desktop and activated services\ninherit the prepared environment"];
 
-    manager -> snapshot;
-    manager -> merge;
-    login -> merge;
-    identity -> loader;
     merge -> loader -> diff;
     diff -> marked;
     diff -> apply;
     apply -> dbus;
-    apply -> process;
+    apply -> processes;
   }
 
   subgraph cluster_cleanup {
-    label="Al cerrar · uxsm-env@ restaura lo que había antes";
+    label="Shutdown · restore exactly what existed before the session";
     color="#fca5a5";
     style="rounded,filled";
     fillcolor="#ffffff";
     fontname="DejaVu Sans Bold";
 
     stop [shape=oval, fillcolor="#fee2e2", color="#b91c1c", fontcolor="#7f1d1d",
-          label="systemd detiene uxsm-env@\nal cerrar la sesión"];
-    compare [label="Compara env_pre, env_cleanup\ny el entorno actual"];
-    unset [label="Borra variables creadas\npor la sesión"];
-    restore [label="Restaura todos los valores\nde env_pre"];
+          label="systemd stops uxsm-env@"];
+    compare [label="Compare env_pre, env_cleanup,\nand the current environment"];
+    unset [label="Remove variables created\nfor the session"];
+    restore [label="Restore every value\nrecorded in env_pre"];
     remove [shape=folder, fillcolor="#e2e8f0", color="#64748b",
-            label="Borra env_pre, env_cleanup,\nenv_login, env_identity y command"];
+            label="Remove uxsm runtime files\nenv_pre · env_cleanup · env_login\nenv_identity · command"];
 
     stop -> compare -> unset -> restore -> remove;
   }
 
-  process -> stop [label=" al cerrar la sesión ", color="#b91c1c"];
+  manager -> snapshot;
+  manager -> merge;
+  login -> merge;
+  identity -> loader;
+  config -> loader;
+  processes -> stop [label=" session ends ", color="#b91c1c"];
   snapshot -> compare [style=dashed];
   marked -> compare [style=dashed];
 }

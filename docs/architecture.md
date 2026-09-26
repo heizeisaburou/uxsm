@@ -1,92 +1,94 @@
-# Cómo funciona uxsm
+# How uxsm works
 
-uxsm convierte una sesión X11 en un conjunto de unidades de `systemd --user`. El escritorio deja de ser un hijo opaco del display manager: pasa a ser el proceso principal de un servicio, comparte un entorno de sesión preparado de forma explícita y arrastra targets estándar de sesión gráfica. Cuando termina el escritorio o desaparece el proceso que abrió la sesión, systemd detiene el conjunto completo y uxsm restaura el entorno anterior.
+uxsm turns an X11 session into a set of `systemd --user` units. Instead of remaining an opaque child of the display manager, the desktop becomes the main process of a service. It receives an explicitly prepared environment and activates the standard graphical-session targets. When the desktop exits or the display manager's session process disappears, systemd stops the whole session and uxsm restores the previous environment.
 
-Este documento explica qué hace uxsm en la máquina de quien lo usa: qué unidades aparecen, con qué nombres, qué entorno recibe el escritorio, cuándo se da la sesión por lista y qué se toca del display manager. Los diagramas muestran un recorrido representativo; no enumeran cada error ni cada combinación de opciones. Sus fuentes DOT están junto a los SVG en `docs/flows`.
+This document is for users who want to understand what uxsm changes on their system: which units it creates, how it names them, which environment the desktop receives, when the session becomes ready, and how display-manager integration works. The diagrams show representative paths rather than every error and option combination. Their DOT sources live beside the SVG files in `docs/flows`
 
-Si lo que buscas es compilar, probar o empaquetar uxsm, eso está en [`development.md`](development.md).
+For build, test, and packaging details, see [Development](development.md).
 
-## Inicio de una sesión
+## Starting a session
 
-`uxsm start` admite dos fuentes:
+`uxsm start` accepts either a session entry or a command:
 
 ```sh
-uxsm start bspwm.desktop       # lee Exec= y DesktopNames= de la entrada
-uxsm start -D bspwm -- bspwm   # recibe el comando directamente
+uxsm start bspwm.desktop       # read Exec= and DesktopNames= from the entry
+uxsm start -D bspwm -- bspwm   # run this command directly
 ```
 
-Un único argumento terminado en `.desktop`, sin `--`, se interpreta como un ID de entrada. Se busca en `xsessions` dentro de los directorios de datos XDG; la primera coincidencia gana. Cualquier otra forma es un comando, y su ejecutable tiene que existir en `PATH`.
+A single argument ending in `.desktop`, without `--`, is treated as an entry ID. uxsm searches the `xsessions` subdirectory of each XDG data directory and uses the first match. Every other form is a command, whose executable must be available in `PATH`.
 
-En ambos casos uxsm:
+In either case, uxsm:
 
-1. decide el ID de la instancia (`bspwm.desktop` para una entrada, `bspwm` para el comando);
-2. calcula la identidad XDG de la sesión;
-3. espera a que otra sesión gráfica haya terminado también su limpieza, mirando las unidades de uxsm y las de uwsm por su nombre, y no `graphical-session.target`, que es de systemd y lo enciende cualquiera ―el envoltorio de sesión de NixOS lo activa antes de ejecutar el `Exec=` de la entrada―. Dos sesiones gráficas de un mismo usuario no encajan: el gestor de systemd es uno por usuario, así que compartirían ese target y el entorno;
-4. guarda el entorno de login, la identidad y, si procede, el comando en `$XDG_RUNTIME_DIR/uxsm`;
-5. arranca una unidad que vigila el PID entregado al display manager;
-6. se sustituye por `systemctl --user start --wait uxsm-desktop@ID.service`.
+1. chooses the instance ID: `bspwm.desktop` for an entry or `bspwm` for a command;
+2. builds the session's XDG identity;
+3. waits for any previous uxsm or uwsm session to finish cleaning up;
+4. saves the login environment, identity, and direct command, when present, under `$XDG_RUNTIME_DIR/uxsm`
+5. starts a unit that watches the PID owned by the display manager; and
+6. replaces itself with `systemctl --user start --wait uxsm-desktop@ID.service`.
 
-![Flujo de arranque](flows/session-start.svg)
+The wait in step 3 checks uxsm and uwsm units by name, not `graphical-session.target`. Any desktop may activate that standard target; NixOS's session wrapper does so before running the entry's `Exec=`. Two graphical sessions for one user cannot safely coexist because they would share both the user manager and its environment.
 
-[Fuente DOT](flows/session-start.dot).
+![Session startup](flows/session-start.svg)
 
-La plantilla del servicio no contiene el comando del escritorio. Ejecuta `uxsm aux exec %i`:
+[DOT source](flows/session-start.dot)
 
-- con un ID terminado en `.desktop`, vuelve a leer el `Exec=` de la entrada;
-- con un comando directo, lee el vector de argumentos guardado por `uxsm start`.
+The service template contains an instance ID rather than a desktop command. It runs `uxsm aux exec %i`, which:
 
-En el último paso `aux exec` usa `exec(2)`. El proceso principal del servicio pasa a ser el propio escritorio, de modo que systemd detecta su salida sin procesos intermediarios.
+- reopens the entry and reads its `Exec=` when the ID ends in `.desktop`; or
+- reads the argument vector saved by `uxsm start` for a direct command.
 
-### Identidad
+Finally, `aux exec` calls `exec(2)`. The desktop itself becomes the service's main process, so systemd detects its exit without an intermediate process.
 
-Sin `-e`, los nombres se combinan en este orden:
+### Session identity
 
-1. `XDG_CURRENT_DESKTOP` recibido del display manager;
-2. `DesktopNames=` de la entrada;
-3. los nombres de `-D`.
+Without `-e`, uxsm combines desktop names in this order:
 
-Se quitan duplicados. Si no queda ninguno, se usa como último recurso el nombre del ejecutable. Con `-e` se ignoran las fuentes anteriores y `-D` pasa a ser obligatorio.
+1. `XDG_CURRENT_DESKTOP` inherited from the display manager;
+2. `DesktopNames=` from the session entry; and
+3. names supplied with `-D`.
 
-Del resultado salen `XDG_CURRENT_DESKTOP`, `XDG_SESSION_DESKTOP`, `XDG_MENU_PREFIX` y `XDG_SESSION_TYPE=x11`.
+Duplicates are removed. If the result is empty, uxsm falls back to the executable name. With `-e`, the other sources are discarded and `-D` is required.
 
-## Grafo de unidades y ciclo de vida
+The result determines `XDG_CURRENT_DESKTOP`, `XDG_SESSION_DESKTOP`, `XDG_MENU_PREFIX`, and `XDG_SESSION_TYPE=x11`.
 
-![Unidades y cierre](flows/systemd-lifecycle.svg)
+## Unit graph and lifecycle
 
-[Fuente DOT](flows/systemd-lifecycle.dot).
+![Units and shutdown](flows/systemd-lifecycle.svg)
 
-Todas se ven con `systemctl --user list-units 'uxsm*'` mientras la sesión está en marcha, y `uxsm check is-active -v` las enumera.
+[DOT source](flows/systemd-lifecycle.dot)
 
-| Unidad | Responsabilidad |
+While a session is running, `systemctl --user list-units 'uxsm*'` shows its units and `uxsm check is-active -v` lists the active ones.
+
+| Unit | Responsibility |
 | --- | --- |
-| `uxsm-bindpid@PID.service` | Espera con `pidfd` al proceso que abrió la sesión. |
-| `uxsm-env@ID.service` | Prepara el entorno antes del escritorio y lo restaura al parar. |
-| `uxsm-desktop@ID.service` | Ejecuta el escritorio como proceso principal y espera a que la sesión esté lista. |
-| `uxsm-session@ID.target` | Representa la sesión uxsm y arrastra `graphical-session.target`. |
-| `uxsm-autostart@ID.target` | Arrastra `xdg-desktop-autostart.target` cuando el autostart le toca a uxsm. |
-| `app-uxsm.slice` y sus hermanas | Donde van las aplicaciones que lanza `uxsm app`. |
-| `uxsm-shutdown.target` | Entra en conflicto con las unidades activas y coordina su cierre. |
+| `uxsm-bindpid@PID.service` | Watches the display manager's session process through `pidfd`. |
+| `uxsm-env@ID.service` | Prepares the environment before startup and restores it on shutdown. |
+| `uxsm-desktop@ID.service` | Runs the desktop as its main process and waits for readiness. |
+| `uxsm-session@ID.target` | Represents the uxsm session and activates `graphical-session.target`. |
+| `uxsm-autostart@ID.target` | Activates `xdg-desktop-autostart.target` when uxsm owns autostart. |
+| `app-uxsm.slice` and peers | Contain applications launched through `uxsm app`. |
+| `uxsm-shutdown.target` | Conflicts with active units and coordinates shutdown. |
 
-La sesión se cierra por el mismo camino si:
+The same shutdown path runs when:
 
-- termina o falla el escritorio;
-- el display manager mata el proceso que estaba esperando la sesión;
-- alguien ejecuta `uxsm stop`.
+- the desktop exits or fails;
+- the display manager kills the process waiting for the session; or
+- someone runs `uxsm stop`.
 
-Los dos primeros casos activan `uxsm-shutdown.target` mediante `OnSuccess=` y `OnFailure=`. `uxsm stop` activa ese target directamente. Sus conflictos paran el escritorio, los targets gráficos y el servicio de entorno; el `ExecStopPost=` de este último siempre intenta restaurar el estado previo.
+The first two cases activate `uxsm-shutdown.target` through `OnSuccess=` or `OnFailure=`. `uxsm stop` activates it directly. Its conflicts stop the desktop, graphical targets, and environment service; that service's `ExecStopPost=` always attempts to restore the previous state.
 
-### Cuándo la sesión está lista
+### Readiness
 
-El escritorio no cuenta como arrancado en cuanto empieza a ejecutarse. `uxsm-desktop@ID.service` lleva un `ExecStartPost=` que ejecuta `uxsm aux wait-ready`, y systemd no da el servicio por arrancado hasta que esa orden termina. Como los targets de la sesión van detrás del servicio, `uxsm-session@ID.target` y `graphical-session.target` esperan con él, y lo que arranque con la sesión gráfica encuentra un escritorio donde colocarse.
+Starting the desktop process does not immediately make the session ready. `uxsm-desktop@ID.service` runs `uxsm aux wait-ready` from `ExecStartPost=`, and systemd keeps the service in its starting state until that command returns. The session targets are ordered after the service, so applications that start with `graphical-session.target` see a working desktop.
 
-Hay dos formas de que la sesión se dé por lista, y valen lo mismo:
+Either of two events marks the session ready:
 
-- **uxsm lo ve.** Es la comprobación de EWMH: la ventana raíz tiene `_NET_SUPPORTING_WM_CHECK` apuntando a una ventana del gestor de ventanas, y esa ventana tiene la misma propiedad apuntando a sí misma. Lo segundo distingue al gestor que está gobernando la pantalla de la marca que deja uno que murió de golpe. uxsm se lo pregunta al servidor X hablando el protocolo X11 por su cuenta, sin libX11 ni `xprop`: es el saludo inicial y dos propiedades, y así la sesión no depende en tiempo de ejecución de ningún paquete de Xorg.
-- **El escritorio lo dice.** `uxsm finalize`, como el `uwsm finalize` de uwsm, ejecutado por el escritorio desde su propia configuración. Sirve para un escritorio que no deje la marca de EWMH, o que prefiera decirlo más tarde.
+- **uxsm detects the window manager.** It verifies the EWMH `_NET_SUPPORTING_WM_CHECK` property on the root window and the referenced window's matching self-reference. The second check rejects a stale marker left by a crashed window manager. uxsm speaks the small required part of the X11 protocol directly, avoiding a runtime dependency on libX11 or `xprop`.
+- **The desktop calls `uxsm finalize`.** This mirrors `uwsm finalize` and supports desktops that do not publish the EWMH marker or deliberately want to signal readiness later.
 
-Las dos encienden la misma señal, y sólo cuenta la primera: es un fichero en `$XDG_RUNTIME_DIR/uxsm/ready` creado con `O_EXCL`, así que encenderla es una sola operación del sistema y no hay dos arranques posibles. `uxsm finalize` con la señal ya encendida no es un error: lo dice y termina bien. La sesión que empieza la apaga primero, por si quedara encendida de una anterior que no llegó a limpiar.
+Both paths create the same file under `$XDG_RUNTIME_DIR/uxsm/ready` with `O_EXCL`, so only the first event changes state. Calling `uxsm finalize` after that is successful and reports that the session was already ready. A new session removes any stale signal before startup.
 
-Si no llega ninguna de las dos, `TimeoutStartSec=30` corta la espera: el servicio falla, su `OnFailure=` apaga la sesión y el display manager vuelve a la pantalla de inicio. Una sesión que no es un escritorio ―un solo programa X11, por ejemplo― puede quitar la espera con un fichero de anulación de la unidad:
+If neither event arrives within `TimeoutStartSec=30`, the desktop service fails, `OnFailure=` shuts the session down, and the display manager returns to the login screen. A session that intentionally runs a single X11 program without a window manager can disable the readiness check with a unit override:
 
 ```ini
 # ~/.config/systemd/user/uxsm-desktop@.service.d/no-wait-ready.conf
@@ -94,148 +96,151 @@ Si no llega ninguna de las dos, `TimeoutStartSec=30` corta la espera: el servici
 ExecStartPost=
 ```
 
-### Autostart XDG
+### XDG autostart
 
-Detrás de la espera, el segundo `ExecStartPost=` del escritorio arranca `uxsm-autostart@ID.target`, que arrastra `xdg-desktop-autostart.target`. A partir de ahí el trabajo es de systemd: `systemd-xdg-autostart-generator` crea una `app-<nombre>@autostart.service` por cada entrada de autostart y las filtra por `OnlyShowIn=` y `NotShowIn=` con el `XDG_CURRENT_DESKTOP` del gestor. Las entradas arrancan, por tanto, con el escritorio ya en pantalla, y se paran con `graphical-session.target`.
+After readiness, the desktop's second `ExecStartPost=` starts `uxsm-autostart@ID.target`, which pulls in `xdg-desktop-autostart.target`. `systemd-xdg-autostart-generator` creates one `app-<name>@autostart.service` per entry. At startup, each generated unit evaluates `OnlyShowIn=` and `NotShowIn=` against the user manager's `XDG_CURRENT_DESKTOP`. Autostart applications therefore start after the desktop is visible and stop with `graphical-session.target`.
 
-uxsm lo lanza siempre, como uwsm: de una sesión gestionada por systemd se espera que las entradas de autostart arranquen solas. Quien no lo quiera, lo dice al arrancar la sesión, y `uxsm start` no mira qué escritorio es:
+Like uwsm, uxsm enables XDG autostart by default. Disable it when the desktop starts those entries itself:
 
 ```sh
 uxsm start --no-autostart bspwm.desktop
 ```
 
-Quien decide poner esa opción en una entrada es `uxsm entry`, apoyándose en [la tabla de escritorios conocidos](#la-tabla-de-escritorios-conocidos), que dice de cada sesión si lanza ella misma sus entradas de autostart. Es una pregunta sobre lo que hace, no sobre lo que es: la lanzan Xfce, GNOME, Plasma o MATE, por su gestor de sesión, y no la lanzan ni un gestor de ventanas ni una sesión con su propio fichero de arranque, como `icewm-session` con `~/.icewm/startup`, que es cosa aparte y no toca estas entradas. Cuando la tabla dice que sí, la opción va en el `Exec=` de la entrada generada:
+Generated entries get this option automatically when the [known desktop table](#the-known-desktop-table) says that the session runs its own XDG autostart. This describes behavior, not desktop type: session managers such as Xfce, GNOME, Plasma, and MATE do it, while window managers and sessions with unrelated startup scripts generally do not. For example, `icewm-session` runs `~/.icewm/startup` but does not process the XDG autostart directories.
 
 ```ini
 Exec=uxsm start --no-autostart -D XFCE -- startxfce4
 ```
 
-Hace falta porque ni el gestor de sesión del escritorio ni systemd comprueban si el otro ya ha lanzado una entrada: en Xfce, con los dos, cada una arranca dos veces. De un escritorio que la tabla no conoce, uxsm no supone nada: la entrada sale sin la opción, el autostart se lanza, y quien vea entradas duplicadas la añade.
+The distinction matters because neither a desktop session manager nor systemd checks whether the other has already started an entry. With both enabled under Xfce, every entry runs twice. For an unknown desktop, uxsm makes no assumption: it enables autostart, and users who observe duplicates can add `--no-autostart`.
 
-Las unidades que crea el generador van a `app.slice`, el estándar, y uxsm se las lleva a `app-uxsm.slice` como todo lo que lanza: escribe un añadido sobre la plantilla que comparten todas, `$XDG_RUNTIME_DIR/systemd/user/app-@autostart.service.d/uxsm-tweaks.conf`, justo antes de arrancar el target, y lo borra al cerrar la sesión. No puede venir en el paquete: un añadido en `/usr/lib` se aplicaría también a las sesiones que no son de uxsm ―las de uwsm, las de un escritorio completo― y les cambiaría el slice. Es lo mismo que hace uwsm con el suyo, y lleva además `PartOf=` y `After=xdg-desktop-autostart.target`, que es lo que permite parar y arrancar el autostart con su target en vez de con la sesión entera.
+The generator normally places its units in `app.slice`. Before starting the target, uxsm writes the runtime drop-in `$XDG_RUNTIME_DIR/systemd/user/app-@autostart.service.d/uxsm-tweaks.conf`, moving them to `app-uxsm.slice` and adding the lifecycle relationships needed to restart autostart independently. uxsm removes the drop-in during shutdown. Installing it system-wide would also alter non-uxsm sessions, including uwsm and full desktop sessions, so it must exist only at runtime.
 
-La decisión de lanzarlo o no se escribe en `$XDG_RUNTIME_DIR/uxsm/autostart`, y quien la mira es `uxsm aux autostart`: con la marca arranca el target, y sin ella no hace nada. Los dos rodeos tienen motivo. La decisión no puede ir en un `Condition*=` de la unidad, porque las dependencias de una unidad se resuelven al montar el trabajo, antes de comprobar sus condiciones: el autostart arrancaría igual en las sesiones en las que la unidad se salta. Y el target estándar no se puede arrancar directamente, porque lleva `RefuseManualStart=`; tiene que arrastrarlo una unidad propia.
+The startup decision is stored in `$XDG_RUNTIME_DIR/uxsm/autostart` and read by `uxsm aux autostart`. A systemd `Condition*=` cannot replace that helper because dependencies are scheduled before conditions are evaluated. uxsm also cannot start `xdg-desktop-autostart.target` directly because that target has `RefuseManualStart=`; its own target must pull it in.
 
-## Aplicaciones
-
-```sh
-uxsm app -- kitty                             # un comando
-uxsm app firefox.desktop                      # una entrada de aplicación
-uxsm app firefox.desktop:new-private-window   # una de sus acciones
-uxsm app -s b -t service -- fcitx5            # en segundo plano y como servicio
-uxsm app -p TimeoutStopSec=5 -- discord       # con un plazo para morir
-```
-
-Sin esto, todo lo que arranca un escritorio cuelga del escritorio y se ve junto. `uxsm app` le da a cada aplicación su propia unidad, dentro de uno de los slices de la sesión: se ve por separado en `systemctl --user`, se le pueden poner límites, su registro va al diario con su nombre, y se para con la sesión. Es lo mismo que hace `uwsm app` en Wayland.
-
-El nombre de la unidad es el que pide systemd para las aplicaciones, `app-<quien la lanza>-<qué aplicación>-<algo que la distingue>`: `app-uxsm-kitty-3f2a1b0c.scope`, o con `@` antes de la parte de azar si es un servicio. De serie es un scope ―la aplicación cuelga de quien la lanzó― y con `-t service` la arranca el gestor. Las opciones son las de uwsm: `-s` elige el slice, `-a`, `-u` y `-d` los nombres y la descripción, y `-S` tira la salida de un servicio.
-
-Y `-p Clave=Valor`, que también es de uwsm ―misma letra y mismo sentido―, pasa propiedades de systemd a la unidad tal como las toma `systemd-run` y se puede repetir: `-p TimeoutStopSec=5` para lo que tarda en morir, `-p MemoryMax=2G` o `-p CPUQuota=50%` para ponerle límites. Un scope admite las de control de recursos y los plazos; las que son propias de un servicio, como `Restart=`, necesitan además `-t service`. uxsm sólo comprueba que la propiedad tenga la forma `Clave=Valor`; de lo demás se queja systemd, que es quien sabe.
-
-Los slices son tres, uno por clase de aplicación, y llevan `PartOf=graphical-session.target`, que es lo que las para con la sesión:
-
-| Slice                   | Para qué                                        |
-| ----------------------- | ----------------------------------------------- |
-| `app-uxsm.slice`        | Las aplicaciones, lo de serie.                  |
-| `background-uxsm.slice` | Lo que corre detrás, como un método de entrada. |
-| `session-uxsm.slice`    | Lo que forma parte de la sesión, como un panel. |
-
-El guion es jerarquía en systemd, así que cuelgan de los `app.slice`, `background.slice` y `session.slice` estándar. Llevan `uxsm` en el nombre porque los instala el paquete y dos paquetes no pueden traer el mismo fichero: los de uwsm, que hace esto mismo en Wayland, se llaman `app-graphical.slice` y compañía. Como dos sesiones gráficas de un mismo usuario no conviven, compartir los nombres no aportaba nada.
-
-De una entrada de aplicación se lee su `Exec=` ―o el de la acción que se pida detrás de `:`―, se sustituyen los códigos de campo con los ficheros o URLs que se le pasen, y se respeta su `Path=`. Una entrada con `Terminal=true` se rechaza por ahora, en vez de lanzarla fuera de un terminal.
-
-`uxsm check is-active` contesta con el código de salida si hay una sesión de uxsm en marcha, y con `-v` dice qué unidades la forman. Es lo que permite a un script saber dónde está. No va dentro de `uxsm check`, que es otra cosa: aquélla comprueba si el sistema está listo para uxsm y escribe un informe.
-
-## Entorno de la sesión
-
-Los servicios de usuario heredan el entorno de `systemd --user`, no el del proceso que los arranca. Por eso `uxsm start` no puede limitarse a llamar a systemd: primero conserva lo que recibió del display manager y `uxsm-env@.service` lo monta en el gestor.
-
-![Preparación y restauración del entorno](flows/environment.svg)
-
-[Fuente DOT](flows/environment.dot).
-
-Durante la preparación:
-
-1. se guarda en `env_pre` una foto filtrada del entorno de `systemd --user`;
-2. el entorno de login se superpone a esa foto;
-3. un cargador `/bin/sh`, empotrado en el binario, carga `/etc/profile`, `~/.profile`, la identidad y los ficheros de entorno de uxsm;
-4. se calcula qué variables poner y quitar, y se guarda en `env_cleanup` qué pertenece a la sesión;
-5. se actualiza el entorno de systemd y, si el bus usa `dbus-daemon`, también el de activación de D-Bus. Con `dbus-broker`, la activación ya se delega en systemd.
-
-Los ficheros de uxsm se cargan de menor a mayor prioridad recorriendo `XDG_DATA_DIRS`, `XDG_CONFIG_DIRS` y `XDG_CONFIG_HOME`. En cada directorio se carga primero `uxsm/env`, después `uxsm/env-<escritorio>` por cada nombre de `XDG_CURRENT_DESKTOP`, y después de cada fichero su directorio `.d` en orden alfabético. Se ignoran copias y ejemplos como `*.bak`, `*.disabled` o `*.sample`.
-
-Al cerrar, uxsm borra las variables creadas para la sesión, restaura todos los valores de `env_pre` y elimina los ficheros de trabajo. Variables de agentes SSH se conservan expresamente.
-
-## Entradas de sesión y display managers
-
-### Generar la entrada
-
-`uxsm entry` crea tres tipos de entrada:
+## Applications
 
 ```sh
-uxsm entry bspwm                       # bspwm-uxsm.desktop → bspwm.desktop
-uxsm entry --exec bspwm                # bspwm-uxsm.desktop → comando de bspwm.desktop
-uxsm entry --plain --from-table bspwm  # bspwm.desktop sin uxsm, de la tabla
-uxsm entry --exec -- mywm --flag       # variante uxsm para un comando explícito
+uxsm app -- kitty                             # command
+uxsm app firefox.desktop                      # application entry
+uxsm app firefox.desktop:new-private-window   # entry action
+uxsm app -s b -t service -- fcitx5            # background service
+uxsm app -p TimeoutStopSec=5 -- discord       # custom stop timeout
 ```
 
-![Generación de entradas](flows/session-entries.svg)
+`uxsm app` gives each application its own unit in one of the session's slices. The application is visible separately in `systemctl --user`, can receive resource limits, logs under its unit name, and stops with the session. This is the X11 equivalent of `uwsm app`.
 
-[Fuente DOT](flows/session-entries.dot).
+Application units follow systemd's naming convention: `app-<launcher>-<application>-<unique-part>`. For example, a scope may be named `app-uxsm-kitty-3f2a1b0c.scope`; a service uses `@` before its unique part. A scope, the default, attaches an existing process to the unit. With `-t service`, the user manager starts the process. The uwsm-compatible options include `-s` for the slice, `-a`, `-u`, and `-d` for naming and description, and `-S` to discard service output.
 
-Una fuente puede ser una entrada existente, un comando o la tabla de escritorios conocidos. El generador rechaza entradas que ya usan uxsm, sesiones que ya arrancan el escritorio mediante `systemd --user` y metasesiones que sólo ejecutan el script personal del usuario.
+Repeatable `-p Key=Value` arguments pass systemd properties through in the same form accepted by `systemd-run`. Examples include `TimeoutStopSec=5`, `MemoryMax=2G`, and `CPUQuota=50%`. Scopes accept resource controls and timeouts; service-only settings such as `Restart=` also require `-t service`. uxsm validates the `Key=Value` shape and leaves property semantics to systemd.
 
-### La tabla de escritorios conocidos
+The three application classes map to these slices:
 
-Es una lista que viene dentro de uxsm, con 38 sesiones de escritorio y de gestores de ventanas ―los de los paquetes de Arch, Debian 13, Ubuntu 24.04 y Fedora 43―. De cada una guarda cuatro cosas: el nombre y el comentario que se ven en la pantalla de inicio, sus `DesktopNames=`, el comando que la arranca ―sólo si es el mismo en todas las distribuciones― y si lanza ella misma las entradas de autostart XDG, que son 18 de las 38.
+| Slice                   | Use                                         |
+| ----------------------- | ------------------------------------------- |
+| `app-uxsm.slice`        | Regular applications; the default.          |
+| `background-uxsm.slice` | Background processes such as input methods. |
+| `session-uxsm.slice`    | Session components such as panels.          |
 
-**Para qué se usa.** Para rellenar lo que la entrada original no dice. Muchas entradas no traen `DesktopNames=` en ninguna distribución, o lo traen en unas y no en otras ―`bspwm` sí en Arch y en Debian, no en Ubuntu ni en Fedora―, y sin esos nombres el escritorio recibe un `XDG_CURRENT_DESKTOP` distinto del que esperan sus propias aplicaciones. Y para saber si la entrada generada tiene que llevar `--no-autostart`, que es lo que evita que un escritorio con gestor de sesión lance cada entrada de autostart dos veces.
+In systemd unit names, a hyphen represents hierarchy. These slices therefore belong below the standard `app.slice`, `background.slice`, and `session.slice`. Their names include `uxsm` because the package installs them and cannot own the same files as uwsm, whose equivalents use `-graphical`.
 
-**Quién manda.** Lo que trae la entrada original, siempre; la tabla sólo aporta lo que falta. Y por encima de las dos, lo que se pida en la línea de órdenes: `-N` el nombre, `-C` el comentario, `-D` los nombres de escritorio.
+For an application entry, uxsm reads `Exec=` from the entry or requested action, expands field codes using the supplied files or URLs, and honors `Path=`. It currently rejects `Terminal=true` instead of starting the program without a terminal.
 
-**De dónde sale la entrada se dice siempre.** Son tres fuentes, y ninguna se elige a escondidas:
+`uxsm check is-active` uses its exit status to report whether a session is running; `-v` also prints the units. This differs from `uxsm check`, which inspects whether the system is configured for uxsm and prints a report.
+
+## Session environment
+
+User services inherit the environment of `systemd --user`, not that of the process requesting them. `uxsm start` therefore saves the environment received from the display manager, and `uxsm-env@.service` applies it to the user manager before starting the desktop.
+
+![Preparing and restoring the environment](flows/environment.svg)
+
+[DOT source](flows/environment.dot)
+
+During preparation, uxsm:
+
+1. stores a filtered snapshot of the user-manager environment in `env_pre`;
+2. overlays the login environment on that snapshot;
+3. runs an embedded `/bin/sh` loader for `/etc/profile`, `~/.profile`, the XDG identity, and uxsm environment files;
+4. computes which variables to set and unset, recording session-owned names in `env_cleanup`; and
+5. updates the systemd environment and, for `dbus-daemon`, the D-Bus activation environment. `dbus-broker` delegates activation to systemd already.
+
+uxsm loads environment files from low to high priority while walking `XDG_DATA_DIRS`, `XDG_CONFIG_DIRS`, and `XDG_CONFIG_HOME`. In each location it loads `uxsm/env`, then one `uxsm/env-<desktop>` file for every `XDG_CURRENT_DESKTOP` name. Each file's `.d` directory follows in lexical order. Backup and example suffixes such as `*.bak`, `*.disabled`, and `*.sample` are ignored.
+
+During shutdown, uxsm removes variables created for the session, restores every value from `env_pre`, and deletes its runtime files. SSH agent variables are preserved explicitly.
+
+## Session entries and display managers
+
+### Generating an entry
+
+`uxsm entry` generates three kinds of entry:
 
 ```sh
-uxsm entry bspwm                            # de la entrada instalada, bspwm.desktop
-uxsm entry --exec --from-table bspwm        # de la tabla: su comando, sus nombres, su descripción
-uxsm entry --plain --from-table bspwm       # igual, pero la entrada normal, sin uxsm
-uxsm entry --exec -- mywm --flag            # de un comando, sin mirar nada más
+uxsm entry bspwm                       # bspwm-uxsm.desktop wraps bspwm.desktop
+uxsm entry --exec bspwm                # bspwm-uxsm.desktop runs bspwm.desktop's command
+uxsm entry --plain --from-table bspwm  # plain bspwm.desktop from the built-in table
+uxsm entry --exec -- mywm --flag       # uxsm entry for an explicit command
 ```
 
-`--from-table` es la forma de generar la entrada de un escritorio que la máquina no trae: la tabla pone el comando, el nombre, el comentario y los `DesktopNames=`, y no se mira lo que haya instalado. Sin `--from-table`, `uxsm entry --exec bspwm` necesita que `bspwm.desktop` exista, y si no existe lo dice y enseña la orden con `--from-table`; nunca cambia de fuente por su cuenta. La entrada normal, la de `--plain`, no puede salir de una instalada ―si ya estuviera, no habría nada que generar―, así que pide `--from-table` o un comando.
+![Session entry generation](flows/session-entries.svg)
 
-**Y rellenar huecos con ella, también.** Ésa es la otra cosa que hace la tabla, y es independiente de la fuente: cuando la entrada instalada o el comando no dicen los `DesktopNames=`, el nombre o el comentario, los pone la tabla. Con `--no-table` no los pone:
+[DOT source](flows/session-entries.dot)
+
+The declared source may be an installed entry, an explicit command, or the known desktop table. The generator rejects entries that already invoke uxsm, sessions that already start through `systemd --user`, and meta-sessions that only run a user's personal session script.
+
+### The known desktop table
+
+uxsm includes data for 38 desktop and window-manager sessions collected from Arch Linux, Debian 13, Ubuntu 24.04, and Fedora 43 packages. Each record may contain the login-screen name and description, `DesktopNames=`, a portable startup command, and whether the session starts XDG autostart itself. Eighteen of the 38 sessions own their autostart.
+
+The table has two purposes:
+
+- fill metadata omitted by an installed entry; and
+- decide whether a generated uxsm entry needs `--no-autostart`.
+
+Installed-entry values always win over the table. Command-line values win over both: `-N` sets the name, `-C` the comment, and `-D` the desktop names.
+
+The entry source is always explicit:
 
 ```sh
-uxsm entry --no-table bspwm            # la entrada dice lo que dice, y nada más
+uxsm entry bspwm                            # installed bspwm.desktop
+uxsm entry --exec --from-table bspwm        # command and metadata from the table
+uxsm entry --plain --from-table bspwm       # plain entry from the table
+uxsm entry --exec -- mywm --flag            # explicit command only
 ```
 
-Vale para una máquina donde la entrada instalada es la verdad y no se quiere que uxsm añada nada. Si así no queda ningún nombre de escritorio, uxsm lo dice y pide `-D`, en vez de inventarlo. Y las combinaciones que se contradicen ―`--from-table` con `--no-table`, `--from-table` con un comando propio― se rechazan explicando por qué.
+`--from-table` is useful when the machine has no installed entry. Without it, `uxsm entry --exec bspwm` requires `bspwm.desktop`; if the entry is missing, uxsm reports the problem and suggests `--from-table`. It never changes sources silently. A plain entry cannot sensibly wrap an already installed plain entry, so `--plain` requires either `--from-table` or an explicit command.
 
-**Los nombres de escritorio.** Con `-e`, los nombres son sólo los de `-D`: se descartan los de la entrada y los de la tabla, igual que en `uxsm start`.
+Table-based completion is independent of the source. Unless `--no-table` is used, the table fills missing desktop names, display name, and comment:
 
 ```sh
-uxsm entry -e -D MiWM bspwm            # DesktopNames=MiWM, y nada más
+uxsm entry --no-table bspwm  # use only the installed entry and command-line metadata
 ```
 
-Conviene saber lo que se tira: esos nombres son los que acaban en `XDG_CURRENT_DESKTOP`, así que dejar fuera el propio del escritorio deja fuera también las entradas de autostart con `OnlyShowIn=bspwm`, los portales y todo lo que se configura por escritorio. `uxsm entry` sin `-i` enseña la entrada antes de escribirla, que es donde se ve.
+If no desktop name remains, uxsm requests `-D` instead of inventing one. Contradictory combinations, such as `--from-table` with `--no-table` or with an explicit command, are rejected with an explanation.
 
-Lo que la tabla nunca hace es inventar. Si una sesión no está en ella, o no tiene un comando que valga en todas las distribuciones, `--from-table` lo dice y no escribe nada:
+With `-e`, only names supplied through `-D` are kept, just as with `uxsm start`:
 
+```sh
+uxsm entry -e -D MyWM bspwm  # DesktopNames=MyWM, and nothing else
 ```
+
+These names become `XDG_CURRENT_DESKTOP`; dropping the desktop's normal identity also excludes matching `OnlyShowIn=` autostart entries and can change portal selection. Run `uxsm entry` without `-i` to review the generated file first.
+
+The table never invents a startup command. If a session is absent or has no command valid across all supported distributions, `--from-table` fails without writing anything:
+
+```text
 uxsm: notawm: not in uxsm's table of known desktops, or no command known for it
 ```
 
-La forma normal, `uxsm entry <nombre>`, no necesita la tabla para el comando: la entrada generada arranca la entrada original con `uxsm start <nombre>.desktop`, y es esa entrada la que lleva el comando.
+The default `uxsm entry <name>` form does not need a table command: its generated entry runs `uxsm start <name>.desktop`, and that original entry contains the command.
 
-### Instalarla y que el display manager la lea
+### Installing an entry
 
-Sin `-i`, la orden es una previsualización. Con `-i` escribe en `/usr/local/share/xsessions`; hace falta ejecutarla con permisos de root. No sobrescribe ni oculta otra entrada con el mismo ID sin `-f`.
+Without `-i`, `uxsm entry` is a preview. With `-i`, it writes to `/usr/local/share/xsessions` and requires root privileges. It will not overwrite or shadow an entry with the same ID unless `-f` is also given.
 
-No todos los display managers leen ese directorio, ni el de Wayland que le hace pareja, `/usr/local/share/wayland-sessions`, donde van las entradas que se escriben a mano ―la de uwsm para su compositor, por ejemplo―. uxsm deja leídos los dos: en LightDM son la misma lista, y arreglar sólo uno dejaría la máquina a medias.
+Not every display manager reads that directory or its Wayland counterpart, `/usr/local/share/wayland-sessions`. uxsm configures both because LightDM uses one combined directory list; changing only one would leave the system inconsistent.
 
-- `uxsm check` identifica el display manager activo y enseña de dónde obtiene su lista;
-- `uxsm setup sessions-dir` calcula el cambio para LightDM y SDDM, y sólo lo aplica con `-i`;
-- para GDM explica el cambio necesario en `XDG_DATA_DIRS`, pero no modifica su unidad.
+- `uxsm check` identifies the active display manager and reports its session search path.
+- `uxsm setup sessions-dir` calculates the required LightDM or SDDM change and applies it only with `-i`.
+- For GDM, uxsm explains the required `XDG_DATA_DIRS` change but never edits the unit.
 
-Después de `-i` hay que reiniciar el display manager, o la máquina: su configuración se lee al arrancar. uxsm lo dice al terminar y no lo reinicia por su cuenta, porque eso se llevaría por delante la sesión gráfica desde la que se está ejecutando. Lo que pasa si no se hace está en [`troubleshooting.md`](troubleshooting.md).
+After `uxsm setup sessions-dir -i`, restart the display manager or the machine. Display managers read this configuration only at startup. uxsm prints that instruction but does not restart the service, because doing so would terminate the graphical session in which the command was run. See [Troubleshooting](troubleshooting.md#the-session-is-missing-from-the-login-screen-or-fails-to-start) for the failure mode.

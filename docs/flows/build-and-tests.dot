@@ -1,74 +1,100 @@
 digraph build_tests {
   graph [
-    label="Compilación y pruebas: qué hace cada orden",
+    label="Build and test commands: increasingly realistic boundaries",
     labelloc=t,
     fontsize=24,
     fontname="DejaVu Sans Bold",
     bgcolor="#f8fafc",
     pad=0.30,
-    nodesep=0.48,
-    ranksep=0.66,
-    splines=polyline
+    nodesep=0.46,
+    ranksep=0.64,
+    splines=polyline,
+    newrank=true
   ];
   node [shape=box, style="rounded,filled", fontname="DejaVu Sans", fontsize=11,
         color="#2563eb", fillcolor="#eff6ff", fontcolor="#0f172a", margin="0.16,0.11"];
   edge [fontname="DejaVu Sans", fontsize=9, color="#64748b", fontcolor="#334155", arrowsize=0.75];
 
   source [shape=folder, fillcolor="#dbeafe",
-          label="Código fuente\n(incluye cambios sin commit)"];
+          label="Current source tree\n(including uncommitted changes)"];
 
   subgraph cluster_local {
-    label="En tu sistema · rápido · sin instalar uxsm";
+    label="Current system · fast · uxsm is not installed";
     color="#93c5fd";
     style="rounded,filled";
     fillcolor="#ffffff";
     fontname="DejaVu Sans Bold";
 
-    test [label="make test"];
-    gotest [label="go test ./...\nEjecuta pruebas Go aisladas"];
-    unit_scope [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
-                label="Comprueba la lógica\n\n• argumentos y entradas .desktop\n• identidad y entorno\n• generación de entradas\n• display managers\n• nombres de unidades y pidfd"];
-    unit_limit [shape=note, fillcolor="#fee2e2", color="#dc2626", fontcolor="#7f1d1d",
-                label="No crea un paquete\nNo arranca una sesión X\nNo prueba systemd --user de extremo a extremo"];
-
+    test [label="make test\ngo test ./..."];
+    unit [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
+          label="Unit coverage\n\nCLI parsing · desktop entries · identity\nenvironment · generated entries · display managers\nunit names · D-Bus selection · pidfd waiting"];
+    check [label="make check"];
+    checks [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
+            label="gofmt check + go vet + unit tests\n+ shell syntax checks"];
     build [label="make build"];
     compile [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
              label="go vet ./...\n+\ngo build → bin/uxsm"];
+    local_limit [shape=note, fillcolor="#fee2e2", color="#dc2626", fontcolor="#7f1d1d",
+                 label="Does not build a native package\nDoes not start X11 or systemd --user sessions\nDoes not test declared runtime dependencies"];
 
-    test -> gotest -> unit_scope -> unit_limit;
+    test -> unit;
+    check -> checks;
     build -> compile;
+    unit -> local_limit [style=dashed];
+    checks -> local_limit [style=dashed];
+    compile -> local_limit [style=dashed];
+    {rank=same; test; check; build}
+    {rank=same; unit; checks; compile}
   }
 
   subgraph cluster_vm {
-    label="En VMs desechables · lento · prueba el producto instalado";
+    label="Disposable distribution VMs · native packages · end-to-end sessions";
     color="#c4b5fd";
     style="rounded,filled";
     fillcolor="#ffffff";
     fontname="DejaVu Sans Bold";
 
-    testvm [label="make test-vm\nUbuntu por defecto"];
+    testvm [label="make test-vm\nUbuntu by default"];
     choose [shape=note, fillcolor="#ede9fe", color="#7c3aed",
-            label="DISTROS=quick  → Ubuntu\nDISTROS=pair   → Ubuntu + Arch\nDISTROS=all      → las cinco"];
+            label="DISTROS=quick → Ubuntu\nDISTROS=pair  → Ubuntu + Arch\nDISTROS=all     → all five"];
     package [shape=folder, fillcolor="#ede9fe", color="#7c3aed",
-             label="1. Empaquetado real\n\nCrea un tarball del árbol actual\nUna VM de la distribución compila\nsu paquete .deb, .rpm o .pkg.tar.zst"];
-    real_session [label="2. Instalación y sesión reales\n\nOtra VM limpia instala el paquete\ncon apt, dnf, zypper o pacman\nXvfb aporta una pantalla X virtual\nsystemd --user y bspwm son reales"];
+             label="1 · Build VM\nArchive the current tree\nBuild the native .deb, .rpm, or .pkg.tar.zst\nwith the distribution recipe"];
+    install [label="2 · Clean test VM\nInstall through apt, dnf, zypper, or pacman\nRun real systemd --user, Xvfb, and bspwm"];
     integration [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
-                 label="Comprueba la integración completa\n\n• entrada y comando directo\n• tres formas de cerrar\n• identidad XDG\n• entorno y restauración\n• entry, check y setup"];
+                 label="3 · Nine integration scenarios\n\nstartup · three shutdown paths · identity · environment\nentry/check/setup · readiness · XDG autostart\nreal LightDM · uxsm app"];
     artifacts [shape=folder, fillcolor="#fef3c7", color="#ca8a04",
-               label="build/release/<distro>\npaquetes + SHA256SUMS"];
+               label="build/release/<distribution>\npackages + SHA256SUMS"];
+    fast [shape=note, fillcolor="#fff7ed", color="#ea580c", fontcolor="#7c2d12",
+          label="FAST=1 uses one VM for build and test\nUseful while developing; not valid for release"];
 
-    testvm -> package -> real_session -> integration -> artifacts;
     choose -> testvm [style=dashed, arrowhead=none];
+    testvm -> package -> install -> integration -> artifacts;
+    fast -> package [style=dashed, arrowhead=none];
   }
 
-  release [label="make release\nElige las cinco distribuciones"];
+  subgraph cluster_nix {
+    label="NixOS-specific path";
+    color="#67e8f9";
+    style="rounded,filled";
+    fillcolor="#ffffff";
+    fontname="DejaVu Sans Bold";
+
+    nix [label="make test-nixos"];
+    nixvm [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
+           label="Pinned nixosTest VM\nLightDM + autologin + bspwm + uxsm package"];
+    nix -> nixvm;
+  }
+
+  release [label="make release\nStrict two-VM path for all five distributions"];
   latest [shape=folder, fillcolor="#bbf7d0", color="#15803d", fontcolor="#14532d",
-          label="Sólo si las cinco pasan:\npublica en releases/latest"];
+          label="Only when every distribution passes\nreleases/latest"];
 
   source -> test;
+  source -> check;
   source -> build;
   source -> testvm;
+  source -> nix;
   source -> release;
-  release -> package [label=" mismo pipeline × 5 ", style=dashed];
-  artifacts -> latest [label=" publica "];
+  release -> package [label=" same pipeline × 5 ", style=dashed];
+  artifacts -> latest [label=" publish "];
 }

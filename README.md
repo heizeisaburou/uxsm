@@ -1,92 +1,92 @@
 # uxsm
 
-Gestor de sesiones X11 para `systemd --user`: la versión X11 de
+An X11 session manager for `systemd --user`, and the X11 counterpart to
 [uwsm](https://github.com/Vladimir-csp/uwsm).
 
-Arranca el escritorio como servicio de `systemd --user`, le prepara el entorno y no da la sesión
-gráfica por arrancada hasta que hay gestor de ventanas. Lanza también el autostart XDG, salvo que
-se le diga que no, y al salir apaga la sesión entera y deja el gestor como estaba. Se lanza desde
-la entrada de sesión que elige el display manager:
+uxsm runs the desktop as a user service, prepares a well-defined session environment, and waits
+for a window manager before declaring the graphical session ready. It can also start XDG autostart
+entries. When the desktop exits, uxsm stops the whole session and restores the previous user-manager
+environment.
 
-- `uxsm start bspwm.desktop` o `uxsm start -- bspwm`: arranca la sesión, de una entrada o de un
-  comando.
-- `uxsm stop`: la cierra.
-- `uxsm app -- kitty` o `uxsm app firefox.desktop`: lanza una aplicación en su propia unidad,
-  dentro de los slices de la sesión, como hace `uwsm app` en Wayland.
-- `uxsm check is-active`: dice con el código de salida si hay una sesión de uxsm en marcha.
-- `uxsm finalize`: lo ejecuta el escritorio, desde su configuración, para decir que ya está
-  arrancado. No hace falta si pone la marca de EWMH, que es lo que uxsm mira por su cuenta.
-- `uxsm entry bspwm`: genera la entrada de sesión de uxsm, `bspwm-uxsm.desktop`, y la instala en
-  `/usr/local/share/xsessions`.
-- `uxsm check` y `uxsm setup sessions-dir`: comprueban y arreglan que el display manager lea los
-  directorios locales de sesiones, el de X11 y el de Wayland.
+The display manager starts uxsm through the selected session entry. The main commands are:
 
-Qué hace uxsm en la máquina ―unidades, entorno, autostart, display managers―: [`docs/architecture.md`](docs/architecture.md).
-Qué hacer cuando algo no va: [`docs/troubleshooting.md`](docs/troubleshooting.md).
-Compilar, probar y empaquetar: [`docs/development.md`](docs/development.md).
+- `uxsm start bspwm.desktop` or `uxsm start -- bspwm` starts a session from an entry or a command.
+- `uxsm stop` stops the current uxsm session.
+- `uxsm app -- kitty` or `uxsm app firefox.desktop` runs an application in its own unit inside the
+  session, like `uwsm app` on Wayland.
+- `uxsm check is-active` reports through its exit status whether an uxsm session is running.
+- `uxsm finalize` lets a desktop report that it is ready. Most window managers do not need it because
+  uxsm detects their EWMH readiness marker.
+- `uxsm entry bspwm` generates `bspwm-uxsm.desktop` and can install it in
+  `/usr/local/share/xsessions`
+- `uxsm check` and `uxsm setup sessions-dir` check and configure the local X11 and Wayland session
+  directories used by display managers.
 
-## Estructura
+## Documentation
 
-```text
-cmd/uxsm/            el binario: reparto de subórdenes y cada suborden
-internal/            el código de uxsm, por paquetes
-data/                lo que se instala además del binario: unidades de systemd
-docs/                documentación: qué hace, qué hacer cuando falla, y cómo se toca
-test/                compilación de los paquetes, pruebas de integración y recogida
-                     de las entradas de sesión de cada distribución, en máquinas
-                     virtuales; test/nixos, la máquina NixOS del flake
-packaging/arch/      PKGBUILD para el AUR
-packaging/debian/    directorio debian/ para Debian y Ubuntu
-packaging/fedora/    .spec para Fedora
-packaging/opensuse/  .spec y .changes para openSUSE
-packaging/nix/       paquete para nixpkgs
-flake.nix            el paquete de Nix compilado desde este directorio
-.githooks/           hooks de git, que se activan con `make hooks`
-Makefile             compilación e instalación, lo que llaman todos salvo Nix
-```
+- [Architecture](docs/architecture.md) explains the units, lifecycle, environment, autostart, session
+  entries, and display-manager integration.
+- [Troubleshooting](docs/troubleshooting.md) covers problems observed on real systems and the relevant
+  workarounds.
+- [Development](docs/development.md) covers building, testing, packaging, and the source tree.
 
-El código que no sea el `main` irá en `internal/`: uxsm es un programa, no una biblioteca.
+## Build and install
 
-## Compilar e instalar
+uxsm requires Go 1.22 or later and uses only the standard library, so Go builds do not need network
+access.
 
-Hace falta Go 1.22 o posterior, la de Ubuntu 24.04 LTS. Sólo biblioteca estándar, así que los
-paquetes compilan sin red.
-
-`make build` pasa `go vet` antes de compilar ―[`docs/development.md`](docs/development.md#versión-de-go)―.
+`make build` runs `go vet` before compiling. See the
+[Go version policy](docs/development.md#go-version) for the reason behind the minimum version.
 
 ```sh
 make
 sudo make install PREFIX=/usr
 ```
 
-`DESTDIR`, `PREFIX` y `BINDIR` funcionan como de costumbre. `VERSION` sale de `git describe`;
-al compilar desde un tarball, sin git, hay que pasarla.
+`DESTDIR`, `PREFIX`, and `BINDIR` have their usual meanings. `VERSION` defaults to `git describe`;
+pass it explicitly when building outside a Git checkout.
 
-## Paquetes
+## Repository layout
 
-Todos salvo Nix llaman a `make build` y `make install`, así que un fichero nuevo que haya que
-instalar se añade en el `Makefile`, en la lista de ficheros de cada paquete y en el
-`postInstall` del de Nix.
+```text
+cmd/uxsm/            command dispatch and CLI implementations
+internal/            uxsm implementation packages
+data/                installed systemd user units
+docs/                user and contributor documentation
+test/                integration tests, VM orchestration, and distro session data
+packaging/arch/      Arch Linux PKGBUILD
+packaging/debian/    Debian and Ubuntu packaging
+packaging/fedora/    Fedora spec
+packaging/opensuse/  openSUSE spec and changes file
+packaging/nix/       nixpkgs package
+flake.nix            Nix package and NixOS test entry point
+.githooks/           Git hooks enabled by `make hooks`
+Makefile             shared build and installation interface
+```
 
-- **Arch (AUR)**: `packaging/arch/PKGBUILD`. Al publicar, se copia al repositorio del AUR junto
-  con `makepkg --printsrcinfo > .SRCINFO`.
-- **Debian y Ubuntu**: `packaging/debian/` se copia a `debian/` en la raíz y se compila con
-  `dpkg-buildpackage -us -uc`. Para Ubuntu se sube el paquete fuente a un PPA de Launchpad.
-- **Fedora**: `packaging/fedora/uxsm.spec`, con `rpmbuild` o subido a COPR.
-- **openSUSE**: `packaging/opensuse/`, en OBS. openSUSE lleva el changelog en `uxsm.changes`,
-  no en el `.spec`.
-- **NixOS**: `packaging/nix/package.nix` va a nixpkgs como `pkgs/by-name/ux/uxsm/package.nix`.
-  Desde el repositorio, `nix build` compila el directorio actual con `flake.nix`.
+Code belongs in `internal/` unless it is part of `main`: uxsm is an application, not a Go library.
 
-`make test-vm` compila los paquetes de cada distribución dentro de máquinas virtuales, con las
-recetas de `packaging/`, y ejecuta las pruebas de integración con ellos instalados.
-`make release` lo hace en todas las distribuciones y deja el resultado en `releases/latest`
-―[`docs/development.md`](docs/development.md#compilación-y-pruebas)―.
+## Packaging and release checks
 
-Todos descargan el tarball de la etiqueta `v<versión>` de GitHub. Al publicar una versión hay
-que actualizar la suma del tarball donde la haya: `hash` en el de Nix, `sha256sums` en el
-PKGBUILD.
+All packages except Nix call `make build` and `make install`. When adding an installed file, update
+the `Makefile`, every package file list, and the Nix `postInstall` phase.
 
-## Licencia
+- **Arch Linux:** `packaging/arch/PKGBUILD`; publish it to the AUR together with the generated
+  `.SRCINFO`
+- **Debian and Ubuntu:** copy `packaging/debian/` to a top-level `debian/` directory and run
+  `dpkg-buildpackage -us -uc`; Ubuntu source packages can be published through a Launchpad PPA.
+- **Fedora:** build `packaging/fedora/uxsm.spec` with `rpmbuild` or through COPR.
+- **openSUSE:** use `packaging/opensuse/` in OBS. Its changelog belongs in `uxsm.changes`, not the spec.
+- **NixOS:** submit `packaging/nix/package.nix` as `pkgs/by-name/ux/uxsm/package.nix` in nixpkgs. In
+  this repository, `nix build` builds the current checkout through `flake.nix`.
 
-[Apache-2.0](LICENSE).
+`make test-vm` builds each selected native package in a VM, installs it in a second clean VM, and
+runs the integration suite. `make release` does this for all supported distributions and writes the
+artifacts to `releases/latest`. See [Build and test](docs/development.md#build-and-test).
+
+Packages download GitHub's `v<version>` tag archive. Before publishing a release, update every stored
+archive checksum, including `hash` in the Nix package and `sha256sums` in the PKGBUILD.
+
+## License
+
+[Apache-2.0](LICENSE)

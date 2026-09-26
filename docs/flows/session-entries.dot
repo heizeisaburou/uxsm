@@ -1,72 +1,84 @@
 digraph session_entries {
   graph [
-    label="Entradas .desktop: qué se genera y qué ocurre al elegirlas",
+    label="Session entries: explicit source, generated result, and installation",
     labelloc=t,
     fontsize=24,
     fontname="DejaVu Sans Bold",
     bgcolor="#f8fafc",
     pad=0.28,
-    nodesep=0.45,
+    nodesep=0.43,
     ranksep=0.58,
-    splines=polyline
+    splines=polyline,
+    newrank=true
   ];
   node [shape=box, style="rounded,filled", fontname="DejaVu Sans", fontsize=11,
-        color="#2563eb", fillcolor="#eff6ff", fontcolor="#0f172a", margin="0.15,0.10"];
+        color="#2563eb", fillcolor="#eff6ff", fontcolor="#0f172a", margin="0.16,0.11"];
   edge [fontname="DejaVu Sans", fontsize=9, color="#64748b", fontcolor="#334155", arrowsize=0.75];
 
-  cli [shape=oval, fillcolor="#dbeafe",
-       label="uxsm entry crea una entrada que verá el display manager"];
-  mode [shape=diamond, label="¿Qué tipo se pide?"];
+  cli [shape=oval, fillcolor="#dbeafe", label="uxsm entry …"];
+  mode [shape=diamond, label="Which output mode?"];
 
-  ref [label="Normal: uxsm entry bspwm\nParte de bspwm.desktop ya instalada"];
-  direct [label="Directa: uxsm entry --exec bspwm\nObtiene el comando de una entrada,\nla base interna o lo escrito tras --"];
-  plain [label="Sin uxsm: uxsm entry --plain bspwm\nObtiene el comando de la base interna\no de lo escrito tras --"];
+  subgraph cluster_sources {
+    label="The source is always explicit";
+    color="#93c5fd";
+    style="rounded,filled";
+    fillcolor="#ffffff";
+    fontname="DejaVu Sans Bold";
 
-  validate [label="Valida los datos y evita recursión o dobles gestores\n\nRechaza algo que ya usa uxsm, sesiones que ya\narrancan con systemd y metasesiones como xinit-compat"];
-  names [label="Completa nombre, comentario y DesktopNames\ncon la entrada original o la base de datos interna\nLas opciones -D y -e permiten ajustarlos"];
-  ownautostart [shape=note, color="#64748b", fillcolor="#f1f5f9",
-                label="Si la base de datos dice que esa sesión\nlanza ella misma su autostart XDG (Xfce, GNOME,\nPlasma, Enlightenment…), el Exec= lleva --no-autostart"];
+    wrapper [label="Wrapper\nuxsm entry bspwm\n\nSource: installed bspwm.desktop"];
+    direct [label="Direct uxsm entry\nuxsm entry --exec …\n\nSource: installed entry, --from-table,\nor an explicit command after --"];
+    plain [label="Plain entry without uxsm\nuxsm entry --plain …\n\nSource: --from-table\nor an explicit command after --"];
+  }
 
-  out_ref [shape=note, fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
-           label="bspwm-uxsm.desktop\nExec=uxsm start bspwm.desktop\n\nAl elegirla:\ndisplay manager → uxsm → entrada original → bspwm"];
+  validate [label="Validate source and mode\n\nReject recursion, sessions already managed by\nsystemd --user, meta-sessions, missing commands,\nand contradictory source options"];
+  enrich [label="Resolve metadata\n\n1. Source values\n2. Fill gaps from the known desktop table\n3. Apply -N, -C, -D, and -e overrides"];
+  no_table [shape=note, color="#64748b", fillcolor="#f1f5f9",
+            label="--no-table disables only gap filling\nIt never changes the declared source"];
+  autostart [shape=note, color="#64748b", fillcolor="#f1f5f9",
+             label="If the known desktop owns XDG autostart,\nadd --no-autostart to generated uxsm commands"];
+
+  out_wrapper [shape=note, fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
+               label="bspwm-uxsm.desktop\nExec=uxsm start bspwm.desktop\n\nLogin path\ndisplay manager → uxsm → original entry → bspwm"];
   out_direct [shape=note, fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
-              label="bspwm-uxsm.desktop\nExec=uxsm start -D bspwm -- bspwm\n\nAl elegirla:\ndisplay manager → uxsm → bspwm\nNo vuelve a necesitar la entrada original"];
+              label="bspwm-uxsm.desktop\nExec=uxsm start -D bspwm -- bspwm\n\nLogin path\ndisplay manager → uxsm → bspwm"];
   out_plain [shape=note, fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
-             label="bspwm.desktop\nExec=bspwm\n\nAl elegirla:\ndisplay manager → bspwm\nuxsm no interviene"];
+             label="bspwm.desktop\nExec=bspwm\n\nLogin path\ndisplay manager → bspwm"];
 
-  destination [label="Comprueba el destino\nSi ya existe o taparía otra entrada,\nsin -f se rechaza"];
-  preview [label="Sin -i\nEnseña la ruta y el contenido\nsin escribir nada"];
+  destination [label="Check the destination\nWithout -f, reject overwrite or shadowing"];
+  preview [label="Without -i\nPrint the destination and contents\nWrite nothing"];
   write [shape=folder, fillcolor="#fef3c7", color="#ca8a04",
-         label="Con -i\n/usr/local/share/xsessions/\n(necesita permisos de root)"];
-  dm [shape=diamond, label="¿El display manager lee\n/usr/local/share/xsessions?"];
+         label="With -i\n/usr/local/share/xsessions\nRoot privileges required"];
+  dm [shape=diamond, label="Does the display manager read\nthe local session directories?"];
   visible [shape=oval, fillcolor="#bbf7d0", color="#15803d", fontcolor="#14532d",
-           label="La sesión aparece\nen la pantalla de login"];
+           label="Restart the display manager\nThe entry appears on the login screen"];
   tools [fillcolor="#fff7ed", color="#ea580c", fontcolor="#7c2d12",
-         label="uxsm check informa\nuxsm setup xsessions-dir propone/aplica\nel cambio para LightDM o SDDM\n(GDM sólo explica el cambio)"];
+         label="uxsm check reports the problem\nuxsm setup sessions-dir explains the fix\nand applies it with -i for LightDM or SDDM\n(GDM remains explanatory only)"];
 
   cli -> mode;
-  mode -> ref [label=" normal "];
+  mode -> wrapper [label=" default "];
   mode -> direct [label=" --exec "];
   mode -> plain [label=" --plain "];
-  ref -> validate;
+  wrapper -> validate;
   direct -> validate;
   plain -> validate;
-  validate -> names;
-  names -> ownautostart [style=dashed, arrowhead=none];
-  names -> out_ref [label=" normal "];
-  names -> out_direct [label=" --exec "];
-  names -> out_plain [label=" --plain "];
-  out_ref -> destination;
+  validate -> enrich;
+  no_table -> enrich [style=dashed, arrowhead=none];
+  enrich -> autostart [style=dashed, arrowhead=none];
+  enrich -> out_wrapper [label=" wrapper "];
+  enrich -> out_direct [label=" direct "];
+  enrich -> out_plain [label=" plain "];
+  out_wrapper -> destination;
   out_direct -> destination;
   out_plain -> destination;
-  destination -> preview [label=" sin -i "];
+  destination -> preview [label=" no -i "];
   destination -> write [label=" -i "];
   write -> dm;
-  dm -> visible [label=" sí "];
+  dm -> visible [label=" yes "];
   dm -> tools [label=" no "];
-  tools -> visible [label=" tras configurarlo "];
+  tools -> visible [label=" after configuration + restart "];
 
-  {rank=same; ref; direct; plain}
-  {rank=same; out_ref; out_direct; out_plain}
+  {rank=same; wrapper; direct; plain}
+  {rank=same; no_table; enrich; autostart}
+  {rank=same; out_wrapper; out_direct; out_plain}
   {rank=same; preview; write}
 }

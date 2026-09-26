@@ -1,131 +1,136 @@
-# Tocar el código de uxsm
+# Developing uxsm
 
-Esto es para quien compila, prueba o empaqueta uxsm. Lo demás de `docs/` es para quien lo usa: [`architecture.md`](architecture.md) explica qué hace uxsm en la máquina y [`troubleshooting.md`](troubleshooting.md) qué hacer cuando algo no va.
+This document is for contributors and package maintainers. For runtime behavior, see [Architecture](architecture.md). For user-facing failure diagnosis, see [Troubleshooting](troubleshooting.md).
 
-## Compilación y pruebas
+## Build and test
 
-![Compilación, pruebas y release](flows/build-and-tests.svg)
+![Build, test, and release paths](flows/build-and-tests.svg)
 
-[Fuente DOT](flows/build-and-tests.dot).
+[DOT source](flows/build-and-tests.dot)
 
-La diferencia esencial es el límite de la prueba:
+The important distinction is the boundary each command tests:
 
-| Orden | Dónde se ejecuta | Qué demuestra |
+| Command | Where it runs | What it proves |
 | --- | --- | --- |
-| `make test` | Sistema actual; uxsm no se instala | Prueba funciones aisladas. |
-| `make test-vm` | VMs desechables | Prueba el paquete instalado con X11 y `systemd --user`. |
+| `make test` | Current system, without installing uxsm | Isolated Go behavior. |
+| `make test-vm` | Disposable VMs | The installed native package with X11 and `systemd --user`. |
 
-Por tanto, `make test-vm` no es simplemente la misma prueba en otra distribución. Primero construye el paquete nativo en una VM y después lo instala en otra VM limpia, donde abre y cierra sesiones de prueba completas.
+`make test-vm` is not the unit suite on another distribution. It builds the native package in one VM, installs it in a second clean VM, and exercises complete sessions there.
 
-El proyecto sólo usa la biblioteca estándar de Go. Los recorridos habituales son:
+uxsm uses only the Go standard library. Common commands are:
 
 ```sh
-make build             # go vet y bin/uxsm
-make test              # pruebas unitarias
-make test-vm           # Ubuntu por defecto
+make build             # go vet, then bin/uxsm
+make test              # Go unit tests
+make check             # formatting, vet, unit tests, and shell syntax
+make test-vm           # Ubuntu by default
 make test-vm DISTROS=pair
 make test-vm DISTROS=all
-make release           # todas las distribuciones y releases/latest
-make test-vm FAST=1    # compilando y probando en la misma máquina
-make test-nixos        # la máquina NixOS del flake
+make test-vm FAST=1    # build and test in one VM
+make test-nixos        # NixOS VM declared by the flake
+make release           # strict VM path for every distribution
 ```
 
-### Pruebas unitarias
+### Unit tests
 
-`go test ./...` comprueba piezas sin privilegios ni una sesión gráfica real:
+`go test ./...` covers behavior that does not require privileges or a real graphical session:
 
-- reparto de subórdenes y distinción entre entrada y comando;
-- lectura y resolución XDG de entradas `.desktop`, incluido el entrecomillado de `Exec=`;
-- identidad, ficheros de runtime y carga de los ficheros de entorno;
-- cálculo de cambios y restauración del entorno;
-- generación y vuelta a leer de entradas;
-- configuración de LightDM, SDDM y GDM sobre un sistema de ficheros falso;
-- nombres de unidades, detección del bus de sesión y espera mediante `pidfd`.
+- command dispatch and entry-versus-command parsing;
+- XDG lookup and parsing of `.desktop` entries, including `Exec=` quoting;
+- session identity, runtime files, and environment-file loading;
+- environment changes and exact restoration;
+- session-entry generation and round trips;
+- LightDM, SDDM, and GDM configuration on a fake filesystem;
+- unit names, session-bus detection, and `pidfd` waiting.
 
-### Pruebas de integración
+### Integration tests
 
-[`test/release.sh`](../test/release.sh) crea un tarball del árbol actual, también con cambios aún no commiteados, y usa [`test/vm.sh`](../test/vm.sh) para trabajar en máquinas QEMU desechables. Para cada distribución se usan dos máquinas:
+[`test/release.sh`](../test/release.sh) archives the current working tree, including uncommitted changes, and drives disposable QEMU machines through [`test/vm.sh`](../test/vm.sh). Each distribution uses two VMs:
 
-1. una compila el paquete nativo con la receta real de `packaging/`;
-2. otra parte limpia, instala ese paquete con el gestor de la distribución y ejecuta las pruebas.
+1. a build VM creates the native package with the real recipe under `packaging/`; and
+2. a clean VM installs that package through the distribution package manager and runs the suite.
 
-Las pruebas de `test/integration` usan Xvfb como servidor X y sustituyen al display manager por una unidad transitoria, salvo la última, que instala LightDM y abre la sesión con él:
+The scripts under `test/integration` use Xvfb and normally replace the display manager with a transient service. The last test installs and starts LightDM instead.
 
-| Script | Recorrido representativo |
+| Script | Coverage |
 | --- | --- |
-| `01-desktop-service.sh` | Entrada y comando directo; el escritorio queda como proceso principal. |
-| `02-session-shutdown.sh` | Salida del escritorio, muerte del proceso de login y `uxsm stop`. |
-| `03-session-identity.sh` | `DesktopNames`, `-D`, `-e` y variables XDG. |
-| `04-session-environment.sh` | Carga de `env*` y restauración exacta por los tres cierres. |
-| `05-generated-entries.sh` | Instalación, sobrescritura, `check` y `setup`. |
-| `06-session-ready.sh` | Las dos formas de estar lista, y la sesión que no llega a estarlo. |
-| `07-xdg-autostart.sh` | Autostart XDG: con gestor de ventanas, con `--no-autostart`, el slice y en la entrada generada. |
-| `08-display-manager.sh` | La sesión abierta por LightDM de verdad, con autologin sobre Xvfb. |
-| `09-app.sh` | `uxsm app`: unidades, slices, entradas y acciones, y que se paran con la sesión. |
+| `01-desktop-service.sh` | Entry and direct-command startup; the desktop is the service's main process. |
+| `02-session-shutdown.sh` | Desktop exit, login-process death, and `uxsm stop`. |
+| `03-session-identity.sh` | `DesktopNames=`, `-D`, `-e`, and XDG variables. |
+| `04-session-environment.sh` | `env*` loading and exact restoration through all shutdown paths. |
+| `05-generated-entries.sh` | Installation, overwrite protection, `check`, and `setup`. |
+| `06-session-ready.sh` | Both readiness signals and the timeout path. |
+| `07-xdg-autostart.sh` | Autostart, `--no-autostart`, generated entries, and application slices. |
+| `08-display-manager.sh` | A real LightDM session with autologin over Xvfb. |
+| `09-app.sh` | `uxsm app` units, slices, entries, actions, properties, and shutdown. |
 
-Las distribuciones cubiertas son Ubuntu 24.04, Debian 13, Arch, Fedora 43 y openSUSE Tumbleweed. `quick` usa Ubuntu; `pair`, Ubuntu y Arch; `all`, las cinco.
+The supported matrix is Ubuntu 24.04, Debian 13, Arch Linux, Fedora 43, and openSUSE Tumbleweed. `DISTROS=quick` selects Ubuntu, `pair` selects Ubuntu and Arch, and `all` selects all five.
 
-Con `FAST=1`, la misma máquina compila el paquete y ejecuta las pruebas con él instalado, lo que ahorra un arranque y una instalación de dependencias por distribución: medido en Ubuntu, 3:37 en vez de 4:07. A cambio se pierde lo que da la máquina limpia, que es donde se nota que a un paquete le falte declarar una dependencia de ejecución: allí sólo está instalado el paquete y lo que piden las pruebas. Por eso vale para trabajar y no para publicar; `make release` siempre usa las dos máquinas.
+With `FAST=1`, one VM builds and tests the package. On Ubuntu this reduced a measured run from 4:07 to 3:37, but it cannot detect undeclared runtime dependencies because build dependencies remain installed. Use it while developing, not when publishing. `make release` always uses separate build and test VMs.
 
 ### NixOS
 
-`make test-nixos` levanta una máquina NixOS declarada entera ―LightDM, autologin, bspwm y la entrada de sesión― con el sistema de pruebas de nixpkgs, y comprueba lo mismo que la prueba del display manager: que la sesión de uxsm arranca, que el proceso principal del servicio es el escritorio, que la identidad llega y que al parar el display manager se apaga todo. La fuente está en [`test/nixos/session.nix`](../test/nixos/session.nix) y se expone como `checks` del flake.
+`make test-nixos` starts a complete declarative NixOS machine with LightDM, autologin, bspwm, and an uxsm session entry. It verifies that the session starts, the desktop is the service's main process, the XDG identity is present, and stopping the display manager tears everything down.
 
-Hace falta Nix con su demonio en marcha, igual que las otras pruebas de máquinas necesitan QEMU. La versión de nixpkgs queda fijada en `flake.lock`, así que la máquina de prueba es la misma en cualquier sitio. Esta prueba sirve para lo que las demás no pueden: en NixOS nada está donde lo ponen las otras distribuciones, y el paquete de Nix instala las unidades por su cuenta.
+The definition is [`test/nixos/session.nix`](../test/nixos/session.nix) and is exposed through the flake's `checks`. It requires Nix and a running Nix daemon, just as the other VM tests require QEMU. `flake.lock` pins nixpkgs so the test machine remains reproducible. This test covers the NixOS layout and packaging path, which differ from conventional distributions.
 
-### Integración continua
+### Continuous integration and hooks
 
-[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) ejecuta `make check` y `make build` en cada push, que es la misma lista que el hook `pre-commit`, y deja `make test-vm` a petición (`workflow_dispatch`), con las distribuciones como parámetro. Los runners de GitHub traen `/dev/kvm`, así que la tanda completa de una distribución ―compilar el paquete en una máquina e instalarlo en otra limpia, con las nueve pruebas de integración― tarda allí unos cuatro minutos.
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs `make check` and `make build` on every push and pull request. The VM suite is available through `workflow_dispatch`, with the distribution set as an input. GitHub-hosted runners expose `/dev/kvm`; a full two-VM distribution run takes about four minutes there.
 
-El hook `pre-commit` ejecuta `gofmt`, `go vet`, las pruebas unitarias y `sh -n` sobre los scripts. El hook `pre-push` exige que los pushes a `main`, `master` o una etiqueta `vX.Y.Z` tengan un `make release` satisfactorio del mismo commit. Se activan con `make hooks`.
+The pre-commit hook runs `gofmt`, `go vet`, unit tests, and `sh -n` over shell scripts. The pre-push hook requires a successful `make release` for the exact commit pushed to `main`, `master`, or a `vX.Y.Z` tag. Enable both with:
 
-## Mapa del código
+```sh
+make hooks
+```
 
-| Ruta | Papel |
+## Source map
+
+| Path | Role |
 | --- | --- |
-| `cmd/uxsm` | CLI pública y subórdenes internas llamadas por las unidades. |
-| `internal/desktopentry` | Búsqueda y lectura de sesiones X11. |
-| `internal/session` | Identidad y ficheros de intercambio en runtime. |
-| `internal/sessionenv` | Preparación y restauración del entorno. |
-| `internal/sessionentry` | Tabla conocida y generación de entradas. |
-| `internal/systemd` | Operaciones contra `systemd --user` y D-Bus. |
-| `internal/dm` | Detección y configuración de display managers. |
-| `internal/appunit` | Nombres, slices y órdenes de las unidades de `uxsm app`. |
-| `internal/autostart` | El añadido que lleva el autostart XDG al slice de la sesión. |
-| `internal/pidwait` | Espera de procesos ajenos mediante `pidfd`. |
-| `internal/x11` | Conversación con el servidor X para saber si hay gestor de ventanas. |
-| `data/systemd/user` | Plantillas de unidades instaladas. |
-| `test` | Integración, VMs, paquetes y recogida de sesiones de distribuciones. |
-| `packaging` | Recetas de paquetes usadas por las pruebas de release. |
+| `cmd/uxsm` | Public CLI and internal subcommands called by systemd units. |
+| `internal/desktopentry` | XDG lookup and desktop-entry parsing. |
+| `internal/session` | Session identity and runtime exchange files. |
+| `internal/sessionenv` | Environment preparation and restoration. |
+| `internal/sessionentry` | Known desktop table and entry generation. |
+| `internal/systemd` | `systemd --user` and D-Bus operations. |
+| `internal/dm` | Display-manager detection and configuration. |
+| `internal/appunit` | Unit names, slices, and commands for `uxsm app`. |
+| `internal/autostart` | Runtime drop-in that moves XDG autostart into the session slice. |
+| `internal/pidwait` | `pidfd`-based waiting for external processes. |
+| `internal/x11` | Direct X11 communication used to detect the window manager. |
+| `data/systemd/user` | Installed systemd user-unit templates. |
+| `test` | Integration scripts, VM orchestration, packages, and distro session data. |
+| `packaging` | Native package recipes exercised by release tests. |
 
-## Versión de Go
+## Go version
 
-### Por qué 1.22
+### Why Go 1.22
 
-Primero pusimos 1.24, la de Debian 13, y la bajamos a 1.22 por **Ubuntu 24.04 LTS**, que trae Go 1.22 y no compilaría nada con un mínimo más alto.
+The minimum version is Go 1.22 because Ubuntu 24.04 LTS ships it. Requiring a newer version would prevent that distribution from building the package with its native toolchain.
 
-Versiones de Go de cada distribución, consultado el 2026-09-17:
+Versions checked on 2026-09-17:
 
-| Distribución                              | Go        |
-| ----------------------------------------- | --------- |
-| Ubuntu 24.04 LTS                          | 1.22      |
-| Debian 13 (trixie)                        | 1.24      |
-| Ubuntu 26.04 LTS                          | 1.26      |
-| Fedora 43                                 | 1.26      |
-| Arch, openSUSE Tumbleweed, NixOS unstable | la última |
+| Distribution                                    | Go version       |
+| ----------------------------------------------- | ---------------- |
+| Ubuntu 24.04 LTS                                | 1.22             |
+| Debian 13 (trixie)                              | 1.24             |
+| Ubuntu 26.04 LTS                                | 1.26             |
+| Fedora 43                                       | 1.26             |
+| Arch Linux, openSUSE Tumbleweed, NixOS unstable | Latest available |
 
-`.0` detrás no es capricho: `go 1.22` a secas es una versión del lenguaje, no una versión publicada de Go, y una Go 1.21 que intente descargar la toolchain que pide `go.mod` fallaría.
+The `.0` in `go.mod` is intentional: `go 1.22` names a language version, not a released Go toolchain. An older Go release attempting automatic toolchain selection needs the full version.
 
-### go vet
+### Why `go vet` runs before every build
 
-`make build` pasa `go vet` antes de compilar. Con una Go más nueva que la de `go.mod`, `go build` acepta sin avisar funciones de la biblioteca estándar posteriores, y `go vet` las detecta.
+A Go version newer than the one declared in `go.mod` can compile calls added to the standard library after Go 1.22. `go vet` catches those compatibility mistakes, so `make build` runs it first.
 
-### No disponible en 1.22
+### APIs unavailable at the minimum version
 
-| Desde | Qué |
+| Added in | Do not use |
 | --- | --- |
-| 1.23 | iteradores: `range` sobre funciones, paquete `iter`, `slices.Collect`, `slices.Sorted`, `maps.Keys`, `maps.Values`; paquete `unique` |
-| 1.24 | alias de tipos genéricos, `os.Root`, `strings.Lines`, `strings.SplitSeq`, `testing.B.Loop`, `omitzero` en `encoding/json` |
-| 1.25 | `sync.WaitGroup.Go`, `testing/synctest` |
+| Go 1.23 | Range-over-function iterators; `iter`; `slices.Collect`; `slices.Sorted`; iterator forms of `maps.Keys` and `maps.Values`; `unique`. |
+| Go 1.24 | Generic type aliases; `os.Root`; `strings.Lines`; `strings.SplitSeq`; `testing.B.Loop`; JSON `omitzero`. |
+| Go 1.25 | `sync.WaitGroup.Go`; `testing/synctest`. |
 
-Lo que sí hay en 1.22 y apetece usar: `for i := range 10`, la variable del `for` nueva en cada vuelta, `min` y `max`, `slices` y `maps` sin iteradores, `math/rand/v2`, `log/slog`.
+Go 1.22 features are available, including integer ranges, per-iteration loop variables, `min`, `max`, pre-iterator `slices` and `maps`, `math/rand/v2`, and `log/slog`.

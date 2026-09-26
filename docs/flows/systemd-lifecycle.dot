@@ -1,79 +1,82 @@
 digraph systemd_lifecycle {
   graph [
-    label="Qué mantiene systemd durante la sesión y cómo la cierra",
+    label="systemd unit graph and convergent shutdown",
     labelloc=t,
     fontsize=24,
     fontname="DejaVu Sans Bold",
     bgcolor="#f8fafc",
     pad=0.30,
-    nodesep=0.52,
-    ranksep=0.68,
-    splines=polyline
+    nodesep=0.50,
+    ranksep=0.66,
+    splines=polyline,
+    newrank=true
   ];
   node [shape=box, style="rounded,filled", fontname="DejaVu Sans", fontsize=11,
         color="#2563eb", fillcolor="#eff6ff", fontcolor="#0f172a", margin="0.16,0.11"];
   edge [fontname="DejaVu Sans", fontsize=9, color="#475569", fontcolor="#334155", arrowsize=0.75];
 
   login [shape=oval, fillcolor="#dbeafe",
-         label="Proceso de sesión del display manager\nAhora ejecuta systemctl --user start --wait"];
+         label="Display manager's session process\nexecs systemctl --user start --wait"];
 
   subgraph cluster_active {
-    label="Mientras la sesión está activa";
+    label="Active session";
     color="#93c5fd";
     style="rounded,filled";
     fillcolor="#ffffff";
     fontname="DejaVu Sans Bold";
 
-    bind [label="uxsm-bindpid@PID.service\n\nVigila el PID del proceso de sesión"];
+    bind [label="uxsm-bindpid@PID.service\n\nWatches the display manager's\nsession-process PID"];
     env [fillcolor="#ede9fe", color="#7c3aed",
-         label="uxsm-env@ID.service\n\nPrepara el entorno antes de arrancar\ny lo restaura cuando se detiene"];
+         label="uxsm-env@ID.service\n\nPrepares the environment first\nand restores it when stopped"];
     desktop [fillcolor="#dcfce7", color="#15803d", fontcolor="#14532d",
-             label="uxsm-desktop@ID.service\n\nSu proceso principal es el escritorio\nNo cuenta como arrancado hasta que la sesión\nestá lista: gestor de ventanas o uxsm finalize"];
+             label="uxsm-desktop@ID.service\n\nRuns the desktop as its main process\nWaits for readiness"];
     session [shape=folder,
-             label="uxsm-session@ID.target\n\nAgrupa todo lo que pertenece\na esta sesión de uxsm"];
-    standards [shape=folder, fillcolor="#ede9fe", color="#7c3aed",
-               label="Targets estándar de systemd\n\ngraphical-session-pre.target\ngraphical-session.target"];
+             label="uxsm-session@ID.target\n\nRepresents this uxsm session"];
+    graphical [shape=folder, fillcolor="#ede9fe", color="#7c3aed",
+               label="Standard graphical targets\ngraphical-session-pre.target\ngraphical-session.target"];
     autostart [shape=folder, fillcolor="#fef3c7", color="#ca8a04",
-               label="uxsm-autostart@ID.target\n\nArrastra xdg-desktop-autostart.target,\nque no se puede arrancar a mano"];
+               label="uxsm-autostart@ID.target\n\nPulls in xdg-desktop-autostart.target\nwhen uxsm owns autostart"];
+    apps [shape=folder, fillcolor="#fef3c7", color="#ca8a04",
+          label="Session application slices\napp-uxsm.slice · background-uxsm.slice\nsession-uxsm.slice"];
 
-    desktop -> env [label=" Requires + After\nprimero el entorno "];
-    desktop -> session [label=" BindsTo\nmisma vida "];
-    session -> standards [label=" activa la sesión gráfica "];
-    desktop -> autostart [label=" ExecStartPost\nsólo si el autostart\nle toca a uxsm "];
-    env -> standards [label=" activa la fase previa "];
+    desktop -> env [label=" Requires + After "];
+    desktop -> session [label=" BindsTo "];
+    session -> graphical [label=" BindsTo "];
+    desktop -> autostart [label=" ExecStartPost "];
+    apps -> graphical [label=" PartOf "];
+    env -> graphical [label=" graphical-session-pre "];
   }
 
   subgraph cluster_shutdown {
-    label="Cualquier forma de salir converge en el mismo cierre";
+    label="Every exit path reaches the same shutdown target";
     color="#fca5a5";
     style="rounded,filled";
     fillcolor="#ffffff";
     fontname="DejaVu Sans Bold";
 
     quit [shape=oval, color="#b91c1c", fillcolor="#fee2e2", fontcolor="#7f1d1d",
-          label="El escritorio termina, falla\no nunca llega a estar listo"];
+          label="Desktop exits, fails,\nor never becomes ready"];
     killed [shape=oval, color="#b91c1c", fillcolor="#fee2e2", fontcolor="#7f1d1d",
-            label="Desaparece el proceso\ndel display manager"];
+            label="Display manager's\nsession process disappears"];
     stop [shape=oval, color="#b91c1c", fillcolor="#fee2e2", fontcolor="#7f1d1d",
-          label="El usuario ejecuta\nuxsm stop"];
+          label="User runs\nuxsm stop"];
     shutdown [shape=octagon, color="#b91c1c", fillcolor="#fecaca", fontcolor="#7f1d1d",
-              label="uxsm-shutdown.target\nPunto único de cierre"];
-    stopunits [label="Por Conflicts=, systemd detiene\nel escritorio, el entorno y los targets\nde la sesión gráfica"];
+              label="uxsm-shutdown.target\nSingle shutdown coordinator"];
+    stopunits [label="Conflicts= stops the desktop, environment,\nautostart, applications, and graphical targets"];
     cleanup [fillcolor="#fef3c7", color="#ca8a04",
-             label="Al parar uxsm-env@, ExecStopPost=\nrestaura el entorno anterior y borra\nlos ficheros temporales de la sesión"];
+             label="uxsm-env@ ExecStopPost=\nrestores the previous environment\nand removes runtime files"];
     down [shape=oval, fillcolor="#e2e8f0", color="#64748b",
-          label="No queda ningún proceso ni estado\nperteneciente a la sesión"];
+          label="No uxsm session process\nor runtime state remains"];
 
     quit -> shutdown [label=" OnSuccess / OnFailure ", color="#b91c1c"];
     killed -> shutdown [label=" OnSuccess / OnFailure ", color="#b91c1c"];
     stop -> shutdown [color="#b91c1c"];
     shutdown -> stopunits -> cleanup -> down;
-
     {rank=same; quit; killed; stop}
   }
 
-  login -> bind [label=" arranca el vigilante "];
-  login -> desktop [label=" arranca y espera "];
+  login -> bind [label=" start watcher "];
+  login -> desktop [label=" start and wait "];
   desktop -> quit [style=dashed, arrowhead=none];
   bind -> killed [style=dashed, arrowhead=none];
 }
