@@ -206,7 +206,9 @@ uxsm entry --exec -- mywm --flag            # ni entrada ni tabla: sólo el coma
 uxsm: bspwm.desktop: -e would drop desktop names that are known: bspwm; add them to -D, or use --force-names to drop them anyway
 ```
 
-El aviso no es celo: esos nombres son los que acaban en `XDG_CURRENT_DESKTOP`, y tirar el propio del escritorio deja fuera las entradas de autostart con `OnlyShowIn=bspwm`, los portales y todo lo que se configura por escritorio. Cuando eso es justo lo que se busca ―una sesión que quiere pasar por otra cosa―, `-force-names` lo hace sin preguntar.
+`-e` es «sólo estos nombres», y en `uxsm start` hace exactamente eso, sin avisar de nada. Aquí avisa, y ésa es la única diferencia entre los dos: lo que `start` decide vale para la sesión que empieza, y el efecto se ve en el momento ―si el escritorio recibe un `XDG_CURRENT_DESKTOP` raro, se nota al entrar―, mientras que `uxsm entry -i` escribe un fichero en `/usr/local/share/xsessions`, como root, que el display manager va a usar en cada inicio de sesión a partir de entonces. Un nombre de menos ahí no se ve al escribirlo: se ve semanas después, cuando algo del autostart ha dejado de arrancar.
+
+Y el nombre que se pierde es, casi siempre, el propio del escritorio: es el que acaban mirando las entradas de autostart con `OnlyShowIn=bspwm`, los portales y todo lo que se configura por escritorio. Así que la orden que se ejecuta una vez obedece, y la que deja algo escrito para siempre pide que se lo confirmen. Cuando tirarlo es justo lo que se busca ―una sesión que quiere pasar por otra cosa―, `-force-names` lo hace sin preguntar, y `uxsm entry` sin `-i` enseña antes lo que escribiría.
 
 Y `--exec -- comando` es el camino de quien no quiere nada de esto: genera la entrada a partir del comando y ya está.
 
