@@ -65,10 +65,6 @@ var ErrUnknown = errors.New("not in uxsm's table of known desktops, or no comman
 // hay DesktopNames=, no está en la tabla y no se han dado con -D.
 var ErrNoNames = errors.New("no desktop names known")
 
-// ErrDropsNames es el error cuando -e tiraría nombres del escritorio que se
-// conocen, sin --force-names.
-var ErrDropsNames = errors.New("-e would drop desktop names that are known")
-
 // ErrBadNames es el error con nombres que no se pueden pasar con -D.
 var ErrBadNames = errors.New("invalid desktop names")
 
@@ -118,9 +114,10 @@ type Source struct {
 	origin string
 }
 
-// FromEntry es la fuente de una entrada que existe. Lo que no traiga lo
-// completa la tabla.
-func FromEntry(e *desktopentry.Entry) (*Source, error) {
+// FromEntry es la fuente de una entrada que existe. Con table, lo que no traiga
+// lo completa la tabla de escritorios conocidos; sin table, lo que no esté en la
+// entrada no está.
+func FromEntry(e *desktopentry.Entry, table bool) (*Source, error) {
 	argv, err := desktopentry.SplitExec(e.Exec)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", e.ID, err)
@@ -131,7 +128,10 @@ func FromEntry(e *desktopentry.Entry) (*Source, error) {
 	if err := checkCommand(e.ID, e.Exec, argv); err != nil {
 		return nil, err
 	}
-	k := known[e.ID]
+	var k Known
+	if table {
+		k = known[e.ID]
+	}
 	base := strings.TrimSuffix(e.ID, ".desktop")
 	s := &Source{
 		ID:         e.ID,
@@ -170,9 +170,9 @@ func FromTable(name string) (*Source, error) {
 }
 
 // FromCommand es la fuente de un comando: la entrada se llama como el programa.
-// Si ese nombre está en la tabla, sus nombres y su descripción cuentan como
-// conocidos.
-func FromCommand(argv []string) (*Source, error) {
+// Con table, si ese nombre está en la tabla, sus nombres y su descripción cuentan
+// como conocidos.
+func FromCommand(argv []string, table bool) (*Source, error) {
 	if len(argv) == 0 {
 		return nil, errors.New("empty command")
 	}
@@ -181,7 +181,10 @@ func FromCommand(argv []string) (*Source, error) {
 		return nil, err
 	}
 	id := prog + ".desktop"
-	k := known[id]
+	var k Known
+	if table {
+		k = known[id]
+	}
 	return &Source{
 		ID: id, Name: first(k.Name, prog), Comment: k.Comment, Argv: argv, Known: k.DesktopNames,
 		origin: "the command " + prog,
@@ -209,10 +212,8 @@ type Options struct {
 	// Names son los nombres de -D, separados por ":". Se añaden al final de
 	// los conocidos, como en uxsm start.
 	Names string
-	// Exclusive es -e: sólo cuentan los nombres de -D.
+	// Exclusive es -e: sólo cuentan los nombres de -D, igual que en uxsm start.
 	Exclusive bool
-	// ForceNames deja que -e tire nombres conocidos.
-	ForceNames bool
 	// Name y Comment, si no están vacíos, sustituyen a los de la fuente.
 	Name, Comment string
 }
@@ -228,21 +229,11 @@ func (s *Source) names(o Options) ([]string, error) {
 		if len(extra) == 0 {
 			return nil, fmt.Errorf("%w: -e needs desktop names given with -D", ErrBadNames)
 		}
-		var dropped []string
-		for _, n := range s.Known {
-			if !slices.Contains(extra, n) {
-				dropped = append(dropped, n)
-			}
-		}
-		if len(dropped) > 0 && !o.ForceNames {
-			return nil, fmt.Errorf("%s: %w: %s; add them to -D, or use --force-names to drop them anyway",
-				s.ID, ErrDropsNames, strings.Join(dropped, ":"))
-		}
 		return extra, nil
 	}
 	names := dedupe(append(slices.Clone(s.Known), extra...))
 	if len(names) == 0 {
-		return nil, fmt.Errorf("%s: %w: it has no DesktopNames= and is not in uxsm's table; give them with -D",
+		return nil, fmt.Errorf("%s: %w: it has no DesktopNames= and none are known for it; give them with -D",
 			s.ID, ErrNoNames)
 	}
 	if !session.ValidNames(strings.Join(names, ":")) {

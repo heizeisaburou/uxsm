@@ -22,6 +22,10 @@ import (
 //	uxsm entry [opciones] --plain bspwm          bspwm.desktop, de la tabla de escritorios
 //	uxsm entry [opciones] --plain -- mywm [args] mywm.desktop, con ese comando
 //
+// La tabla de escritorios conocidos completa lo que la fuente no diga. Eso se
+// dice a propósito con --no-table, que la deja fuera, y con --table, que genera
+// la entrada desde ella sin mirar la que hubiera instalada.
+//
 // Sólo escribe en dm.LocalXSessions: ni a la salida estándar ni a otro
 // directorio, y menos en /usr/share/xsessions, que es de los paquetes. Sin -i
 // sólo enseña qué fichero escribiría y con qué contenido.
@@ -38,14 +42,18 @@ func runEntry(args []string) error {
 			"  --plain <name>  the plain <name>.desktop, without uxsm, from the table\n"+
 			"  -- <command>    with --exec or --plain, an entry for that command,\n"+
 			"                  named after its program\n\n"+
+			"uxsm's table of known desktops fills in what the source does not say:\n"+
+			"desktop names, name, comment and, with --exec, the command. Use\n"+
+			"--no-table to leave it out, or --table to generate the entry from it.\n\n"+
 			"Without -i, it only shows the file it would write.")
 	exec := fs.Bool("exec", false, "make a -uxsm entry that starts the command directly")
 	plain := fs.Bool("plain", false, "make the plain entry, without uxsm")
 	install := fs.Bool("i", false, "write the entry (needs root)")
 	force := fs.Bool("f", false, "overwrite an entry with the same name in "+dm.LocalXSessions+",\nor hide one in another xsessions directory, such as a package's")
-	forceNames := fs.Bool("force-names", false, "let -e drop the desktop names that are known for it")
 	names := fs.String("D", "", "desktop `names` to add, separated by ':'")
 	exclusive := fs.Bool("e", false, "use only the names given with -D, dropping the known ones")
+	table := fs.Bool("table", false, "take the entry from uxsm's table of known desktops, ignoring\nan installed entry of that name; needs --exec or --plain")
+	noTable := fs.Bool("no-table", false, "do not use uxsm's table of known desktops: the entry says what\nit says, and the rest is what -D, -N and -C give")
 	name := fs.String("N", "", "the `name` shown on the login screen")
 	comment := fs.String("C", "", "the `comment` shown on the login screen")
 	if err := parseFlags(fs, args); err != nil {
@@ -56,15 +64,27 @@ func runEntry(args []string) error {
 		fs.Usage()
 		return errUsage
 	}
+	if *table && *noTable {
+		return errors.New("--table and --no-table say the opposite: use one or the other")
+	}
+	if *table && dashes {
+		return errors.New("--table takes the command from uxsm's table; for a command of your own, leave it out")
+	}
+	if *table && !*exec && !*plain {
+		return errors.New("--table makes the entry from uxsm's table instead of from an installed one, so it needs --exec or --plain")
+	}
+	if *noTable && *plain && !dashes {
+		return errors.New("--plain takes everything from uxsm's table, so it cannot go with --no-table; for a command of your own, use --plain -- <command>")
+	}
 	if dashes && !*exec && !*plain {
 		return errors.New("an entry that points to another entry needs that entry's name; for a command, use --exec or --plain")
 	}
 
-	src, err := entrySource(fs.Args(), dashes, *exec, *plain)
+	src, err := entrySource(fs.Args(), dashes, *exec, *plain, *table, !*noTable)
 	if err != nil {
 		return err
 	}
-	opts := sessionentry.Options{Names: *names, Exclusive: *exclusive, ForceNames: *forceNames, Name: *name, Comment: *comment}
+	opts := sessionentry.Options{Names: *names, Exclusive: *exclusive, Name: *name, Comment: *comment}
 	var e *sessionentry.Entry
 	switch {
 	case *plain:
@@ -103,21 +123,28 @@ func runEntry(args []string) error {
 
 // entrySource decide de dónde sale la entrada: un comando, una entrada que
 // existe o la tabla de escritorios conocidos.
-func entrySource(args []string, dashes, exec, plain bool) (*sessionentry.Source, error) {
+//
+// fromTable es --table, que manda: la entrada sale de la tabla aunque haya una
+// instalada con ese nombre. table es lo contrario de --no-table y dice si la
+// tabla puede completar lo que la fuente no traiga.
+func entrySource(args []string, dashes, exec, plain, fromTable, table bool) (*sessionentry.Source, error) {
 	if dashes {
-		return sessionentry.FromCommand(args)
+		return sessionentry.FromCommand(args, table)
 	}
 	id := strings.TrimSuffix(args[0], ".desktop") + ".desktop"
 	name := strings.TrimSuffix(id, ".desktop")
 
 	// La entrada normal sale siempre de la tabla: si ya hubiera una, no haría
 	// falta generarla.
-	if plain {
+	if plain || fromTable {
 		return sessionentry.FromTable(name)
 	}
 	entry, err := desktopentry.Find(desktopentry.XSessions, id)
 	if err == nil {
-		return sessionentry.FromEntry(entry)
+		return sessionentry.FromEntry(entry, table)
+	}
+	if exec && !table {
+		return nil, fmt.Errorf("there is no session entry %s, and with --no-table there is nowhere else to take its command from; give the command with `uxsm entry --exec -- <command>`", id)
 	}
 	if exec {
 		return sessionentry.FromTable(name)

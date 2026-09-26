@@ -74,6 +74,37 @@ expect_var XDG_CURRENT_DESKTOP bspwm
 ok "bspwm-uxsm.desktop with the command starts bspwm directly, as bspwm"
 quit_session
 
+# Decir si la tabla se usa o no: --table genera la entrada sin mirar la que está
+# instalada, y --no-table se queda con lo que dice la instalada.
+out=$(sudo uxsm entry --table --exec -f bspwm) || fail "uxsm entry --table failed: $out"
+case $out in
+*"Exec=uxsm start -D bspwm -- bspwm"*) ok "--table takes the command from uxsm's table" ;;
+*) fail "uxsm entry --table --exec bspwm: $out" ;;
+esac
+if err=$(sudo uxsm entry --table -f bspwm 2>&1); then
+    fail "--table was accepted without --exec or --plain"
+fi
+case $err in
+*"needs --exec or --plain"*) ok "and says so when it cannot come from the table" ;;
+*) fail "uxsm entry --table bspwm: $err" ;;
+esac
+out=$(sudo uxsm entry --no-table -f bspwm) || fail "uxsm entry --no-table failed: $out"
+case $out in
+*"Exec=uxsm start bspwm.desktop"*) ok "--no-table generates the entry without the table" ;;
+*) fail "uxsm entry --no-table bspwm: $out" ;;
+esac
+if err=$(sudo uxsm entry --no-table --plain -f bspwm 2>&1); then
+    fail "--plain --no-table was accepted, and the table is its only source"
+fi
+ok "and --no-table with --plain, which has nowhere else to look, is refused"
+
+# -e se queda con los nombres de -D y tira los demás, como en uxsm start.
+out=$(sudo uxsm entry -e -D MiWM -f bspwm) || fail "uxsm entry -e failed: $out"
+case $out in
+*"DesktopNames=MiWM;"*) ok "-e keeps only the desktop names given with -D" ;;
+*) fail "uxsm entry -e -D MiWM bspwm: $out" ;;
+esac
+
 # La normal taparía la del paquete, en /usr/share/xsessions.
 if sudo uxsm entry -i --plain bspwm 2>/dev/null; then
     fail "uxsm entry --plain hid the package's bspwm.desktop without -f"

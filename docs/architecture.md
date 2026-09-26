@@ -193,24 +193,24 @@ Es una lista que viene dentro de uxsm, con 38 sesiones de escritorio y de gestor
 
 **Quién manda.** Lo que trae la entrada original, siempre; la tabla sólo aporta lo que falta. Y por encima de las dos, lo que se pida en la línea de órdenes: `-N` el nombre, `-C` el comentario, `-D` los nombres de escritorio.
 
-**Cuándo no se usa.** Con `-e`, los nombres de escritorio son sólo los de `-D`: se descartan los de la entrada y los de la tabla. Pero si eso tirara algún nombre conocido, uxsm no obedece callando, dice cuál y para:
+**Usarla o no, dicho a propósito.** De serie la tabla completa lo que falta, y hay una opción para cada una de las otras dos posturas:
 
 ```sh
-uxsm entry -e -D MiWM bspwm                 # falla: tiraría el nombre conocido, bspwm
-uxsm entry -e -D bspwm:MiWM bspwm           # bien: el conocido va en -D, y se añade MiWM
-uxsm entry -e -D MiWM -force-names bspwm    # bien: tirarlo es lo que se quiere, y se insiste
-uxsm entry --exec -- mywm --flag            # ni entrada ni tabla: sólo el comando que se da
+uxsm entry --no-table bspwm            # la entrada dice lo que dice, y nada más
+uxsm entry --table --exec bspwm        # todo de la tabla, aunque haya una entrada instalada
+uxsm entry --plain bspwm               # la entrada normal, que sale sólo de la tabla
+uxsm entry --exec -- mywm --flag       # ni entrada ni tabla: el comando que se da
 ```
 
+`--no-table` sirve para una máquina en la que la entrada instalada es la verdad y la tabla no tiene por qué añadir nada; si con eso no queda ningún nombre de escritorio, uxsm lo dice y pide `-D` en vez de inventarlo. `--table` es lo contrario: genera la entrada con el nombre, el comentario, los `DesktopNames=` y el comando que uxsm conoce, sin mirar lo que haya instalado, que es también la forma de generar una entrada de un escritorio cuya entrada no está en la máquina. Las combinaciones que se contradicen ―`--table` con `--no-table`, `--table` con un comando propio, `--plain` con `--no-table`― se rechazan diciendo por qué.
+
+**Los nombres de escritorio.** Con `-e`, los nombres son sólo los de `-D`: se descartan los de la entrada y los de la tabla, igual que en `uxsm start`.
+
+```sh
+uxsm entry -e -D MiWM bspwm            # DesktopNames=MiWM, y nada más
 ```
-uxsm: bspwm.desktop: -e would drop desktop names that are known: bspwm; add them to -D, or use --force-names to drop them anyway
-```
 
-`-e` es «sólo estos nombres», y en `uxsm start` hace exactamente eso, sin avisar de nada. Aquí avisa, y ésa es la única diferencia entre los dos: lo que `start` decide vale para la sesión que empieza, y el efecto se ve en el momento ―si el escritorio recibe un `XDG_CURRENT_DESKTOP` raro, se nota al entrar―, mientras que `uxsm entry -i` escribe un fichero en `/usr/local/share/xsessions`, como root, que el display manager va a usar en cada inicio de sesión a partir de entonces. Un nombre de menos ahí no se ve al escribirlo: se ve semanas después, cuando algo del autostart ha dejado de arrancar.
-
-Y el nombre que se pierde es, casi siempre, el propio del escritorio: es el que acaban mirando las entradas de autostart con `OnlyShowIn=bspwm`, los portales y todo lo que se configura por escritorio. Así que la orden que se ejecuta una vez obedece, y la que deja algo escrito para siempre pide que se lo confirmen. Cuando tirarlo es justo lo que se busca ―una sesión que quiere pasar por otra cosa―, `-force-names` lo hace sin preguntar, y `uxsm entry` sin `-i` enseña antes lo que escribiría.
-
-Y `--exec -- comando` es el camino de quien no quiere nada de esto: genera la entrada a partir del comando y ya está.
+Conviene saber lo que se tira: esos nombres son los que acaban en `XDG_CURRENT_DESKTOP`, así que dejar fuera el propio del escritorio deja fuera también las entradas de autostart con `OnlyShowIn=bspwm`, los portales y todo lo que se configura por escritorio. `uxsm entry` sin `-i` enseña la entrada antes de escribirla, que es donde se ve.
 
 Lo que la tabla nunca hace es inventar. Si una sesión no está en ella, o no tiene un comando que valga en todas las distribuciones, `uxsm entry --exec <nombre>` y `--plain <nombre>` lo dicen y no escriben nada:
 

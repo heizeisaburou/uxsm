@@ -21,7 +21,7 @@ func fromFile(t *testing.T, path string) *Source {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := FromEntry(e)
+	s, err := FromEntry(e, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,16 +71,13 @@ func TestUxsm(t *testing.T) {
 }
 
 func TestNames(t *testing.T) {
-	// -e que tira los conocidos, sin --force-names.
-	if _, err := fromFile(t, "arch/cinnamon.desktop").Uxsm(Options{Names: "Cinnamon", Exclusive: true}); !errors.Is(err, ErrDropsNames) {
-		t.Errorf("-e dropping X-Cinnamon: %v, want ErrDropsNames", err)
-	}
-	e, err := fromFile(t, "arch/cinnamon.desktop").Uxsm(Options{Names: "Cinnamon", Exclusive: true, ForceNames: true})
+	// -e tira los conocidos y se queda con los de -D, como en uxsm start.
+	e, err := fromFile(t, "arch/cinnamon.desktop").Uxsm(Options{Names: "Cinnamon", Exclusive: true})
 	// Con -e los nombres son sólo los de -D, y "Cinnamon" a secas no está en la
 	// tabla ―el de Cinnamon es "X-Cinnamon"―, así que no hay de dónde saber que
 	// lanza su propio autostart y la entrada sale sin --no-autostart.
 	if err != nil || e.Exec != "uxsm start -e -D Cinnamon cinnamon.desktop" {
-		t.Errorf("-e with --force-names: %+v, %v", e, err)
+		t.Errorf("-e dropping X-Cinnamon: %+v, %v", e, err)
 	}
 	// -e sin -D.
 	if _, err := fromFile(t, "arch/bspwm.desktop").Uxsm(Options{Exclusive: true}); !errors.Is(err, ErrBadNames) {
@@ -104,21 +101,21 @@ func TestRefuses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := FromEntry(e); !errors.Is(err, ErrUsesSystemd) {
+	if _, err := FromEntry(e, true); !errors.Is(err, ErrUsesSystemd) {
 		t.Errorf("Arch's qtile.desktop: %v, want ErrUsesSystemd", err)
 	}
 	e, err = desktopentry.Read("testdata/debian/lightdm-xsession.desktop")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := FromEntry(e); !errors.Is(err, ErrMetaSession) {
+	if _, err := FromEntry(e, true); !errors.Is(err, ErrMetaSession) {
 		t.Errorf("Debian's lightdm-xsession.desktop: %v, want ErrMetaSession", err)
 	}
 	// Lo que cuenta es la orden, no el nombre de la entrada.
-	if _, err := FromEntry(&desktopentry.Entry{ID: "mine.desktop", Exec: "/usr/libexec/xinit-compat"}); !errors.Is(err, ErrMetaSession) {
+	if _, err := FromEntry(&desktopentry.Entry{ID: "mine.desktop", Exec: "/usr/libexec/xinit-compat"}, true); !errors.Is(err, ErrMetaSession) {
 		t.Errorf("an entry running xinit-compat: %v, want ErrMetaSession", err)
 	}
-	if _, err := FromEntry(&desktopentry.Entry{ID: "xinit-compat.desktop", Exec: "mywm"}); err != nil {
+	if _, err := FromEntry(&desktopentry.Entry{ID: "xinit-compat.desktop", Exec: "mywm"}, true); err != nil {
 		t.Errorf("a desktop named xinit-compat.desktop: %v", err)
 	}
 	for _, e := range []desktopentry.Entry{
@@ -126,17 +123,17 @@ func TestRefuses(t *testing.T) {
 		{ID: "mine.desktop", Exec: "uxsm start bspwm.desktop"},
 		{ID: "mine.desktop", Exec: "/usr/bin/uxsm start -D x bspwm.desktop"},
 	} {
-		if _, err := FromEntry(&e); !errors.Is(err, ErrUsesUxsm) {
+		if _, err := FromEntry(&e, true); !errors.Is(err, ErrUsesUxsm) {
 			t.Errorf("%s with Exec=%s: %v, want ErrUsesUxsm", e.ID, e.Exec, err)
 		}
 	}
 	for _, argv := range [][]string{{"uxsm", "start", "x.desktop"}, {"xinit-compat"}} {
-		if _, err := FromCommand(argv); err == nil {
+		if _, err := FromCommand(argv, true); err == nil {
 			t.Errorf("FromCommand(%q) should fail", argv)
 		}
 	}
 	// Un ID que no vale como instancia de unidad no se podría arrancar.
-	s, err := FromEntry(&desktopentry.Entry{ID: "my wm.desktop", Exec: "mywm"})
+	s, err := FromEntry(&desktopentry.Entry{ID: "my wm.desktop", Exec: "mywm"}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,7 +199,7 @@ X-UXSM-Source=dwm.desktop
 
 func TestFromCommand(t *testing.T) {
 	// Un programa de la tabla: sus nombres cuentan como conocidos.
-	s, err := FromCommand([]string{"/usr/bin/bspwm", "-c", "my config"})
+	s, err := FromCommand([]string{"/usr/bin/bspwm", "-c", "my config"}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,11 +207,20 @@ func TestFromCommand(t *testing.T) {
 	if err != nil || e.ID != "bspwm-uxsm.desktop" || e.Exec != `uxsm start -D bspwm -- /usr/bin/bspwm -c "my config"` {
 		t.Errorf("bspwm command: %+v, %v", e, err)
 	}
-	if _, err := s.UxsmExec(Options{Names: "other", Exclusive: true}); !errors.Is(err, ErrDropsNames) {
-		t.Errorf("-e dropping bspwm: %v", err)
+	if e, err := s.UxsmExec(Options{Names: "other", Exclusive: true}); err != nil ||
+		strings.Join(e.DesktopNames, ":") != "other" {
+		t.Errorf("-e dropping bspwm: %+v, %v", e, err)
+	}
+	// Y sin tabla, ese mismo programa no tiene nombres conocidos: los pide.
+	noTable, err := FromCommand([]string{"/usr/bin/bspwm"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := noTable.UxsmExec(Options{}); !errors.Is(err, ErrNoNames) {
+		t.Errorf("bspwm without the table: %v, want ErrNoNames", err)
 	}
 	// Uno que no está: hacen falta los nombres.
-	s, err = FromCommand([]string{"mywm"})
+	s, err = FromCommand([]string{"mywm"}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
