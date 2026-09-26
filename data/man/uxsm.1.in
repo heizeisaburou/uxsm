@@ -1,0 +1,76 @@
+.\" Manual page for uxsm. Edit this .in file, never the installed page: the
+.\" build fills in the version and the binary directory. `make check` lints it.
+.\"
+.\" Sections marked TODO are the ones still to write. Keep this page in step
+.\" with `uxsm <command> -h`, which is where its wording comes from, and with
+.\" docs/architecture.md, which explains the same things at length.
+.TH UXSM 1 "2026-09-26" "uxsm @VERSION@" "User Commands"
+.SH NAME
+uxsm \- X11 session manager for systemd \-\-user
+.SH SYNOPSIS
+.B uxsm
+.I command
+.RI [ options ]
+.RI [ arguments ]
+.SH DESCRIPTION
+.B uxsm
+starts an X11 session as a set of
+.BR "systemd \-\-user" (1)
+units: the desktop becomes the main process of a service, the session gets an
+environment prepared on purpose, and the standard graphical session targets are
+pulled in. When the desktop exits, or the process that opened the session goes
+away, systemd stops the whole set and uxsm restores the previous environment.
+It is the X11 counterpart of
+.BR uwsm (1).
+.\" TODO: what a session looks like once it is up, and what it does not do.
+.SH COMMANDS
+.TP
+.B start
+Start an X11 session from a session entry or a command.
+.TP
+.B stop
+Stop the running session.
+.TP
+.B finalize
+Tell uxsm, from the desktop, that the session is ready.
+.TP
+.B app
+Run an application in its own unit, inside the session.
+.TP
+.B entry
+Generate a session entry and install it.
+.TP
+.B check
+Check that the system is ready for uxsm, or whether a session is running.
+.TP
+.B setup
+Change the system so that uxsm works fully.
+.TP
+.B version
+Print the version.
+.PP
+Each command takes
+.B \-h
+for its own options.
+.\" TODO: one subsection per command with its options and arguments, in the
+.\" order above. Take the wording from `uxsm <command> -h`.
+.SH ENVIRONMENT
+.\" TODO: XDG_CURRENT_DESKTOP, XDG_SESSION_DESKTOP, XDG_SESSION_TYPE,
+.\" XDG_RUNTIME_DIR, DISPLAY, and the uxsm/env* files.
+.SH FILES
+.\" TODO: the session entries directory, $XDG_RUNTIME_DIR/uxsm, the unit
+.\" templates in @BINDIR@'s sibling lib/systemd/user, and the environment files.
+.SH EXIT STATUS
+.\" TODO: what each command returns, and `uxsm check is-active` in particular.
+.SH EXAMPLES
+.\" TODO: a handful, taken from the README.
+.SH SEE ALSO
+.BR uwsm (1),
+.BR systemd (1),
+.BR "systemd.special" (7),
+.BR "systemd\-xdg\-autostart\-generator" (8),
+.BR loginctl (1)
+.SH AUTHORS
+Written by the uxsm authors.
+.SH BUGS
+Report bugs at https://github.com/heizeisaburou/uxsm/issues

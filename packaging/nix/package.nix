@@ -38,6 +38,13 @@ buildGoModule (finalAttrs: {
       install -Dm644 "$f" "$unit"
       substituteInPlace "$unit" --replace-quiet @BINDIR@ $out/bin
     done
+    for f in data/man/*.1.in; do
+      page=$out/share/man/man1/$(basename "$f" .in)
+      install -Dm644 "$f" "$page"
+      substituteInPlace "$page" \
+        --replace-quiet @BINDIR@ $out/bin \
+        --replace-quiet @VERSION@ "${finalAttrs.version}"
+    done
   '';
 
   meta = {

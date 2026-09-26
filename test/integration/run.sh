@@ -59,6 +59,12 @@ for f in $files; do
     [ -d "$f" ] || echo "  $f"
 done
 
+# El manual tiene que venir en el paquete, comprimido o no según la distribución.
+echo "$files" | grep -q "man/man1/uxsm\.1" || {
+    echo "run.sh: the package does not ship the man page" >&2
+    exit 1
+}
+
 # Lo que el paquete haya traído para la sesión, como el bus de D-Bus con
 # dbus-user-session, lo arrancaría el siguiente inicio de sesión; éste empezó
 # antes de instalar. Sólo si hace falta: openSUSE no deja arrancarlo a mano

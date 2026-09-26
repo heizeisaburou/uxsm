@@ -51,6 +51,7 @@ make test
 %{_bindir}/uxsm
 %{_prefix}/lib/systemd/user/uxsm-*
 %{_prefix}/lib/systemd/user/*-uxsm.slice
+%{_mandir}/man1/uxsm.1*
 
 # openSUSE keeps the changelog in uxsm.changes, not here.
 %changelog

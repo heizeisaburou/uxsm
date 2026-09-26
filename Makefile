@@ -7,6 +7,7 @@ BINDIR  ?= $(PREFIX)/bin
 # systemd --user lee unidades tanto de /usr/lib/systemd/user como de
 # /usr/local/lib/systemd/user, así que sirve con cualquiera de los dos PREFIX.
 USERUNITDIR ?= $(PREFIX)/lib/systemd/user
+MANDIR  ?= $(PREFIX)/share/man
 DESTDIR ?=
 
 # Al compilar desde un tarball no hay git: los paquetes pasan VERSION.
@@ -27,6 +28,8 @@ endif
 BIN := bin/uxsm
 SRC := go.mod $(shell find . \( -name '*.go' -o -name '*.sh' \) -path './internal/*' -o -name '*.go' -path './cmd/*')
 UNITS := $(wildcard data/systemd/user/*.in)
+# Man pages, written as .in and installed with @VERSION@ and @BINDIR@ filled in.
+MAN := $(wildcard data/man/*.1.in)
 
 .PHONY: all build check test vet fmt install uninstall test-vm test-nixos release hooks dist clean
 
@@ -56,6 +59,16 @@ check:
 	@for f in $$(git ls-files --cached --others --exclude-standard '*.sh' .githooks 2>/dev/null); do \
 		sh -n "$$f" || exit 1; \
 	done
+	@# Man pages: groff exits 0 even on warnings, so anything on stderr fails.
+	@command -v groff >/dev/null 2>&1 || exit 0; \
+	for f in $(MAN); do \
+		out=$$(sed 's|@BINDIR@|$(BINDIR)|g;s|@VERSION@|$(VERSION)|g' "$$f" | groff -man -z -ww 2>&1 >/dev/null); \
+		if [ -n "$$out" ]; then \
+			echo "$$f:" >&2; \
+			echo "$$out" | sed 's|^troff:<standard input>:|  line |' >&2; \
+			exit 1; \
+		fi; \
+	done
 
 test:
 	$(GO) test ./...
@@ -75,10 +88,16 @@ install: $(BIN)
 		unit="$(DESTDIR)$(USERUNITDIR)/$$(basename "$$f" .in)"; \
 		sed 's|@BINDIR@|$(BINDIR)|g' "$$f" > "$$unit" && chmod 644 "$$unit"; \
 	done
+	install -d $(DESTDIR)$(MANDIR)/man1
+	for f in $(MAN); do \
+		page="$(DESTDIR)$(MANDIR)/man1/$$(basename "$$f" .in)"; \
+		sed 's|@BINDIR@|$(BINDIR)|g;s|@VERSION@|$(VERSION)|g' "$$f" > "$$page" && chmod 644 "$$page"; \
+	done
 
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/uxsm
 	for f in $(UNITS); do rm -f "$(DESTDIR)$(USERUNITDIR)/$$(basename "$$f" .in)"; done
+	for f in $(MAN); do rm -f "$(DESTDIR)$(MANDIR)/man1/$$(basename "$$f" .in)"; done
 
 # Pruebas de integración en máquinas virtuales desechables, con los paquetes
 # reales: test/release.sh compila el paquete de cada distribución en una máquina

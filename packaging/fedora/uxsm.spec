@@ -43,6 +43,7 @@ make test
 %{_bindir}/uxsm
 %{_prefix}/lib/systemd/user/uxsm-*
 %{_prefix}/lib/systemd/user/*-uxsm.slice
+%{_mandir}/man1/uxsm.1*
 
 %changelog
 * Thu Sep 17 2026 平生三郎 <heizeisaburou@gmail.com> - 0.0.0-1

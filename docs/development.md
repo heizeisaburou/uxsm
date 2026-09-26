@@ -100,6 +100,13 @@ make hooks
 | `internal/pidwait` | `pidfd`-based waiting for external processes. |
 | `internal/x11` | Direct X11 communication used to detect the window manager. |
 | `data/systemd/user` | Installed systemd user-unit templates. |
+| `data/man` | The manual page, written as `uxsm.1.in`. |
+
+## The manual page
+
+`data/man/uxsm.1.in` is the source of `uxsm.1`. `make install` writes it to `$(MANDIR)/man1`, filling in `@VERSION@` and `@BINDIR@`, the same way the unit templates are filled in; the Arch and Debian packages get it from that, and the Fedora, openSUSE and Nix recipes list it themselves.
+
+`make check` lints it with `groff -man -z -ww`. groff exits 0 even when it warns, so the check fails on anything written to stderr, which is what catches an unknown macro or a section that was left open. The integration suite checks the other half: `test/integration/run.sh` fails if the installed package does not ship `man/man1/uxsm.1`, whatever compression the distribution puts on it.
 | `test` | Integration scripts, VM orchestration, packages, and distro session data. |
 | `packaging` | Native package recipes exercised by release tests. |
 
