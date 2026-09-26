@@ -193,14 +193,22 @@ Es una lista que viene dentro de uxsm, con 38 sesiones de escritorio y de gestor
 
 **Quién manda.** Lo que trae la entrada original, siempre; la tabla sólo aporta lo que falta. Y por encima de las dos, lo que se pida en la línea de órdenes: `-N` el nombre, `-C` el comentario, `-D` los nombres de escritorio.
 
-**Cuándo no se usa.** Con `-e`, uxsm usa sólo los nombres de `-D` y descarta los demás, los de la entrada y los de la tabla:
+**Cuándo no se usa.** Con `-e`, los nombres de escritorio son sólo los de `-D`: se descartan los de la entrada y los de la tabla. Pero si eso tirara algún nombre conocido, uxsm no obedece callando, dice cuál y para:
 
 ```sh
-uxsm entry -e -D MiWM bspwm          # los nombres son exactamente MiWM
-uxsm entry --exec -- mywm --flag     # sin entrada y sin tabla: el comando que se le da
+uxsm entry -e -D MiWM bspwm                 # falla: tiraría el nombre conocido, bspwm
+uxsm entry -e -D bspwm:MiWM bspwm           # bien: el conocido va en -D, y se añade MiWM
+uxsm entry -e -D MiWM -force-names bspwm    # bien: tirarlo es lo que se quiere, y se insiste
+uxsm entry --exec -- mywm --flag            # ni entrada ni tabla: sólo el comando que se da
 ```
 
-`-e` se niega a tirar por la borda unos nombres conocidos sin que se le insista, porque casi siempre es un error: para eso está `-force-names`. Y `--exec -- comando` es el camino de quien no quiere nada de esto: genera la entrada a partir del comando y ya está.
+```
+uxsm: bspwm.desktop: -e would drop desktop names that are known: bspwm; add them to -D, or use --force-names to drop them anyway
+```
+
+El aviso no es celo: esos nombres son los que acaban en `XDG_CURRENT_DESKTOP`, y tirar el propio del escritorio deja fuera las entradas de autostart con `OnlyShowIn=bspwm`, los portales y todo lo que se configura por escritorio. Cuando eso es justo lo que se busca ―una sesión que quiere pasar por otra cosa―, `-force-names` lo hace sin preguntar.
+
+Y `--exec -- comando` es el camino de quien no quiere nada de esto: genera la entrada a partir del comando y ya está.
 
 Lo que la tabla nunca hace es inventar. Si una sesión no está en ella, o no tiene un comando que valga en todas las distribuciones, `uxsm entry --exec <nombre>` y `--plain <nombre>` lo dicen y no escriben nada:
 
