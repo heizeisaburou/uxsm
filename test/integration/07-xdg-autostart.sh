@@ -101,8 +101,9 @@ stop_session
 
 # Y esa opción la pone el generador de entradas, apoyándose en la tabla: la de
 # un escritorio que lanza su propio autostart la lleva, y la de un gestor de
-# ventanas, no.
-out=$(uxsm entry --exec xfce) || fail "uxsm entry --exec xfce failed: $out"
+# ventanas, no. Xfce no está instalado en estas máquinas, así que su entrada sale
+# de la tabla, que es lo que hay que pedir con --from-table.
+out=$(uxsm entry --exec --from-table xfce) || fail "uxsm entry --exec --from-table xfce failed: $out"
 case $out in
 *"Exec=uxsm start --no-autostart"*) ok "the generated entry of a desktop carries --no-autostart" ;;
 *) fail "the generated entry of xfce says: $out" ;;

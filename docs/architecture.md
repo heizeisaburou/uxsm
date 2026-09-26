@@ -173,10 +173,10 @@ Al cerrar, uxsm borra las variables creadas para la sesión, restaura todos los 
 `uxsm entry` crea tres tipos de entrada:
 
 ```sh
-uxsm entry bspwm                    # bspwm-uxsm.desktop → bspwm.desktop
-uxsm entry --exec bspwm             # bspwm-uxsm.desktop → comando bspwm
-uxsm entry --plain bspwm            # bspwm.desktop sin uxsm
-uxsm entry --exec -- mywm --flag    # variante uxsm para un comando explícito
+uxsm entry bspwm                       # bspwm-uxsm.desktop → bspwm.desktop
+uxsm entry --exec bspwm                # bspwm-uxsm.desktop → comando de bspwm.desktop
+uxsm entry --plain --from-table bspwm  # bspwm.desktop sin uxsm, de la tabla
+uxsm entry --exec -- mywm --flag       # variante uxsm para un comando explícito
 ```
 
 ![Generación de entradas](flows/session-entries.svg)
@@ -193,16 +193,24 @@ Es una lista que viene dentro de uxsm, con 38 sesiones de escritorio y de gestor
 
 **Quién manda.** Lo que trae la entrada original, siempre; la tabla sólo aporta lo que falta. Y por encima de las dos, lo que se pida en la línea de órdenes: `-N` el nombre, `-C` el comentario, `-D` los nombres de escritorio.
 
-**Usarla o no, dicho a propósito.** De serie la tabla completa lo que falta, y hay una opción para cada una de las otras dos posturas:
+**De dónde sale la entrada se dice siempre.** Son tres fuentes, y ninguna se elige a escondidas:
+
+```sh
+uxsm entry bspwm                            # de la entrada instalada, bspwm.desktop
+uxsm entry --exec --from-table bspwm        # de la tabla: su comando, sus nombres, su descripción
+uxsm entry --plain --from-table bspwm       # igual, pero la entrada normal, sin uxsm
+uxsm entry --exec -- mywm --flag            # de un comando, sin mirar nada más
+```
+
+`--from-table` es la forma de generar la entrada de un escritorio que la máquina no trae: la tabla pone el comando, el nombre, el comentario y los `DesktopNames=`, y no se mira lo que haya instalado. Sin `--from-table`, `uxsm entry --exec bspwm` necesita que `bspwm.desktop` exista, y si no existe lo dice y enseña la orden con `--from-table`; nunca cambia de fuente por su cuenta. La entrada normal, la de `--plain`, no puede salir de una instalada ―si ya estuviera, no habría nada que generar―, así que pide `--from-table` o un comando.
+
+**Y rellenar huecos con ella, también.** Ésa es la otra cosa que hace la tabla, y es independiente de la fuente: cuando la entrada instalada o el comando no dicen los `DesktopNames=`, el nombre o el comentario, los pone la tabla. Con `--no-table` no los pone:
 
 ```sh
 uxsm entry --no-table bspwm            # la entrada dice lo que dice, y nada más
-uxsm entry --table --exec bspwm        # todo de la tabla, aunque haya una entrada instalada
-uxsm entry --plain bspwm               # la entrada normal, que sale sólo de la tabla
-uxsm entry --exec -- mywm --flag       # ni entrada ni tabla: el comando que se da
 ```
 
-`--no-table` sirve para una máquina en la que la entrada instalada es la verdad y la tabla no tiene por qué añadir nada; si con eso no queda ningún nombre de escritorio, uxsm lo dice y pide `-D` en vez de inventarlo. `--table` es lo contrario: genera la entrada con el nombre, el comentario, los `DesktopNames=` y el comando que uxsm conoce, sin mirar lo que haya instalado, que es también la forma de generar una entrada de un escritorio cuya entrada no está en la máquina. Las combinaciones que se contradicen ―`--table` con `--no-table`, `--table` con un comando propio, `--plain` con `--no-table`― se rechazan diciendo por qué.
+Vale para una máquina donde la entrada instalada es la verdad y no se quiere que uxsm añada nada. Si así no queda ningún nombre de escritorio, uxsm lo dice y pide `-D`, en vez de inventarlo. Y las combinaciones que se contradicen ―`--from-table` con `--no-table`, `--from-table` con un comando propio― se rechazan explicando por qué.
 
 **Los nombres de escritorio.** Con `-e`, los nombres son sólo los de `-D`: se descartan los de la entrada y los de la tabla, igual que en `uxsm start`.
 
@@ -212,7 +220,7 @@ uxsm entry -e -D MiWM bspwm            # DesktopNames=MiWM, y nada más
 
 Conviene saber lo que se tira: esos nombres son los que acaban en `XDG_CURRENT_DESKTOP`, así que dejar fuera el propio del escritorio deja fuera también las entradas de autostart con `OnlyShowIn=bspwm`, los portales y todo lo que se configura por escritorio. `uxsm entry` sin `-i` enseña la entrada antes de escribirla, que es donde se ve.
 
-Lo que la tabla nunca hace es inventar. Si una sesión no está en ella, o no tiene un comando que valga en todas las distribuciones, `uxsm entry --exec <nombre>` y `--plain <nombre>` lo dicen y no escriben nada:
+Lo que la tabla nunca hace es inventar. Si una sesión no está en ella, o no tiene un comando que valga en todas las distribuciones, `--from-table` lo dice y no escribe nada:
 
 ```
 uxsm: notawm: not in uxsm's table of known desktops, or no command known for it
