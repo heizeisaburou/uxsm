@@ -96,10 +96,25 @@ case $err in
 *"--plain --from-table"*) ok "and --plain asks where the entry comes from" ;;
 *) fail "uxsm entry --plain bspwm: $err" ;;
 esac
-out=$(sudo uxsm entry --no-table -f bspwm) || fail "uxsm entry --no-table failed: $out"
+# Y lo que la tabla rellena se ve con un comando, que es igual en todas las
+# distribuciones: bspwm está en la tabla, así que de ella salen sus nombres.
+out=$(sudo uxsm entry --exec -f -- bspwm) || fail "uxsm entry --exec -- bspwm failed: $out"
 case $out in
-*"Exec=uxsm start bspwm.desktop"*) ok "--no-table generates the entry without the table" ;;
-*) fail "uxsm entry --no-table bspwm: $out" ;;
+*"Exec=uxsm start -D bspwm -- bspwm"*) ok "the table fills in the desktop names a command does not have" ;;
+*) fail "uxsm entry --exec -- bspwm: $out" ;;
+esac
+if err=$(sudo uxsm entry --no-table --exec -f -- bspwm 2>&1); then
+    fail "--no-table took the desktop names from the table anyway"
+fi
+case $err in
+*"no desktop names known"*) ok "--no-table does not fill them in, and asks for -D" ;;
+*) fail "uxsm entry --no-table --exec -- bspwm: $err" ;;
+esac
+out=$(sudo uxsm entry --no-table -D MiWM --exec -f -- bspwm) ||
+    fail "uxsm entry --no-table -D MiWM failed: $out"
+case $out in
+*"Exec=uxsm start -D MiWM -- bspwm"*) ok "and with -D the names are exactly the ones given" ;;
+*) fail "uxsm entry --no-table -D MiWM --exec -- bspwm: $out" ;;
 esac
 if err=$(sudo uxsm entry --no-table --from-table --exec -f bspwm 2>&1); then
     fail "--from-table with --no-table was accepted"
