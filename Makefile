@@ -37,7 +37,7 @@ build: $(BIN)
 # Un objetivo de fichero, para que `make install` justo después de `make build`
 # no vuelva a compilar con otras opciones. vet va antes: una Go local más nueva
 # compila sin avisar funciones de la biblioteca estándar posteriores a go.mod, y
-# sólo vet las detecta (docs/go-version.md).
+# sólo vet las detecta (docs/development.md).
 $(BIN): $(SRC)
 	$(GO) vet ./...
 	$(GO) build -ldflags "-X main.version=$(VERSION) $(GO_LDFLAGS)" -o $(BIN) ./cmd/uxsm

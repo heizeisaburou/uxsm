@@ -21,8 +21,9 @@ la entrada de sesión que elige el display manager:
 - `uxsm check` y `uxsm setup sessions-dir`: comprueban y arreglan que el display manager lea los
   directorios locales de sesiones, el de X11 y el de Wayland.
 
-Arquitectura, interacción con systemd y pruebas: [`docs/architecture.md`](docs/architecture.md).
+Qué hace uxsm en la máquina ―unidades, entorno, autostart, display managers―: [`docs/architecture.md`](docs/architecture.md).
 Qué hacer cuando algo no va: [`docs/troubleshooting.md`](docs/troubleshooting.md).
+Compilar, probar y empaquetar: [`docs/development.md`](docs/development.md).
 
 ## Estructura
 
@@ -30,7 +31,7 @@ Qué hacer cuando algo no va: [`docs/troubleshooting.md`](docs/troubleshooting.m
 cmd/uxsm/            el binario: reparto de subórdenes y cada suborden
 internal/            el código de uxsm, por paquetes
 data/                lo que se instala además del binario: unidades de systemd
-docs/                documentación técnica
+docs/                documentación: qué hace, qué hacer cuando falla, y cómo se toca
 test/                compilación de los paquetes, pruebas de integración y recogida
                      de las entradas de sesión de cada distribución, en máquinas
                      virtuales; test/nixos, la máquina NixOS del flake
@@ -51,7 +52,7 @@ El código que no sea el `main` irá en `internal/`: uxsm es un programa, no una
 Hace falta Go 1.22 o posterior, la de Ubuntu 24.04 LTS. Sólo biblioteca estándar, así que los
 paquetes compilan sin red.
 
-`make build` pasa `go vet` antes de compilar ―[`docs/go-version.md`](docs/go-version.md)―.
+`make build` pasa `go vet` antes de compilar ―[`docs/development.md`](docs/development.md#versión-de-go)―.
 
 ```sh
 make
@@ -80,7 +81,7 @@ instalar se añade en el `Makefile`, en la lista de ficheros de cada paquete y e
 `make test-vm` compila los paquetes de cada distribución dentro de máquinas virtuales, con las
 recetas de `packaging/`, y ejecuta las pruebas de integración con ellos instalados.
 `make release` lo hace en todas las distribuciones y deja el resultado en `releases/latest`
-―[`docs/architecture.md`](docs/architecture.md#compilación-y-pruebas)―.
+―[`docs/development.md`](docs/development.md#compilación-y-pruebas)―.
 
 Todos descargan el tarball de la etiqueta `v<versión>` de GitHub. Al publicar una versión hay
 que actualizar la suma del tarball donde la haya: `hash` en el de Nix, `sha256sums` en el

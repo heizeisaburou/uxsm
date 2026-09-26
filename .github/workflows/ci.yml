@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       # La Go de go.mod, que es la mínima que uxsm admite: así se compila aquí
-      # con la misma que en Ubuntu 24.04 (docs/go-version.md).
+      # con la misma que en Ubuntu 24.04 (docs/development.md).
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
