@@ -46,6 +46,21 @@ sudo make install PREFIX=/usr
 `DESTDIR`, `PREFIX`, and `BINDIR` have their usual meanings. `VERSION` defaults to `git describe`;
 pass it explicitly when building outside a Git checkout.
 
+### Without a package manager
+
+Every release also carries a binary tarball, `uxsm-<version>-linux-<arch>.tar.gz`, for machines with
+no uxsm package. The binary in it is static, so it needs neither Go nor a matching glibc:
+
+```sh
+tar xzf uxsm-<version>-linux-x86_64.tar.gz
+cd uxsm-<version>-linux-x86_64
+sudo ./install.sh --prefix /usr
+```
+
+It installs the binary, the systemd user units and the manual page, the same files a package
+installs. `--prefix` defaults to `/usr/local`, `--destdir` installs under a root, and `--uninstall`
+removes what it installed. Checksums for every file in a release are in its `SHA256SUMS`.
+
 ## Repository layout
 
 ```text
@@ -84,8 +99,14 @@ the `Makefile`, every package file list, and the Nix `postInstall` phase.
 runs the integration suite. `make release` does this for all supported distributions and writes the
 artifacts to `releases/latest`. See [Build and test](docs/development.md#build-and-test).
 
-Packages download GitHub's `v<version>` tag archive. Before publishing a release, update every stored
-archive checksum, including `hash` in the Nix package and `sha256sums` in the PKGBUILD.
+`make publish TAG=v0.1.0` publishes a version: it checks that the tree is clean and that neither the
+tag nor a release of that name exists yet, creates the tag, builds and tests every distribution with
+it in place, and uploads the packages, both tarballs and `SHA256SUMS` to a GitHub release. Add
+`DRY_RUN=1` to see what it would do. See [Publishing a release](docs/development.md#publishing-a-release).
+
+Packages download GitHub's `v<version>` tag archive, whose checksum only exists once the tag does.
+`test/publish.sh --hashes v0.1.0` fetches it and writes it into the Arch and Nix recipes, which is
+what the AUR and nixpkgs read.
 
 ## License
 
