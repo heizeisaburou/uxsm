@@ -104,7 +104,7 @@ uxsm lo lanza siempre, como uwsm: de una sesión gestionada por systemd se esper
 uxsm start --no-autostart bspwm.desktop
 ```
 
-Quien se apoya en la tabla de escritorios conocidos es `uxsm entry`. La tabla dice, de cada sesión conocida, si lanza ella misma sus entradas de autostart. Es una pregunta sobre lo que hace, no sobre lo que es: la lanzan Xfce, GNOME, Plasma o MATE, por su gestor de sesión, y no la lanzan ni un gestor de ventanas ni una sesión con su propio fichero de arranque, como `icewm-session` con `~/.icewm/startup`, que es cosa aparte y no toca estas entradas. Cuando la tabla dice que sí, la opción va en el `Exec=` de la entrada generada:
+Quien decide poner esa opción en una entrada es `uxsm entry`, apoyándose en [la tabla de escritorios conocidos](#la-tabla-de-escritorios-conocidos), que dice de cada sesión si lanza ella misma sus entradas de autostart. Es una pregunta sobre lo que hace, no sobre lo que es: la lanzan Xfce, GNOME, Plasma o MATE, por su gestor de sesión, y no la lanzan ni un gestor de ventanas ni una sesión con su propio fichero de arranque, como `icewm-session` con `~/.icewm/startup`, que es cosa aparte y no toca estas entradas. Cuando la tabla dice que sí, la opción va en el `Exec=` de la entrada generada:
 
 ```ini
 Exec=uxsm start --no-autostart -D XFCE -- startxfce4
@@ -134,11 +134,11 @@ Y `-p Clave=Valor`, que también es de uwsm ―misma letra y mismo sentido―, p
 
 Los slices son tres, uno por clase de aplicación, y llevan `PartOf=graphical-session.target`, que es lo que las para con la sesión:
 
-| Slice | Para qué |
-| --- | --- |
-| `app-uxsm.slice` | Las aplicaciones, lo de serie. |
+| Slice                   | Para qué                                        |
+| ----------------------- | ----------------------------------------------- |
+| `app-uxsm.slice`        | Las aplicaciones, lo de serie.                  |
 | `background-uxsm.slice` | Lo que corre detrás, como un método de entrada. |
-| `session-uxsm.slice` | Lo que forma parte de la sesión, como un panel. |
+| `session-uxsm.slice`    | Lo que forma parte de la sesión, como un panel. |
 
 El guion es jerarquía en systemd, así que cuelgan de los `app.slice`, `background.slice` y `session.slice` estándar. Llevan `uxsm` en el nombre porque los instala el paquete y dos paquetes no pueden traer el mismo fichero: los de uwsm, que hace esto mismo en Wayland, se llaman `app-graphical.slice` y compañía. Como dos sesiones gráficas de un mismo usuario no conviven, compartir los nombres no aportaba nada.
 
@@ -168,6 +168,8 @@ Al cerrar, uxsm borra las variables creadas para la sesión, restaura todos los 
 
 ## Entradas de sesión y display managers
 
+### Generar la entrada
+
 `uxsm entry` crea tres tipos de entrada:
 
 ```sh
@@ -181,7 +183,34 @@ uxsm entry --exec -- mywm --flag    # variante uxsm para un comando explícito
 
 [Fuente DOT](flows/session-entries.dot).
 
-Una fuente puede ser una entrada existente, un comando o la tabla de escritorios conocidos. La tabla completa nombres, comentarios, `DesktopNames` y, cuando es portable entre distribuciones, el comando; y dice también qué sesiones lanzan su propio autostart XDG, para escribir `--no-autostart` en su `Exec=`. El generador rechaza entradas que ya usan uxsm, sesiones que ya arrancan el escritorio mediante `systemd --user` y metasesiones que sólo ejecutan el script personal del usuario.
+Una fuente puede ser una entrada existente, un comando o la tabla de escritorios conocidos. El generador rechaza entradas que ya usan uxsm, sesiones que ya arrancan el escritorio mediante `systemd --user` y metasesiones que sólo ejecutan el script personal del usuario.
+
+### La tabla de escritorios conocidos
+
+Es una lista que viene dentro de uxsm, con 38 sesiones de escritorio y de gestores de ventanas ―los de los paquetes de Arch, Debian 13, Ubuntu 24.04 y Fedora 43―. De cada una guarda cuatro cosas: el nombre y el comentario que se ven en la pantalla de inicio, sus `DesktopNames=`, el comando que la arranca ―sólo si es el mismo en todas las distribuciones― y si lanza ella misma las entradas de autostart XDG, que son 18 de las 38.
+
+**Para qué se usa.** Para rellenar lo que la entrada original no dice. Muchas entradas no traen `DesktopNames=` en ninguna distribución, o lo traen en unas y no en otras ―`bspwm` sí en Arch y en Debian, no en Ubuntu ni en Fedora―, y sin esos nombres el escritorio recibe un `XDG_CURRENT_DESKTOP` distinto del que esperan sus propias aplicaciones. Y para saber si la entrada generada tiene que llevar `--no-autostart`, que es lo que evita que un escritorio con gestor de sesión lance cada entrada de autostart dos veces.
+
+**Quién manda.** Lo que trae la entrada original, siempre; la tabla sólo aporta lo que falta. Y por encima de las dos, lo que se pida en la línea de órdenes: `-N` el nombre, `-C` el comentario, `-D` los nombres de escritorio.
+
+**Cuándo no se usa.** Con `-e`, uxsm usa sólo los nombres de `-D` y descarta los demás, los de la entrada y los de la tabla:
+
+```sh
+uxsm entry -e -D MiWM bspwm          # los nombres son exactamente MiWM
+uxsm entry --exec -- mywm --flag     # sin entrada y sin tabla: el comando que se le da
+```
+
+`-e` se niega a tirar por la borda unos nombres conocidos sin que se le insista, porque casi siempre es un error: para eso está `-force-names`. Y `--exec -- comando` es el camino de quien no quiere nada de esto: genera la entrada a partir del comando y ya está.
+
+Lo que la tabla nunca hace es inventar. Si una sesión no está en ella, o no tiene un comando que valga en todas las distribuciones, `uxsm entry --exec <nombre>` y `--plain <nombre>` lo dicen y no escriben nada:
+
+```
+uxsm: notawm: not in uxsm's table of known desktops, or no command known for it
+```
+
+La forma normal, `uxsm entry <nombre>`, no necesita la tabla para el comando: la entrada generada arranca la entrada original con `uxsm start <nombre>.desktop`, y es esa entrada la que lleva el comando.
+
+### Instalarla y que el display manager la lea
 
 Sin `-i`, la orden es una previsualización. Con `-i` escribe en `/usr/local/share/xsessions`; hace falta ejecutarla con permisos de root. No sobrescribe ni oculta otra entrada con el mismo ID sin `-f`.
 
