@@ -156,6 +156,13 @@ func SetEnvironment(vars ...string) error {
 	return cmd.Run()
 }
 
+// DaemonReload le pide al gestor que vuelva a leer sus unidades. Hace falta
+// después de escribir o borrar un añadido en el directorio de unidades de
+// runtime: los añadidos se leen al cargar la unidad, no al arrancarla.
+func DaemonReload() error {
+	return systemctl("daemon-reload")
+}
+
 // LiveUnits devuelve las unidades que coinciden con patterns y que aún no han
 // terminado: están activas, arrancando, recargando o apagándose.
 //

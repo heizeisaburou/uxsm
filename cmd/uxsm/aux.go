@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/heizeisaburou/uxsm/internal/autostart"
 	"github.com/heizeisaburou/uxsm/internal/desktopentry"
 	"github.com/heizeisaburou/uxsm/internal/pidwait"
 	"github.com/heizeisaburou/uxsm/internal/session"
@@ -252,6 +253,14 @@ func runAuxAutostart(args []string) error {
 		}
 		return err
 	}
+	// El añadido lleva las entradas a app-uxsm.slice, y el gestor sólo lo lee si
+	// recarga antes de cargar las unidades.
+	if err := autostart.Write(); err != nil {
+		return fmt.Errorf("writing the autostart drop-in: %w", err)
+	}
+	if err := systemd.DaemonReload(); err != nil {
+		return err
+	}
 	fmt.Println("Starting the XDG autostart entries of the session.")
 	return systemd.StartNoBlock(systemd.AutostartTarget(fs.Arg(0)))
 }
@@ -286,5 +295,14 @@ func runAuxCleanupEnv(args []string) error {
 		fs.Usage()
 		return errUsage
 	}
-	return sessionenv.Cleanup()
+	err := sessionenv.Cleanup()
+	// El añadido del autostart se borra siempre, también si la sesión no llegó a
+	// escribirlo, y aunque la limpieza del entorno haya fallado.
+	if rerr := autostart.Remove(); rerr != nil && err == nil {
+		err = fmt.Errorf("removing the autostart drop-in: %w", rerr)
+	}
+	if err == nil {
+		err = systemd.DaemonReload()
+	}
+	return err
 }

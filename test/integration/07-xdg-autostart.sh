@@ -13,6 +13,7 @@ log=$HOME/uxsm-it-autostart.log
 entry=$HOME/.config/autostart/uxsm-it-probe.desktop
 unit="app-$(systemd-escape uxsm-it-probe)@autostart.service"
 target=uxsm-autostart@bspwm.desktop.target
+dropin=$XDG_RUNTIME_DIR/systemd/user/app-@autostart.service.d/uxsm-tweaks.conf
 
 # diagnose enseña el estado de las unidades del autostart cuando algo no sale,
 # que si no hay que ir a buscarlo a la máquina.
@@ -24,7 +25,7 @@ diagnose() {
 cleanup() {
     uxsm stop 2>/dev/null || true
     systemctl --user stop uxsm-it-session.service uxsm-it-xvfb-5.service 2>/dev/null || true
-    rm -f "$probe" "$entry" "$log"
+    rm -f "$probe" "$entry" "$log" "$dropin"
     systemctl --user daemon-reload
 }
 trap cleanup EXIT
@@ -67,12 +68,23 @@ sleep 2
 [ "$(runs)" = 1 ] || fail "the autostart entry ran $(runs) times, expected once"
 ok "and its entry runs exactly once"
 
+# Y cae en el slice de uxsm, no en el app.slice donde la deja el generador: eso
+# lo hace el añadido que uxsm escribe al arrancar el autostart.
+slice=$(systemctl --user show -p Slice --value "$unit")
+[ "$slice" = app-uxsm.slice ] || fail "the autostart entry is in $slice, not app-uxsm.slice"
+ok "in the applications slice of the session, not in app.slice"
+
 grep -q bspwm "$log" || fail "the autostart entry did not get XDG_CURRENT_DESKTOP=bspwm: $(cat "$log")"
 ok "with XDG_CURRENT_DESKTOP, which is what filters OnlyShowIn="
 
 stop_session
 wait_stopped 15 "$unit" xdg-desktop-autostart.target || fail "the autostart entry outlived the session"
 ok "and it stops with the session"
+
+# El añadido es de la sesión, no del usuario: al cerrarla no queda nada que
+# cambie el slice de las sesiones que vengan detrás, las de uwsm entre ellas.
+[ ! -e "$dropin" ] || fail "the autostart drop-in outlived the session: $(cat "$dropin")"
+ok "and the drop-in it wrote is gone"
 
 # Con --no-autostart no lo lanza, que es lo que pide un escritorio que lanza el
 # suyo.
