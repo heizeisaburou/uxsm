@@ -15,6 +15,14 @@
 # Please submit bugfixes or comments via https://github.com/heizeisaburou/uxsm/issues
 #
 
+# This spec is also what the OBS project builds on Fedora, so what Fedora needs
+# and openSUSE does not goes behind %if. Here: the Makefile builds with
+# -trimpath, which leaves no source paths in the DWARF data, so find-debuginfo
+# has nothing to put in -debugsource and fails on the empty package. rpm checks
+# whether the macro is defined, not its value, so it has to be undefined.
+%if !0%{?suse_version}
+%undefine _debugsource_packages
+%endif
 
 Name:           uxsm
 Version:        0.1.0
@@ -25,7 +33,14 @@ Group:          System/X11/Utilities
 URL:            https://github.com/heizeisaburou/uxsm
 Source0:        %{url}/archive/refs/tags/v%{version}/%{name}-%{version}.tar.gz
 # openSUSE's go packages provide golang(API); any of them >= 1.22 will do.
+# Fedora names it golang and has no such provide, and this spec is what the OBS
+# project builds for both.
+%if 0%{?suse_version}
 BuildRequires:  golang(API) >= 1.22
+%else
+BuildRequires:  gcc
+BuildRequires:  golang >= 1.22
+%endif
 BuildRequires:  make
 Requires:       systemd
 
@@ -38,7 +53,13 @@ graphical-session.target and cleans up when the session ends.
 %autosetup -n %{name}-%{version}
 
 %build
+%if 0%{?suse_version}
 %make_build build VERSION=%{version}
+%else
+# Fedora's debuginfo extraction needs a GNU build ID in the binary; gobuildid
+# derives it from Go's own build ID, so the build stays reproducible.
+%make_build build VERSION=%{version} GO_LDFLAGS="-linkmode=external -B gobuildid"
+%endif
 
 %check
 make test
