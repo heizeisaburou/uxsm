@@ -17,7 +17,7 @@ buildGoModule (finalAttrs: {
     owner = "heizeisaburou";
     repo = "uxsm";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-PHODySJV5Z2dRs6ImQBO6IIgMe4XKNgrv6Yj8q3Dm7I=";
+    hash = "sha256-nCJ/JOYM550Uxxp46P+0vafRhNWyrIYsatsQhDezr/4=";
   };
 
   # Standard library only: no vendor directory to hash.

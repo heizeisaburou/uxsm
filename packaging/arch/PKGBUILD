@@ -13,7 +13,7 @@ license=('Apache-2.0')
 depends=('glibc' 'systemd')
 makedepends=('go>=1.22')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('3c7383c92255e59d9d46ce8899004ee8822031ee1728d82bbfa623f2adc39bb2')
+sha256sums=('9c227f24e60ce79d14c71a78e8ffb4bda7d184d5b2ac862c6adb108437b3affe')
 
 build() {
   cd "$pkgname-$pkgver"
