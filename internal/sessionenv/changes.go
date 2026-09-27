@@ -5,8 +5,8 @@ import (
 	"strings"
 )
 
-// envMap convierte asignaciones "NOMBRE=valor" en un mapa. Si un nombre se
-// repite, gana la última.
+// envMap converts "NAME=value" assignments into a map. The last value wins
+// when a name is repeated.
 func envMap(env []string) map[string]string {
 	m := make(map[string]string, len(env))
 	for _, kv := range env {
@@ -18,8 +18,8 @@ func envMap(env []string) map[string]string {
 	return m
 }
 
-// assignments convierte un mapa en asignaciones "NOMBRE=valor", ordenadas por
-// nombre para que el resultado no dependa del orden del mapa.
+// assignments converts a map into "NAME=value" assignments sorted by name so
+// the result does not depend on map iteration order.
 func assignments(m map[string]string) []string {
 	out := make([]string, 0, len(m))
 	for name, value := range m {
@@ -38,24 +38,24 @@ func sortedNames(s set) []string {
 	return out
 }
 
-// changes es lo que la preparación tiene que hacer en el gestor.
+// changes describes what preparation must do in the manager.
 type changes struct {
-	// set son las variables que se suben, "NOMBRE=valor".
+	// set contains variables to import in "NAME=value" form.
 	set []string
-	// unset son las que se borran.
+	// unset contains variables to remove.
 	unset []string
-	// cleanup son los nombres que habrá que borrar al cerrar la sesión.
+	// cleanup contains names to remove when the session ends.
 	cleanup []string
 }
 
-// computeChanges compara la foto del gestor (pre) con el entorno que ha dejado
-// el cargador (post), con el criterio de prepare_env de uwsm:
+// computeChanges compares the manager snapshot (pre) with the environment left
+// by the loader (post), following uwsm's prepare_env rules:
 //
-//   - Se sube lo que cambia o es nuevo en post, más las de alwaysExport que
-//     estén en post, menos las de neverExport y alwaysUnset.
-//   - Se borra lo que estaba en el gestor y ya no está en post, más las de
-//     alwaysUnset, siempre que el gestor las tenga.
-//   - Al cerrar se borrará lo que se sube, menos las de neverCleanup.
+//   - Import values changed or added in post, plus alwaysExport values present
+//     in post, excluding neverExport and alwaysUnset.
+//   - Remove values present in the manager but absent from post, plus
+//     alwaysUnset values present in the manager.
+//   - On shutdown, remove imported values except neverCleanup.
 func computeChanges(pre, post []string) changes {
 	preMap, postMap := envMap(pre), envMap(post)
 
@@ -91,10 +91,10 @@ func computeChanges(pre, post []string) changes {
 	return changes{set: assignments(toSet), unset: sortedNames(toUnset), cleanup: sortedNames(cleanup)}
 }
 
-// cleanupNames decide qué borrar al cerrar la sesión, con el criterio de
-// cleanup_env de uwsm: lo que apuntó la preparación y las de alwaysCleanup,
-// menos las de neverCleanup, que el gestor tenga ahora y que no estuvieran en la
-// foto. Lo que estaba en la foto se restaura después con su valor de entonces.
+// cleanupNames decides what to remove when the session ends, following uwsm's
+// cleanup_env rules: names recorded during preparation plus alwaysCleanup,
+// excluding neverCleanup, that are currently in the manager and were absent
+// from the snapshot. Snapshot values are restored afterwards to their old values.
 func cleanupNames(pre []string, now []string, marked []string) []string {
 	preNames, nowNames := envMap(pre), envMap(now)
 	candidates := newSet(marked...).union(alwaysCleanup)

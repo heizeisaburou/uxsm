@@ -1,12 +1,11 @@
 #!/bin/sh
-# Recoge las entradas de sesión X11 que trae cada paquete de la distribución de
-# la máquina, sin instalar ninguno: busca en los índices de ficheros qué
-# paquetes tienen algo en /usr/share/xsessions, los descarga sin dependencias y
-# extrae sólo esas entradas. Lo ejecuta test/xsessions.sh dentro de una máquina
-# de test/vm.sh.
+# Collect X11 session entries shipped by packages for the VM's distribution
+# without installing them: search file indexes for packages containing files in
+# /usr/share/xsessions, download them without dependencies, and extract only
+# those entries. test/xsessions.sh runs this inside a test/vm.sh machine.
 #
-# Deja en ~/uxsm/out las entradas tal cual, y en ~/uxsm/out/index una línea por
-# entrada: «fichero paquete versión».
+# Leave entries unchanged in ~/uxsm/out and one "file package version" line per
+# entry in the ~/uxsm/out/index file.
 
 set -eu
 out=$HOME/uxsm/out
@@ -16,10 +15,10 @@ cd "$HOME/dl"
 if command -v pacman >/dev/null 2>&1; then
     sudo pacman -Sy --noconfirm >/dev/null
     sudo pacman -Fy --noconfirm >/dev/null
-    # «usr/share/xsessions/i3.desktop is owned by extra/i3-wm 4.25.1-1»
+    # "usr/share/xsessions/i3.desktop is owned by extra/i3-wm 4.25.1-1"
     pacman -Fx '^usr/share/xsessions/.+\.desktop$' |
         sed -E 's|^usr/share/xsessions/(\S+) is owned by [^/]+/(\S+) (\S+)$|\1 \2 \3|' >"$out/index"
-    # -dd: sin dependencias; los paquetes se quedan en la caché de pacman.
+    # -dd: no dependencies; packages remain in pacman's cache.
     cut -d' ' -f2 "$out/index" | sort -u | xargs sudo pacman -Sddw --noconfirm >/dev/null
     for p in /var/cache/pacman/pkg/*.pkg.tar.zst; do
         bsdtar -xf "$p" -C "$HOME/dl" 'usr/share/xsessions/*' 2>/dev/null || true
@@ -30,7 +29,7 @@ elif command -v apt-get >/dev/null 2>&1; then
     apt update
     apt install apt-file
     sudo apt-file update >/dev/null
-    # «i3-wm: /usr/share/xsessions/i3.desktop»
+    # "i3-wm: /usr/share/xsessions/i3.desktop"
     apt-file search -x '^/usr/share/xsessions/.+\.desktop$' |
         sed -E 's|^(\S+): /usr/share/xsessions/(\S+)$|\2 \1|' |
         while read -r f p; do
@@ -42,8 +41,8 @@ elif command -v apt-get >/dev/null 2>&1; then
     done
 
 elif command -v dnf >/dev/null 2>&1; then
-    # dnf no carga las listas de ficheros si no se le pide. El índice sale de
-    # los paquetes ya descargados: una consulta por paquete a dnf es muy lenta.
+    # dnf does not load file lists unless requested. Build the index from
+    # downloaded packages because one dnf query per package is very slow.
     dnf -q repoquery --latest-limit 1 --setopt=optional_metadata_types=filelists \
         --qf '%{name}\n' --file '/usr/share/xsessions/*' | sort -u | xargs dnf -q download >/dev/null
     for p in ./*.rpm; do

@@ -1,8 +1,8 @@
 #!/bin/sh
-# Compila el paquete .deb de la distribución de la máquina, Debian o Ubuntu,
-# con packaging/debian y dpkg-buildpackage. Lo ejecuta test/release.sh con
-# ~/uxsm/version y ~/uxsm/uxsm-<versión>.tar.gz ya subidos, y deja el paquete en
-# ~/uxsm/out.
+# Build the VM distribution's .deb package, Debian or Ubuntu, using
+# packaging/debian and dpkg-buildpackage. test/release.sh runs this after
+# uploading ~/uxsm/version and ~/uxsm/uxsm-<version>.tar.gz; the package is left
+# in the ~/uxsm/out directory.
 
 set -eu
 cd "$HOME/uxsm"
@@ -19,15 +19,15 @@ cp "../uxsm-$v.tar.gz" "uxsm_$v.orig.tar.gz"
 tar -xzf "uxsm_$v.orig.tar.gz"
 cd "uxsm-$v"
 cp -r packaging/debian debian
-# La primera línea del changelog es la que da la versión al paquete. La
-# revisión lleva la distribución, -1~ubuntu24.04 o -1~debian13: los paquetes de
-# cada una no se llaman igual, y con ~ el -1 de un paquete oficial va después.
+# The changelog's first line supplies the package version. The revision includes
+# the distribution, -1~ubuntu24.04 or -1~debian13, giving each package a distinct
+# name; ~ also makes an official package's -1 sort later.
 sed -i "1s/([^)]*)/($v-1~$ID$VERSION_ID)/" debian/changelog
 
 echo "== installing build dependencies"
 apt update
 apt install --no-install-recommends build-essential dpkg-dev
-# Las de Build-Depends en debian/control: si falta alguna, falla aquí.
+# Install Build-Depends from debian/control, so a missing dependency fails here.
 apt build-dep ./
 
 echo "== building uxsm $v"

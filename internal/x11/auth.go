@@ -10,21 +10,21 @@ import (
 	"strconv"
 )
 
-// cookieName es el único método de autorización que usan los servidores X de un
-// escritorio normal: un secreto que el display manager escribe en el fichero de
-// autorización del usuario y el cliente le devuelve al conectarse.
+// cookieName is the only authorization method used by X servers for a normal
+// desktop: a secret the display manager writes to the user's authorization file
+// and the client sends back when connecting.
 const cookieName = "MIT-MAGIC-COOKIE-1"
 
-// Familias de direcciones del fichero de autorización. Sólo se distinguen las
-// que puede tener la entrada de un display local.
+// Address families in the authorization file. Only those that may occur in a
+// local display entry are distinguished.
 const (
 	familyInternet = 0
 	familyLocal    = 256
 	familyWild     = 65535
 )
 
-// authEntry es una entrada del fichero de autorización: para qué display de qué
-// máquina vale este secreto.
+// authEntry is an authorization-file entry: the machine and display for which
+// this secret is valid.
 type authEntry struct {
 	family  uint16
 	address string
@@ -33,11 +33,11 @@ type authEntry struct {
 	data    []byte
 }
 
-// authFor busca el secreto con el que conectarse al display d.
+// authFor finds the secret used to connect to display d.
 //
-// Si no hay fichero de autorización, o no hay entrada para este display, se
-// devuelve una autorización vacía: el servidor decidirá si acepta la conexión
-// ―lo hace, por ejemplo, un Xvfb arrancado sin -auth―.
+// If there is no authorization file or no entry for this display, it returns
+// empty authorization and lets the server decide whether to accept the
+// connection, as an Xvfb started without -auth does.
 func authFor(d display) (name, data []byte, err error) {
 	path := os.Getenv("XAUTHORITY")
 	if path == "" {
@@ -68,9 +68,9 @@ func authFor(d display) (name, data []byte, err error) {
 	return []byte(e.name), e.data, nil
 }
 
-// readAuth lee las entradas de un fichero de autorización. Su formato son
-// entradas seguidas, cada una con cinco campos por delante de los cuales va su
-// longitud en dos bytes, y los números van siempre en orden de red.
+// readAuth reads entries from an authorization file. It consists of consecutive
+// entries, each with five fields prefixed by a two-byte length; numbers always
+// use network byte order.
 func readAuth(r io.Reader) ([]authEntry, error) {
 	var entries []authEntry
 	for {
@@ -102,12 +102,11 @@ func readAuth(r io.Reader) ([]authEntry, error) {
 	}
 }
 
-// matchAuth elige la entrada que vale para el display d, o nil si no hay
-// ninguna.
+// matchAuth selects the entry valid for display d, or nil if none applies.
 //
-// Tiene que valer el número del display y la máquina: una entrada sin número
-// vale para cualquiera, y una de familia «wild», para cualquier máquina. Las
-// entradas de un display local llevan el nombre de la máquina.
+// Both display number and machine must match: an entry without a number applies
+// to any display, and a "wild" family entry applies to any machine. Local
+// display entries contain the machine name.
 func matchAuth(entries []authEntry, d display) *authEntry {
 	host, _ := os.Hostname()
 	number := strconv.Itoa(d.number)

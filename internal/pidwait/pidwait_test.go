@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-// TestWaitRunning lanza un proceso que dura 300 ms y comprueba que Wait no
-// vuelve antes de que termine.
+// TestWaitRunning launches a process that lasts 300 ms and verifies that Wait
+// does not return before it exits.
 func TestWaitRunning(t *testing.T) {
 	cmd := exec.Command("sleep", "0.3")
 	if err := cmd.Start(); err != nil {
@@ -24,7 +24,7 @@ func TestWaitRunning(t *testing.T) {
 	}
 }
 
-// TestWaitGone comprueba que un proceso que ya no existe no es un error.
+// TestWaitGone verifies that an already absent process is not an error.
 func TestWaitGone(t *testing.T) {
 	cmd := exec.Command("true")
 	if err := cmd.Run(); err != nil {

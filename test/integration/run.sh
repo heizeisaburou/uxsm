@@ -1,19 +1,19 @@
 #!/bin/sh
-# Punto de entrada de las pruebas de integración. Se ejecuta dentro de una
-# máquina desechable, como un usuario con sudo sin contraseña y una sesión de
-# logind (la del ssh). test/release.sh sube a ~/uxsm los paquetes de uxsm de
-# cada distribución en packages/<distro> y la versión que deben dar en version.
+# Integration-test entry point. It runs inside a disposable VM as a user with
+# passwordless sudo and a logind session (the SSH session). test/release.sh
+# uploads each distribution's uxsm packages under packages/<distro> and the
+# expected output of the version command to the ~/uxsm directory.
 #
-# Instala el paquete de uxsm con el gestor de paquetes, como lo instalaría
-# cualquiera, más las dependencias de las pruebas, y ejecuta cada NN-*.sh por
-# orden. Termina con error si falla alguna.
+# Install the uxsm package through the distribution package manager, as a user
+# would, plus test dependencies, then run each NN-*.sh in order. Exit with an
+# error if any test fails.
 
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 
-# Los de esta distribución, en packages/<distro>; vm.sh dice cuál es. Los globs
-# toman sólo el paquete principal, no los de depuración (uxsm-dbgsym,
-# uxsm-debug, uxsm-debuginfo, uxsm-debugsource), que también se compilan.
+# Packages for this distribution live in packages/<distro>; vm.sh identifies it.
+# Globs select only the main package, not debug packages (uxsm-dbgsym, uxsm-debug,
+# uxsm-debuginfo, uxsm-debugsource), which are built too.
 packages=$HOME/uxsm/packages/$UXSM_VM_DISTRO
 
 if command -v apt-get >/dev/null 2>&1; then
@@ -22,12 +22,12 @@ if command -v apt-get >/dev/null 2>&1; then
     apt update
     apt install xvfb x11-utils bspwm
     echo "== installing uxsm"
-    # apt, no dpkg -i: resuelve las Depends del paquete, y falla si no puede.
+    # Use apt rather than dpkg -i: it resolves package Depends and fails if it cannot.
     apt install "$packages"/uxsm_*.deb
     files=$(dpkg -L uxsm)
 elif command -v pacman >/dev/null 2>&1; then
     echo "== updating the system"
-    # El paquete se compiló contra un sistema al día; éste tiene que estarlo.
+    # The package was built against an updated system, so this one must match.
     sudo pacman -Sy --noconfirm --needed archlinux-keyring >/dev/null
     sudo pacman -Su --noconfirm >/dev/null
     echo "== installing test dependencies"
@@ -47,7 +47,7 @@ elif command -v zypper >/dev/null 2>&1; then
     echo "== installing test dependencies"
     zypper install --no-recommends xorg-x11-server-Xvfb xprop bspwm
     echo "== installing uxsm"
-    # Un paquete compilado aquí no está firmado.
+    # A package built here is unsigned.
     zypper install --allow-unsigned-rpm "$packages"/uxsm-[0-9]*.rpm
     files=$(rpm -ql uxsm)
 else
@@ -59,16 +59,16 @@ for f in $files; do
     [ -d "$f" ] || echo "  $f"
 done
 
-# El manual tiene que venir en el paquete, comprimido o no según la distribución.
+# The package must contain the manual, compressed according to the distribution.
 echo "$files" | grep -q "man/man1/uxsm\.1" || {
     echo "run.sh: the package does not ship the man page" >&2
     exit 1
 }
 
-# Lo que el paquete haya traído para la sesión, como el bus de D-Bus con
-# dbus-user-session, lo arrancaría el siguiente inicio de sesión; éste empezó
-# antes de instalar. Sólo si hace falta: openSUSE no deja arrancarlo a mano
-# (RefuseManualStart=), aunque allí ya está en marcha.
+# Session components installed by the package, such as the D-Bus bus from
+# dbus-user-session, would start at the next login; this login predates package
+# installation. Start them only when needed: openSUSE forbids manual startup
+# (RefuseManualStart=), though the bus is already running there.
 systemctl --user daemon-reload
 systemctl --user is-active -q dbus.socket || systemctl --user start dbus.socket
 got=$(uxsm version)

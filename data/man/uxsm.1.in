@@ -1,9 +1,9 @@
 .\" Manual page for uxsm. Edit this .in file, never the installed page: the
 .\" build fills in the version and the binary directory. `make check` lints it.
 .\"
-.\" Sections marked TODO are the ones still to write. Keep this page in step
-.\" with `uxsm <command> -h`, which is where its wording comes from, and with
-.\" docs/architecture.md, which explains the same things at length.
+.\" Keep this page in step with `uxsm <command> -h`, which is where its wording
+.\" comes from, and with docs/architecture.md, which explains the same things
+.\" at length.
 .TH UXSM 1 "2026-09-26" "uxsm @VERSION@" "User Commands"
 .SH NAME
 uxsm \- X11 session manager for systemd \-\-user
@@ -22,7 +22,22 @@ pulled in. When the desktop exits, or the process that opened the session goes
 away, systemd stops the whole set and uxsm restores the previous environment.
 It is the X11 counterpart of
 .BR uwsm (1).
-.\" TODO: what a session looks like once it is up, and what it does not do.
+.PP
+Once ready, the session activates
+.B graphical-session.target
+and, by default,
+.BR xdg-desktop-autostart.target .
+Applications launched with
+.B uxsm app
+run in separate units inside session-specific slices and stop with the session.
+Only one graphical session can use a user's systemd manager and its shared
+environment at a time.
+.PP
+uxsm does not replace the display manager, X server, desktop, or window
+manager. It manages the lifetime and environment of the session selected by
+the display manager. Most window managers report readiness through EWMH;
+desktops that do not can call
+.BR "uxsm finalize" .
 .SH COMMANDS
 .TP
 .B start
@@ -52,18 +67,388 @@ Print the version.
 Each command takes
 .B \-h
 for its own options.
-.\" TODO: one subsection per command with its options and arguments, in the
-.\" order above. Take the wording from `uxsm <command> -h`.
+.SS start
+.SY "uxsm start"
+.OP \-e
+.OP \-D names
+.OP \-\-no-autostart
+.I entry.desktop
+.YS
+.SY "uxsm start"
+.OP \-e
+.OP \-D names
+.OP \-\-no-autostart
+.RI [ \-\- ]
+.I command
+.RI [ args... ]
+.YS
+.PP
+Start an X11 session and run its desktop as a systemd user service. A single
+argument ending in
+.B .desktop
+is resolved as a session entry in the XDG
+.B xsessions
+directories. Anything else, and everything after
+.BR \-\- ,
+is a command whose executable must be in
+.BR PATH .
+.TP
+.BI \-D " names"
+Add desktop names to
+.BR XDG_CURRENT_DESKTOP .
+Separate multiple names with a colon.
+.TP
+.B \-e
+Use only the names supplied with
+.BR \-D ,
+discarding the inherited
+.B XDG_CURRENT_DESKTOP
+and the entry's
+.BR DesktopNames= .
+.TP
+.B \-\-no-autostart
+Do not start the session's XDG autostart entries. uxsm starts them by default,
+as uwsm does.
+
+.SS stop
+.SY "uxsm stop"
+.YS
+.PP
+Stop the running uxsm session. This activates the same shutdown path used when
+the desktop exits or the display manager's session process disappears.
+
+.SS finalize
+.SY "uxsm finalize"
+.YS
+.PP
+Tell uxsm, from the desktop itself, that the session is ready. uxsm also
+detects when a window manager takes over the X display; only the first of the
+two readiness signals changes the session state.
+
+.SS app
+.SY "uxsm app"
+.OP \-s slice
+.OP \-t scope|service
+.OP \-p Key=Value
+.RI [ options ]
+.RI [ \-\- ]
+.I command
+.RI [ args... ]
+.YS
+.SY "uxsm app"
+.RI [ options ]
+.IR entry.desktop [ :action ]
+.RI [ "files or URLs..." ]
+.YS
+.PP
+Run an application in its own systemd unit inside the graphical slices of the
+session. The unit is visible independently and stops with the session. An
+argument ending in
+.B .desktop
+is an application entry, optionally followed by an action after a colon.
+Anything else, and everything after
+.BR \-\- ,
+is a command.
+.TP
+.BI \-S " output"
+Discard
+.BR out ,
+.BR err ,
+or
+.B both
+for a service. A scope inherits its caller's output.
+.TP
+.BI \-a " name"
+Set the application component of the generated unit name.
+.TP
+.BI \-d " description"
+Set the unit description.
+.TP
+.BI \-p " Key=Value"
+Pass a systemd unit property in the form accepted by
+.BR systemd-run (1),
+such as
+.BR TimeoutStopSec=5 ,
+.BR MemoryMax=2G ,
+or
+.BR CPUQuota=50% .
+May be repeated.
+.TP
+.BI \-s " slice"
+Select
+.B a
+for applications (the default),
+.B b
+for background processes,
+.B s
+for session components, or give a full name ending in
+.BR .slice .
+.TP
+.BI \-t " type"
+Create a
+.B scope
+(the default) or a
+.BR service .
+.TP
+.BI \-u " unit"
+Use this complete unit name instead of generating one.
+
+.SS entry
+.SY "uxsm entry"
+.RI [ options ]
+.I name
+.YS
+.SY "uxsm entry"
+.RI [ options ]
+.B \-\-exec
+.I name
+.YS
+.SY "uxsm entry"
+.RI [ options ]
+.B \-\-exec \-\-
+.I command
+.RI [ args... ]
+.YS
+.SY "uxsm entry"
+.RI [ options ]
+.B \-\-plain \-\-from-table
+.I name
+.YS
+.SY "uxsm entry"
+.RI [ options ]
+.B \-\-plain \-\-
+.I command
+.RI [ args... ]
+.YS
+.PP
+Generate a session entry for
+.I /usr/local/share/xsessions
+and install it only with
+.BR \-i .
+Without
+.BR \-i ,
+print the destination and contents without writing anything.
+.PP
+The default form creates a wrapper named
+.B <name>-uxsm.desktop
+around an installed
+.B <name>.desktop
+entry.
+With
+.BR \-\-exec ,
+the generated uxsm entry starts the source command directly. With
+.BR \-\-plain ,
+the generated entry does not use uxsm. A source is always explicit: an
+installed entry, the built-in table requested with
+.BR \-\-from-table ,
+or a command after
+.BR \-\- .
+.TP
+.BI \-C " comment"
+Set the comment shown on the login screen.
+.TP
+.BI \-D " names"
+Add desktop names separated by a colon.
+.TP
+.BI \-N " name"
+Set the name shown on the login screen.
+.TP
+.B \-e
+Use only the names supplied with
+.BR \-D ,
+discarding names from the source and table.
+.TP
+.B \-\-exec
+Create an uxsm entry that starts the source command directly.
+.TP
+.B \-f
+Overwrite an entry with the same name in
+.I /usr/local/share/xsessions
+or shadow one in another
+.B xsessions
+directory.
+.TP
+.B \-\-from-table
+Use uxsm's known desktop table as the source instead of an installed entry.
+Requires
+.B \-\-exec
+or
+.BR \-\-plain .
+.TP
+.B \-i
+Write the entry. This requires root privileges.
+.TP
+.B \-\-no-table
+Do not use the known desktop table to fill metadata omitted by the source.
+The remaining metadata comes from
+.BR \-D ,
+.BR \-N ,
+and
+.BR \-C .
+.TP
+.B \-\-plain
+Create a plain session entry that does not use uxsm.
+
+.SS check
+.SY "uxsm check"
+.YS
+.PP
+Run every system check and print an
+.BR ok ,
+.BR warning ,
+or
+.B unknown
+result. The current check reports whether the active display manager reads the
+local session directories where
+.B uxsm entry
+installs entries.
+.PP
+.SY "uxsm check is-active"
+.OP \-v
+.YS
+.PP
+Report through the exit status whether an uxsm session is running or starting.
+With
+.BR \-v ,
+also print the active units.
+
+.SS setup
+.SY "uxsm setup sessions-dir"
+.OP \-i
+.RI [ lightdm | sddm | gdm ]
+.YS
+.PP
+Make the display manager read the two local session directories
+.I /usr/local/share/wayland-sessions
+and
+.I /usr/local/share/xsessions
+where entries installed by hand live. Without an explicit display-manager
+name, use the active one. Without
+.BR \-i ,
+only explain the required change. With
+.BR \-i ,
+apply it for LightDM or SDDM with root privileges. For GDM, always explain the
+required configuration and never modify it.
+
+.SS version
+.SY "uxsm version"
+.YS
+.PP
+Print the uxsm version.
 .SH ENVIRONMENT
-.\" TODO: XDG_CURRENT_DESKTOP, XDG_SESSION_DESKTOP, XDG_SESSION_TYPE,
-.\" XDG_RUNTIME_DIR, DISPLAY, and the uxsm/env* files.
+.TP
+.B XDG_CURRENT_DESKTOP
+Colon-separated desktop names. Without
+.BR \-e ,
+uxsm combines the inherited value, the session entry's
+.BR DesktopNames= ,
+and names from
+.BR \-D .
+.TP
+.B XDG_SESSION_DESKTOP
+The first desktop name selected for the session.
+.TP
+.B XDG_SESSION_TYPE
+Set to
+.BR x11 .
+.TP
+.B XDG_RUNTIME_DIR
+Contains uxsm's transient state and generated user-manager drop-ins.
+.TP
+.B DISPLAY
+Inherited from the display manager and propagated to the user manager before
+the desktop starts.
+.PP
+The session environment loader reads
+.I /etc/profile
+and
+.I ~/.profile
+then loads
+.BR uxsm/env ,
+.BR uxsm/env-<desktop> ,
+and their
+.B .d
+directories from the XDG configuration and data directories, from lower to
+higher priority. On shutdown, uxsm removes session-owned variables and restores
+the environment that existed before startup.
 .SH FILES
-.\" TODO: the session entries directory, $XDG_RUNTIME_DIR/uxsm, the unit
-.\" templates in @BINDIR@'s sibling lib/systemd/user, and the environment files.
+.TP
+.I /usr/local/share/xsessions
+Destination used by
+.B uxsm entry \-i
+.TP
+.I /usr/local/share/wayland-sessions
+Local Wayland entry directory configured alongside the X11 directory by
+.B uxsm setup sessions-dir
+.TP
+.I $XDG_RUNTIME_DIR/uxsm
+Transient login environment, identity, command, readiness state, and cleanup
+records for the current session.
+.TP
+.I @BINDIR@/../lib/systemd/user
+Installed uxsm user-unit templates and application slices.
+.TP
+.I $XDG_CONFIG_HOME/uxsm/env
+User session environment file.
+.TP
+.I $XDG_CONFIG_HOME/uxsm/env-<desktop>
+Per-desktop user environment file. Matching files below
+.B XDG_CONFIG_DIRS
+and
+.B XDG_DATA_DIRS
+are also loaded, as are the corresponding
+.B .d
+directories.
 .SH EXIT STATUS
-.\" TODO: what each command returns, and `uxsm check is-active` in particular.
+.TP
+.B 0
+The command succeeded, or help was requested.
+.TP
+.B 1
+A runtime operation failed.
+.B uxsm check
+also returns 1 when any check reports a warning.
+.B uxsm check is-active
+returns 1, without printing an error, when no uxsm session is running or
+starting.
+.TP
+.B 2
+The command line is invalid. The relevant usage text is printed on standard
+error.
 .SH EXAMPLES
-.\" TODO: a handful, taken from the README.
+.PP
+Start bspwm from its installed session entry:
+.PP
+.EX
+uxsm start bspwm.desktop
+.EE
+.PP
+Start a direct command and set its desktop identity:
+.PP
+.EX
+uxsm start -D bspwm -- bspwm
+.EE
+.PP
+Launch an application in its own unit:
+.PP
+.EX
+uxsm app firefox.desktop:new-private-window
+uxsm app -p TimeoutStopSec=5 -- discord
+.EE
+.PP
+Preview and then install a generated session entry:
+.PP
+.EX
+uxsm entry bspwm
+sudo uxsm entry -i bspwm
+.EE
+.PP
+Check display-manager configuration and preview its fix:
+.PP
+.EX
+uxsm check
+uxsm setup sessions-dir
+.EE
 .SH SEE ALSO
 .BR uwsm (1),
 .BR systemd (1),

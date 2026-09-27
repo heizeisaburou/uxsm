@@ -100,30 +100,50 @@ make hooks
 | `internal/pidwait` | `pidfd`-based waiting for external processes. |
 | `internal/x11` | Direct X11 communication used to detect the window manager. |
 | `data/systemd/user` | Installed systemd user-unit templates. |
-| `data/man` | The manual page, written as `uxsm.1.in`. |
+| `data/man` | Manual-page source and its build-time substitutions. |
+| `test` | Integration scripts, VM orchestration, packages, and distro session data. |
+| `packaging` | Native package recipes exercised by release tests. |
 
 ## Publishing a release
 
-`make release` builds and tests; `make publish TAG=vX.Y.Z` publishes. They are separate because a release build is also the test gate, run while working, and publishing is a public, one-way act.
+`make release` builds and tests; `make publish TAG=vX.Y.Z` publishes. They are separate because the
+release build is also a test gate used during development, while publishing is a public,
+irreversible action.
 
-`test/publish.sh` does it in this order, stopping at the first thing that does not add up:
+`test/publish.sh` follows this order and stops at the first failed precondition or command:
 
-1. **Checks.** The version looks like `vX.Y.Z`, the tree is clean, the branch is `main` or `master`, the tag exists neither here nor on the remote, no GitHub release carries that name, and `gh` is logged in.
-2. **The tag, locally.** It has to come before the build: `test/version.sh` derives the version from `git describe`, so the packages and the tarballs only carry `X.Y.Z` once the tag exists. If `releases/latest` is not that version, `make release` runs now.
-3. **The binary tarball**, next to the packages, and `SHA256SUMS` recomputed with it. Then the tarball is installed into a temporary root and the installed binary is asked its version: a tarball that does not install is not published.
-4. **The push and the release.** The commit, the tag, and `gh release create` with the five packages, the source tarball, the binary tarball and `SHA256SUMS`.
+1. **Checks.** The version has the form `vX.Y.Z`, the tree is clean, the branch is `main` or
+   `master`, the tag is unused locally and remotely, no GitHub release has that name, and `gh` is
+   logged in.
+2. **The local tag.** It must precede the build because `test/version.sh` derives the version from
+   `git describe`; packages and tarballs contain `X.Y.Z` only after the tag exists. If
+   `releases/latest` does not contain that version, `make release` runs now.
+3. **The binary tarball.** It is placed beside the packages and included in a new `SHA256SUMS`.
+   Before publication, the script installs the tarball into a temporary root and checks the
+   installed binary's version. A tarball that cannot install itself is never published.
+4. **The push and GitHub release.** The commit and tag are pushed, then `gh release create` uploads
+   the five packages, source tarball, binary tarball, and `SHA256SUMS`.
 
-Everything up to step 3 stays in the clone, and the tag is undone with `git tag -d`. Step 4 asks first, unless `--yes`, and `DRY_RUN=1` runs nothing at all.
+Everything through step 3 remains local, and the tag can still be removed with `git tag -d`.
+Step 4 asks for confirmation unless `--yes` is used. `DRY_RUN=1` still performs read-only checks,
+but executes no state-changing command and prints each one it would run.
 
-Afterwards, `test/publish.sh --hashes vX.Y.Z` downloads the tag archive GitHub serves and writes its checksum into `packaging/arch/PKGBUILD` and `packaging/nix/package.nix`. It cannot be done earlier: GitHub compresses that archive its own way, so the checksum is only knowable once the tag is there.
+Afterwards, `test/publish.sh --hashes vX.Y.Z` downloads GitHub's tag archive and writes its checksum
+to `packaging/arch/PKGBUILD` and `packaging/nix/package.nix` for publication in the AUR and nixpkgs.
+This cannot happen earlier because GitHub creates and compresses that archive itself; its checksum
+is knowable only after the tag is available there.
 
 ## The manual page
 
-`data/man/uxsm.1.in` is the source of `uxsm.1`. `make install` writes it to `$(MANDIR)/man1`, filling in `@VERSION@` and `@BINDIR@`, the same way the unit templates are filled in; the Arch and Debian packages get it from that, and the Fedora, openSUSE and Nix recipes list it themselves.
+`data/man/uxsm.1.in` is the source of `uxsm.1`. `make install` writes it under `$(MANDIR)/man1` and
+replaces `@VERSION@` and `@BINDIR@`, just as it fills in the unit templates. Arch and Debian obtain
+the page through that installation; the Fedora, openSUSE, and Nix recipes list it explicitly.
 
-`make check` lints it with `groff -man -z -ww`. groff exits 0 even when it warns, so the check fails on anything written to stderr, which is what catches an unknown macro or a section that was left open. The integration suite checks the other half: `test/integration/run.sh` fails if the installed package does not ship `man/man1/uxsm.1`, whatever compression the distribution puts on it.
-| `test` | Integration scripts, VM orchestration, packages, and distro session data. |
-| `packaging` | Native package recipes exercised by release tests. |
+`make check` lints it with `groff -man -z -ww`. Because groff exits successfully even after a
+warning, the check separately fails on any standard-error output; this catches problems such as an
+unknown macro or an unclosed section. The integration suite verifies installation:
+`test/integration/run.sh` fails if a package omits `man/man1/uxsm.1`, regardless of the compression
+used by that distribution.
 
 ## Go version
 

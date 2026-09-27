@@ -1,5 +1,5 @@
-// Command uxsm arranca y gestiona sesiones gráficas X11 con systemd --user,
-// como uwsm lo hace en Wayland.
+// Command uxsm starts and manages graphical X11 sessions with systemd --user,
+// as uwsm does for Wayland.
 package main
 
 import (
@@ -8,14 +8,15 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
-// version la pone el Makefile al compilar: go build -ldflags "-X main.version=…".
+// version is set by the Makefile at build time: go build -ldflags "-X main.version=…".
 var version = "dev"
 
-// command es una suborden: su nombre, una línea de ayuda, la función que la
-// ejecuta con los argumentos que vienen detrás del nombre y si se oculta en la
-// ayuda general.
+// command is a subcommand: its name, a one-line summary, the function that runs
+// it with the arguments after its name, and whether it is hidden from general
+// help.
 type command struct {
 	name    string
 	summary string
@@ -23,19 +24,18 @@ type command struct {
 	hidden  bool
 }
 
-// group es un conjunto de subórdenes con su propia ayuda. uxsm tiene dos: el
-// de primer nivel (start, stop…) y el de aux (exec, waitpid). Los dos reparten
-// con el mismo código, así que se comportan igual.
+// group is a set of subcommands with its own help. uxsm has two: the top-level
+// group (start, stop…) and the aux group (exec, waitpid). Both use the same
+// dispatch code, so they behave consistently.
 type group struct {
-	// name es cómo se escribe el grupo en la línea de órdenes: "uxsm" o "uxsm aux".
+	// name is how the group is written on the command line: "uxsm" or "uxsm aux".
 	name        string
 	description string
 	commands    []command
 }
 
-// rootCommands son las subórdenes de uxsm, en el orden en que salen en la
-// ayuda. aux está oculta: la llaman las unidades de systemd, no las personas,
-// pero se ejecuta igual que las demás.
+// rootCommands contains uxsm's subcommands in help order. aux is hidden because
+// systemd units, rather than people, call it, but it runs like any other command.
 var rootCommands = group{
 	name:        "uxsm",
 	description: "Start and manage X11 sessions under systemd --user.",
@@ -56,11 +56,11 @@ func main() {
 	os.Exit(exitCode(rootCommands.dispatch(os.Args[1:])))
 }
 
-// dispatch selecciona la suborden a partir del primer argumento y le pasa
-// el resto tal cual.
+// dispatch selects the subcommand from the first argument and passes through
+// the rest unchanged.
 //
-// `help`, `-h` y `--help` sólo se interpretan aquí si aparecen en primera
-// posición; cualquier ayuda posterior corresponde a la suborden.
+// `help`, `-h`, and `--help` are interpreted here only in the first position;
+// any later help request belongs to the subcommand.
 func (g group) dispatch(args []string) error {
 	if len(args) == 0 {
 		g.usage(os.Stderr)
@@ -83,7 +83,7 @@ func (g group) dispatch(args []string) error {
 	return errUsage
 }
 
-// usage escribe la ayuda del grupo, sin las subórdenes ocultas.
+// usage writes the group's help without hidden subcommands.
 func (g group) usage(w io.Writer) {
 	fmt.Fprintf(w, "Usage: %s <command> [options]\n\n%s\n\nCommands:\n", g.name, g.description)
 	for _, c := range g.commands {
@@ -94,16 +94,16 @@ func (g group) usage(w io.Writer) {
 	fmt.Fprintf(w, "\nRun \"%s <command> -h\" for help on a command.\n", g.name)
 }
 
-// errUsage marca los errores de argumentos, que ya han enseñado su ayuda.
+// errUsage marks argument errors that have already displayed their help.
 var errUsage = errors.New("usage")
 
-// errNo es la respuesta "no" de una orden que pregunta algo, como is-active:
-// acaba con código 1, como un error, pero sin escribir nada.
+// errNo is the "no" answer from a command that asks a question, such as
+// is-active: it exits with status 1 like an error, but writes nothing.
 var errNo = errors.New("no")
 
-// exitCode traduce el resultado de una suborden a código de salida: 0 si va
-// bien o se ha pedido ayuda, 2 si los argumentos están mal y 1 con cualquier
-// otro error, que además se escribe.
+// exitCode translates a subcommand result into an exit status: 0 on success or
+// requested help, 2 for invalid arguments, and 1 for any other error, which is
+// also written out.
 func exitCode(err error) int {
 	switch {
 	case err == nil, errors.Is(err, flag.ErrHelp):
@@ -118,12 +118,12 @@ func exitCode(err error) int {
 	}
 }
 
-// wantsHelp dice si args pide ayuda en cualquier posición antes de "--".
+// wantsHelp says whether args requests help anywhere before "--".
 //
-// flag deja de leer opciones en el primer argumento que no lo es, así que por
-// sí solo no vería el -h de `uxsm start bspwm.desktop -h`. Mirar toda la línea
-// permite añadir -h al final de una orden a medio escribir y ver su ayuda. Lo
-// que va detrás de "--" es del programa que se lanza, no de uxsm.
+// flag stops parsing options at the first non-option argument, so by itself it
+// would miss the -h in `uxsm start bspwm.desktop -h`. Scanning the whole line
+// lets users append -h to a partially written command and see its help. Anything
+// after "--" belongs to the launched program, not uxsm.
 func wantsHelp(args []string) bool {
 	for _, a := range args {
 		if a == "--" {
@@ -136,9 +136,9 @@ func wantsHelp(args []string) bool {
 	return false
 }
 
-// isHelpFlag dice si a es una forma de pedir ayuda. Son las cuatro que reconoce
-// el paquete flag, para que valgan las mismas en cualquier sitio: `uxsm -help`
-// y `uxsm start bspwm.desktop -help`.
+// isHelpFlag says whether a is a help request. These are the four forms
+// recognized by package flag, so the same forms work anywhere: `uxsm -help`
+// and `uxsm start bspwm.desktop -help`.
 func isHelpFlag(a string) bool {
 	switch a {
 	case "-h", "-help", "--h", "--help":
@@ -147,10 +147,10 @@ func isHelpFlag(a string) bool {
 	return false
 }
 
-// parseFlags lee las opciones de una suborden. Si en cualquier parte se pide
-// ayuda, la enseña por la salida estándar y devuelve flag.ErrHelp, que acaba
-// con código 0. Si una opción está mal, flag ya ha escrito el error y la ayuda
-// en la salida de error, y devuelve errUsage, que acaba con código 2.
+// parseFlags parses a subcommand's options. If help is requested anywhere, it
+// writes help to standard output and returns flag.ErrHelp, which produces exit
+// status 0. If an option is invalid, flag has already written the error and help
+// to standard error, and parseFlags returns errUsage, which produces status 2.
 func parseFlags(fs *flag.FlagSet, args []string) error {
 	if wantsHelp(args) {
 		fs.SetOutput(os.Stdout)
@@ -164,13 +164,14 @@ func parseFlags(fs *flag.FlagSet, args []string) error {
 	return nil
 }
 
-// newFlagSet crea el conjunto de opciones de una suborden con su propia ayuda:
-// la línea de uso, una descripción y las opciones que tenga.
+// newFlagSet creates a subcommand's option set with its own help: the usage
+// line, a description, and any options it defines.
 func newFlagSet(name, usageLine, description string) *flag.FlagSet {
 	fs := flag.NewFlagSet("uxsm "+name, flag.ContinueOnError)
 	fs.Usage = func() {
 		w := fs.Output()
-		fmt.Fprintf(w, "Usage: uxsm %s %s\n\n%s\n", name, usageLine, description)
+		// With no usageLine, do not leave a stray space after the name.
+		fmt.Fprintf(w, "Usage: %s\n\n%s\n", strings.TrimSpace("uxsm "+name+" "+usageLine), description)
 		hasFlags := false
 		fs.VisitAll(func(*flag.Flag) { hasFlags = true })
 		if hasFlags {

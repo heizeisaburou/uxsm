@@ -1,11 +1,11 @@
 #!/bin/sh
-# Antes de subir a producción ―la rama main o master, o una etiqueta vX.Y.Z―,
-# lo que se sube tiene que haber pasado `make release`: compilar los paquetes y
-# probarlos instalados en todas las distribuciones. Las demás ramas suben sin más.
+# Before pushing to production—the main or master branch, or a vX.Y.Z tag—the
+# pushed commit must have passed `make release`: build packages and test them
+# installed on every distribution. Other branches are pushed without this gate.
 #
-# releases/latest/version dice de qué se compiló, así que si ya se hizo con
-# este mismo commit no se repite. Si no, se ejecuta ahora y el push espera.
-# `git push --no-verify` se lo salta.
+# releases/latest/version records the built commit, so a release already run for
+# this commit is not repeated. Otherwise it runs now and the push waits.
+# `git push --no-verify` skips it.
 
 set -eu
 cd "$(git rev-parse --show-toplevel)"
@@ -13,14 +13,14 @@ cd "$(git rev-parse --show-toplevel)"
 zero=0000000000000000000000000000000000000000
 gated=
 
-# Una línea por referencia: <ref local> <sha local> <ref remota> <sha remota>.
+# One line per reference: <local ref> <local sha> <remote ref> <remote sha>.
 while read -r _ local_sha remote_ref _; do
     [ "$local_sha" != "$zero" ] || continue # borrar una referencia
     case "$remote_ref" in
     refs/heads/main | refs/heads/master | refs/tags/v[0-9]*) ;;
     *) continue ;;
     esac
-    # Una etiqueta anotada llega como su propio objeto, no como el commit.
+    # An annotated tag arrives as its own object rather than as the commit.
     commit=$(git rev-parse "$local_sha^{commit}")
     if [ "$commit" != "$(git rev-parse HEAD)" ]; then
         echo "pre-push: $remote_ref is not HEAD; check it out so make release can build it" >&2
@@ -45,5 +45,5 @@ if [ "$(cat releases/latest/version 2>/dev/null)" = "$version" ]; then
 fi
 
 echo "pre-push: releases/latest is not uxsm $version; running make release" >&2
-# stdin es la lista de referencias, no un terminal.
+# stdin is the reference list, not a terminal.
 make release </dev/null

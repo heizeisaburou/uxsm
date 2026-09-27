@@ -9,8 +9,8 @@ import (
 	"github.com/heizeisaburou/uxsm/internal/dm"
 )
 
-// setupCommands son los arreglos de uxsm setup: cada uno arregla una cosa
-// concreta, con su nombre, y no un script cualquiera.
+// setupCommands are the fixes provided by uxsm setup: each is a named fix for
+// one specific issue rather than an arbitrary script.
 var setupCommands = group{
 	name:        "uxsm setup",
 	description: "Change the system so that uxsm works fully. Without -i, each command\nonly explains what it would do.",
@@ -23,17 +23,18 @@ func runSetup(args []string) error {
 	return setupCommands.dispatch(args)
 }
 
-// runSetupSessionsDir hace que el display manager lea los directorios locales
-// de sesiones: `uxsm setup sessions-dir [-i] [lightdm|sddm|gdm]`.
+// runSetupSessionsDir makes the display manager read the local session
+// directories: `uxsm setup sessions-dir [-i] [lightdm|sddm|gdm]`.
 //
-// Son dos, el de X11 y el de Wayland. uxsm sólo genera entradas de X11, pero
-// arreglar sólo ese sería dejar la máquina a medias: en LightDM es la misma
-// lista para los dos, y quien escriba a mano una entrada de Wayland ―como pide
-// el README de uwsm para su compositor― se encontraría con que no sale.
+// There are two, for X11 and Wayland. uxsm generates only X11 entries, but
+// fixing only that directory would leave the machine half-configured: LightDM
+// uses one list for both, and a hand-written Wayland entry—as recommended by
+// uwsm's README for its compositor—would remain hidden.
 //
-// Sin display manager, usa el que está en uso. Sin -i sólo explica qué haría.
-// Con GDM nunca escribe nada: su lista sale de su XDG_DATA_DIRS, que también
-// decide dónde busca todo lo demás, y eso es mejor que lo cambie una persona.
+// Without an explicit display manager, it uses the active one. Without -i it
+// only explains the change. It never writes GDM configuration: its list comes
+// from XDG_DATA_DIRS, which controls all other data lookup too and is better
+// changed by a person.
 func runSetupSessionsDir(args []string) error {
 	fs := newFlagSet("setup sessions-dir", "[-i] [lightdm | sddm | gdm]",
 		"Make the display manager read "+strings.Join(dm.LocalSessions, " and ")+",\n"+
@@ -84,8 +85,8 @@ func runSetupSessionsDir(args []string) error {
 		if c.Old == "" {
 			action = "create"
 		}
-		// Sin dos puntos detrás de la ruta: así se copia de la terminal con
-		// dos clics, sin arrastrar el signo.
+		// Do not put a colon after the path: this lets users copy it from the
+		// terminal with a double click without capturing punctuation.
 		if *install {
 			fmt.Printf("\nGoing to %s this file\n  %s\n", action, c.File)
 		} else {
@@ -113,31 +114,32 @@ func runSetupSessionsDir(args []string) error {
 	return nil
 }
 
-// explainRestart dice que hay que reiniciar el display manager y cómo, sin
-// hacerlo: reiniciarlo se lleva por delante la sesión gráfica desde la que se
-// está ejecutando esto, y eso lo decide quien está delante, no uxsm.
+// explainRestart says that the display manager must be restarted and how, but
+// does not restart it: that would terminate the graphical session running this
+// command, and the person at the machine must make that decision.
 //
-// No es un detalle: su greeter lee los directorios por su cuenta, así que
-// ofrece la sesión nueva antes de que el display manager sepa arrancarla, y al
-// elegirla cierra el greeter, falla, y deja el asiento en negro.
+// This is not cosmetic: the greeter reads directories independently, so it can
+// offer the new session before the display manager knows how to start it. When
+// selected, the greeter closes, startup fails, and the seat remains black.
 func explainRestart(r *dm.Report) {
 	unit := r.Unit
 	if unit == "" {
 		unit = "display-manager.service"
 	}
 	fmt.Printf(`
-The %s that is running still does not know them: restart it, or the machine,
-before logging out. Until then its login screen can offer the session and then
-fail to launch it, leaving the screen black. From another console (Ctrl+Alt+F2)
+The running %s has not reloaded its session directories. Restart it, or the
+machine, before logging out. Until then its login screen can offer the new
+session but fail to launch it, leaving the screen black. From another console
+(Ctrl+Alt+F2), run
 
   sudo systemctl restart %s
 
-uxsm does not do it: it would take down the graphical session you are in.
+uxsm does not restart it because that would end your current graphical session.
 `, r.Name, unit)
 }
 
-// missingOr son los directorios que le faltaban al display manager, para
-// decirlo al terminar; si ya los leía todos, los dos.
+// missingOr returns the directories the display manager lacked, for the final
+// message; if it already read all of them, it returns both.
 func missingOr(r *dm.Report) []string {
 	if missing := r.Missing(); len(missing) > 0 {
 		return missing
@@ -145,8 +147,8 @@ func missingOr(r *dm.Report) []string {
 	return dm.LocalSessions
 }
 
-// printChange enseña un cambio: la línea que cambia, si sólo cambia una, o el
-// fichero nuevo entero.
+// printChange displays the changed line when there is exactly one, otherwise
+// the complete new file.
 func printChange(c *dm.Change) {
 	oldLines, newLines := strings.Split(c.Old, "\n"), strings.Split(c.New, "\n")
 	if c.Old != "" && len(oldLines) == len(newLines) {
@@ -167,8 +169,8 @@ func printChange(c *dm.Change) {
 	}
 }
 
-// explainGDM explica cómo decide GDM sus directorios y cómo cambiarlos, sin
-// cambiar nada.
+// explainGDM explains how GDM chooses its directories and how to change them,
+// without modifying anything.
 func explainGDM(r *dm.Report) {
 	if len(r.Missing()) == 0 {
 		fmt.Printf("It already reads them, nothing to do\n")
@@ -176,7 +178,7 @@ func explainGDM(r *dm.Report) {
 	}
 	fmt.Printf(`
 GDM looks for session entries in the xsessions subdirectory of every
-directory in its XDG_DATA_DIRS, and in /usr/share/xsessions. To make it read
+directory in its XDG_DATA_DIRS, and in the /usr/share/xsessions directory. To make it read
 %s, add /usr/local/share to XDG_DATA_DIRS in its unit with
 
   systemctl edit %s

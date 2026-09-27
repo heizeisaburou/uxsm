@@ -1,7 +1,7 @@
 #!/bin/sh
-# Installer shipped inside the binary tarball, for machines where uxsm is not
-# packaged: it puts the same files in the same places as `make install`, without
-# needing Go or a package manager.
+# Installer included in the binary tarball for machines without an uxsm package.
+# It places the same files in the same locations as `make install`, without
+# requiring Go or a package manager.
 #
 # It lives in the repository so it is reviewed and linted with everything else;
 # `make bindist` copies it into the tarball.
@@ -17,11 +17,11 @@ usage() {
     cat <<USAGE
 Usage: ./install.sh [--prefix DIR] [--destdir DIR] [--uninstall]
 
-Install uxsm: the binary, the systemd user units and the manual page.
+Install the uxsm binary, systemd user units, and manual page.
 
-  --prefix DIR    where to install, /usr/local by default
-  --destdir DIR   a root to install under, for packaging
-  --uninstall     remove what this script installs
+  --prefix DIR    installation prefix, /usr/local by default
+  --destdir DIR   prepend a staging root, for packaging
+  --uninstall     remove these files instead of installing them
 
 systemd reads user units from both /usr/lib/systemd/user and
 /usr/local/lib/systemd/user, so either prefix works.
@@ -30,8 +30,8 @@ USAGE
 
 while [ $# -gt 0 ]; do
     case $1 in
-    --prefix) prefix=${2:?--prefix needs a directory}; shift 2 ;;
-    --destdir) destdir=${2:?--destdir needs a directory}; shift 2 ;;
+    --prefix) prefix=${2:?--prefix requires DIR}; shift 2 ;;
+    --destdir) destdir=${2:?--destdir requires DIR}; shift 2 ;;
     --uninstall) uninstall=1; shift ;;
     -h | --help) usage; exit 0 ;;
     *) usage >&2; exit 2 ;;
@@ -58,7 +58,7 @@ fi
 
 # A clear message beats a permission error halfway through.
 if ! mkdir -p "$destdir$bindir" 2>/dev/null; then
-    echo "install.sh: cannot write to $destdir$bindir; run it as root or pass --prefix" >&2
+    echo "install.sh: cannot write under $destdir$bindir (run as root or pass --prefix)" >&2
     exit 1
 fi
 
@@ -82,7 +82,7 @@ cat <<DONE
 Installed uxsm $version under
   $destdir$prefix
 
-Next: make the display manager offer a uxsm session
+Next, as your regular user, check the display manager and preview a session entry
   uxsm check
   uxsm entry <your window manager>
 DONE

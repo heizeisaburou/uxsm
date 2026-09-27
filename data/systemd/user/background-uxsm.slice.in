@@ -1,8 +1,8 @@
 [Unit]
 Description=User Graphical Background Application Slice of uxsm
 Documentation=https://github.com/heizeisaburou/uxsm
-# Lo que hace que las aplicaciones se paren con la sesión. El guion es jerarquía
-# en systemd, así que este slice cuelga del background.slice estándar.
+# This makes applications stop with the session. A dash denotes hierarchy in
+# systemd, so this slice is a child of the standard background.slice.
 PartOf=graphical-session.target
 After=graphical-session.target
 Conflicts=uxsm-shutdown.target

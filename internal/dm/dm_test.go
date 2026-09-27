@@ -9,8 +9,8 @@ import (
 	"testing"
 )
 
-// fakeSystem crea un árbol de configuración con files y un systemctl falso
-// que responde con answers, por argumentos.
+// fakeSystem creates a configuration tree from files and a fake systemctl that
+// returns answers keyed by arguments.
 func fakeSystem(t *testing.T, files map[string]string, answers map[string]string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -29,7 +29,7 @@ func fakeSystem(t *testing.T, files map[string]string, answers map[string]string
 		if out, ok := answers[strings.Join(args, " ")]; ok {
 			return out, nil
 		}
-		// Cualquier unidad por la que no se pregunte no existe.
+		// Any unit not explicitly queried does not exist.
 		if args[0] == "show" {
 			return "LoadState=not-found\n", nil
 		}
@@ -43,7 +43,7 @@ const activeLightDM = "show -p Id -p LoadState display-manager.service"
 func TestActiveLightDM(t *testing.T) {
 	answers := map[string]string{activeLightDM: "Id=lightdm.service\nLoadState=loaded\n"}
 
-	// Sin nada que ponga sessions-directory: el valor de serie, sin /usr/local.
+	// With no sessions-directory setting, the default does not include /usr/local
 	fakeSystem(t, map[string]string{
 		"/usr/share/lightdm/lightdm.conf.d/01_debian.conf": "[Seat:*]\ngreeter-session=lightdm-greeter\n",
 	}, answers)
@@ -55,8 +55,8 @@ func TestActiveLightDM(t *testing.T) {
 		t.Errorf("default LightDM: %+v", r)
 	}
 
-	// El orden de lectura comprobado con `lightdm --show-config`: gana el
-	// último, lightdm.conf; sin él, el de /etc/lightdm/lightdm.conf.d.
+	// Read order verified with `lightdm --show-config`: the last file,
+	// lightdm.conf, wins; without it, /etc/lightdm/lightdm.conf.d wins.
 	files := map[string]string{
 		"/usr/share/lightdm/lightdm.conf.d/10-a.conf": "[LightDM]\nsessions-directory=/A\n",
 		"/etc/xdg/lightdm/lightdm.conf.d/10-b.conf":   "[LightDM]\nsessions-directory=/B\n",
@@ -86,7 +86,7 @@ func TestActiveOthers(t *testing.T) {
 		t.Errorf("no display manager: %v", err)
 	}
 
-	// SDDM de serie ya lee /usr/local/share/xsessions.
+	// SDDM reads /usr/local/share/xsessions by default.
 	fakeSystem(t, nil, map[string]string{activeLightDM: "Id=sddm.service\nLoadState=loaded\n"})
 	if r, err := Active(); err != nil || !r.Reads(LocalXSessions) || r.Origin != "compiled default" {
 		t.Errorf("default SDDM: %+v, %v", r, err)
@@ -110,7 +110,7 @@ func TestGDM(t *testing.T) {
 		t.Errorf("default GDM: %+v", r)
 	}
 
-	// EnvironmentFile= pisa a Environment=.
+	// EnvironmentFile= overrides Environment=.
 	answers["show -p Environment -p EnvironmentFiles gdm3.service"] =
 		"Environment=\"XDG_DATA_DIRS=/opt/a:/usr/share\" FOO=1\nEnvironmentFiles=/etc/default/gdm (ignore_errors=yes)\n"
 	fakeSystem(t, map[string]string{"/etc/default/gdm": "# comment\nXDG_DATA_DIRS=\"/opt/b:/usr/share\"\n"}, answers)
@@ -120,8 +120,8 @@ func TestGDM(t *testing.T) {
 }
 
 func TestSetupSessionsDir(t *testing.T) {
-	// Nadie pone la opción: se crea el fichero propio, con la lista de serie y
-	// cada directorio local delante de su hermano de /usr/share.
+	// No file sets the option: create the dedicated file with the default list
+	// and each local directory before its /usr/share counterpart.
 	fakeSystem(t, nil, nil)
 	changes, err := SetupSessionsDir("lightdm")
 	if err != nil {
@@ -147,15 +147,15 @@ func TestSetupSessionsDir(t *testing.T) {
 		t.Errorf("second run should change nothing: %+v", changes)
 	}
 
-	// SDDM tiene una opción por tipo de sesión, y sus valores de serie ya
-	// traen los dos directorios locales.
+	// SDDM has one option per session type, and its defaults already contain
+	// both local directories.
 	fakeSystem(t, nil, nil)
 	if changes, _ := SetupSessionsDir("sddm"); len(changes) != 0 {
 		t.Errorf("SDDM with its defaults should change nothing: %+v", changes)
 	}
 
-	// Un fichero del usuario pone una de las dos: se cambia en ese mismo
-	// fichero, sin tocar las demás líneas, y la otra se queda como está.
+	// A user file sets one option: change it in place without touching other
+	// lines, and leave the other option unchanged.
 	user := "/etc/sddm.conf.d/10-mine.conf"
 	fakeSystem(t, map[string]string{user: "[Theme]\nCurrent=x\n\n[X11]\nSessionDir=/opt/sessions\nMinimumVT=1\n"}, nil)
 	changes, err = SetupSessionsDir("sddm")
@@ -167,7 +167,7 @@ func TestSetupSessionsDir(t *testing.T) {
 		t.Errorf("user file: %+v", changes)
 	}
 
-	// Un fichero de un paquete la pone: no se toca, se escribe el propio.
+	// A package file sets the option: leave it untouched and write our own.
 	fakeSystem(t, map[string]string{"/usr/lib/sddm/sddm.conf.d/10-distro.conf": "[X11]\nSessionDir=/usr/share/xsessions\n"}, nil)
 	changes, _ = SetupSessionsDir("sddm")
 	if len(changes) != 1 || changes[0].File != "/etc/sddm.conf.d/99-uxsm.conf" ||
@@ -175,7 +175,7 @@ func TestSetupSessionsDir(t *testing.T) {
 		t.Errorf("package file: %+v", changes)
 	}
 
-	// Y si faltan las dos, salen en el mismo fichero, cada una en su grupo.
+	// If both are missing, write them to the same file under their own groups.
 	fakeSystem(t, map[string]string{
 		"/usr/lib/sddm/sddm.conf.d/10-distro.conf": "[X11]\nSessionDir=/usr/share/xsessions\n" +
 			"[Wayland]\nWaylandSessionDir=/usr/share/wayland-sessions\n",

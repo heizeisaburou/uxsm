@@ -40,7 +40,7 @@ func TestCheckUserBus(t *testing.T) {
 		t.Error("CheckUserBus without a bus should fail")
 	}
 
-	// Un fichero normal no es un bus.
+	// A regular file is not a bus.
 	if err := os.WriteFile(filepath.Join(dir, "bus"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}

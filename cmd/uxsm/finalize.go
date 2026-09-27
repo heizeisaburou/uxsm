@@ -9,18 +9,18 @@ import (
 	"github.com/heizeisaburou/uxsm/internal/session"
 )
 
-// runFinalize enciende la señal de que la sesión está lista: `uxsm finalize`.
+// runFinalize turns on the signal that says the session is ready: `uxsm finalize`.
 //
-// Es lo mismo que hace uwsm con su `uwsm finalize`: lo ejecuta el escritorio
-// desde su configuración ―una línea en bspwmrc, en autostart de Xfce o donde
-// sea― cuando se considera arrancado. En X11 uxsm no lo necesita, porque lo ve
-// él solo en cuanto el gestor de ventanas deja su marca de EWMH, pero un
-// escritorio que no ponga esa marca, o que quiera decirlo más tarde, tiene así
-// cómo decirlo.
+// It is equivalent to uwsm's `uwsm finalize`: the desktop runs it from its
+// configuration—a line in bspwmrc, Xfce autostart, or elsewhere—when it
+// considers itself started. uxsm does not need this on X11 because it detects
+// the EWMH marker as soon as the window manager publishes it, but this gives a
+// desktop that does not publish the marker, or wants to declare readiness later,
+// a way to do so.
 //
-// Los dos caminos encienden la misma señal y sólo cuenta el primero: si la
-// sesión ya estaba lista, esto no es un error ni vuelve a arrancar nada; lo
-// dice y termina bien, para que un escritorio que lo llame de más no se rompa.
+// Both paths turn on the same signal and only the first one counts: if the
+// session was already ready, this is not an error and does not restart anything;
+// it reports that state and succeeds so an extra desktop call does not break.
 func runFinalize(args []string) error {
 	fs := newFlagSet("finalize", "",
 		"Tell uxsm that the desktop of the session is up, from the desktop\n"+
@@ -38,8 +38,8 @@ func runFinalize(args []string) error {
 	if err != nil {
 		return err
 	}
-	// La identidad la escribe uxsm start y la borra el cierre de la sesión, así
-	// que es lo que dice si hay una sesión de uxsm ahora mismo.
+	// uxsm start writes the identity and session shutdown removes it, so its
+	// presence proves that a uxsm session is currently running.
 	if _, err := os.Stat(filepath.Join(dir, session.IdentityFile)); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return errors.New("there is no uxsm session to finalize: run uxsm finalize from the " +

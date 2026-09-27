@@ -1,10 +1,10 @@
 #!/bin/sh
-# Paso 1: `uxsm start` lanza el Exec= de la entrada como servicio de systemd
-# --user, y la sesión dura lo que dura el escritorio. Lo mismo con un comando
-# en vez de una entrada: `uxsm start -- bspwm`.
+# Step 1: `uxsm start` launches the entry's Exec= as a systemd --user service,
+# and the session lasts as long as the desktop. The same applies to a command
+# instead of an entry: `uxsm start -- bspwm`.
 #
-# El display manager se sustituye por una unidad pasajera, uxsm-it-session,
-# que ejecuta `uxsm start` con DISPLAY puesto, como lo haría LightDM.
+# A transient unit, uxsm-it-session, stands in for the display manager and runs
+# `uxsm start` with DISPLAY set, as LightDM would.
 
 set -eu
 . "$(dirname "$0")/lib.sh"
@@ -53,8 +53,8 @@ wait_for 10 sh -c '! systemctl --user is-active uxsm-it-session.service' ||
     fail "the session process is still running after bspc quit"
 ok "quitting bspwm ends the session process"
 
-# La misma sesión, arrancada con un comando. La instancia es el nombre del
-# programa, y uxsm aux exec lee el comando que guardó uxsm start.
+# The same session started from a command. The instance is the program name,
+# and uxsm aux exec reads the command saved by uxsm start.
 if uxsm start -- uxsm-it-no-such-program 2>/dev/null; then
     fail "uxsm start with a missing program did not fail"
 fi

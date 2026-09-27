@@ -23,7 +23,7 @@ func TestParseDisplay(t *testing.T) {
 		{in: ":5.1", number: 5, screen: 1},
 		{in: "unix:2", host: "unix", number: 2},
 		{in: "localhost:10.0", host: "localhost", number: 10},
-		{in: "", number: 7}, // de DISPLAY
+		{in: "", number: 7}, // from DISPLAY
 		{in: "bspwm", bad: true},
 		{in: ":", bad: true},
 		{in: ":x", bad: true},
@@ -64,8 +64,8 @@ func TestReadAuthAndMatch(t *testing.T) {
 		t.Fatalf("readAuth returned %d entries, want 4", len(entries))
 	}
 
-	// matchAuth compara con el nombre de esta máquina, así que la entrada que
-	// tiene que ganar lleva el suyo.
+	// matchAuth compares against this machine's name, so the winning entry must
+	// contain it.
 	host := entries[2].address
 	if h, err := os.Hostname(); err == nil {
 		host = h
@@ -80,7 +80,7 @@ func TestReadAuthAndMatch(t *testing.T) {
 	if got == nil || string(got.data) != "good" {
 		t.Errorf("matchAuth chose %+v, want the local entry of display 1", got)
 	}
-	// Para otro display sólo vale la entrada que sirve para cualquiera.
+	// For another display, only the entry valid for every display applies.
 	got = matchAuth(entries, display{number: 9})
 	if got == nil || string(got.data) != "wild" {
 		t.Errorf("matchAuth for display 9 chose %+v, want the wild entry", got)
@@ -94,9 +94,9 @@ func TestReadAuthTruncated(t *testing.T) {
 	}
 }
 
-// TestManager recorre la comprobación de EWMH entera contra un servidor X de
-// mentira: sin propiedad no hay gestor de ventanas, con una marca que no se
-// confirma tampoco, y cuando se confirma sale su nombre.
+// TestManager exercises the complete EWMH check against a fake X server: no
+// property means no window manager, an unconfirmed marker does too, and a
+// confirmed marker yields its name.
 func TestManager(t *testing.T) {
 	const root, wm = 0x111, 0x222
 
@@ -111,14 +111,14 @@ func TestManager(t *testing.T) {
 		t.Fatalf("Manager without the property = %v, %v; want nil, nil", got, err)
 	}
 
-	// La raíz apunta a una ventana que no existe: es la marca de un gestor de
-	// ventanas que ya no está.
+	// The root points to a nonexistent window: a marker from a window manager
+	// that is no longer present.
 	srv.props[propKey{root, 300}] = window(wm)
 	if got, err := c.Manager(); err != nil || got != nil {
 		t.Fatalf("Manager with a stale mark = %v, %v; want nil, nil", got, err)
 	}
 
-	// La ventana existe pero apunta a otra: tampoco vale.
+	// The window exists but points elsewhere, so it is also invalid.
 	srv.windows = map[uint32]bool{wm: true}
 	srv.props[propKey{wm, 300}] = window(root)
 	if got, err := c.Manager(); err != nil || got != nil {
@@ -139,8 +139,8 @@ func TestManager(t *testing.T) {
 	}
 }
 
-// TestManagerSkipsEvents comprueba que un evento que llegue por el camino no se
-// toma por la respuesta de la petición.
+// TestManagerSkipsEvents verifies that an interleaved event is not mistaken for
+// the request reply.
 func TestManagerSkipsEvents(t *testing.T) {
 	srv := &fakeX{
 		root:    0x111,
@@ -155,7 +155,7 @@ func TestManagerSkipsEvents(t *testing.T) {
 	}
 }
 
-// authRecord arma una entrada de fichero de autorización.
+// authRecord builds an authorization-file entry.
 func authRecord(family uint16, address, number, name string, data []byte) []byte {
 	var b []byte
 	b = binary.BigEndian.AppendUint16(b, family)
@@ -173,18 +173,18 @@ type propKey struct {
 	property uint32
 }
 
-// fakeX es un servidor X de mentira: contesta al saludo y a las dos peticiones
-// que usa uxsm, InternAtom y GetProperty, con lo que le hayan puesto.
+// fakeX is a fake X server: it replies to the handshake and the two requests
+// uxsm uses, InternAtom and GetProperty, with configured values.
 type fakeX struct {
 	root    uint32
 	atoms   map[string]uint32
 	props   map[propKey][]byte
 	windows map[uint32]bool
-	// events es cuántos eventos mete por delante de la primera respuesta.
+	// events is the number of events inserted before the first reply.
 	events int
 }
 
-// start arranca el servidor y devuelve la conexión del cliente, ya saludada.
+// start launches the server and returns the client connection after its handshake.
 func (s *fakeX) start(t *testing.T) *Conn {
 	t.Helper()
 	client, server := net.Pipe()
@@ -208,7 +208,7 @@ func (s *fakeX) serve(nc net.Conn) {
 	if _, err := io.ReadFull(nc, head); err != nil {
 		return
 	}
-	// Nombre y datos de autorización, cada uno con su relleno.
+	// Authorization name and data, each with its padding.
 	for _, n := range []int{int(le.Uint16(head[6:8])), int(le.Uint16(head[8:10]))} {
 		if _, err := io.ReadFull(nc, make([]byte, n+pad(n))); err != nil {
 			return
@@ -258,7 +258,7 @@ func (s *fakeX) serve(nc net.Conn) {
 			value := s.props[propKey{win, le.Uint32(rest[4:8])}]
 			reply = make([]byte, 32, 32+len(value)+pad(len(value)))
 			reply[0] = 1
-			reply[1] = 8 // bits por unidad
+			reply[1] = 8 // bits per unit
 			le.PutUint16(reply[2:4], seq)
 			le.PutUint32(reply[4:8], uint32((len(value)+pad(len(value)))/4))
 			le.PutUint32(reply[16:20], uint32(len(value)))
@@ -272,25 +272,25 @@ func (s *fakeX) serve(nc net.Conn) {
 	}
 }
 
-// setupReply arma un saludo de servidor con dos pantallas, para que el cliente
-// tenga que recorrer la primera con sus profundidades para llegar a la segunda.
+// setupReply builds a server handshake with two screens so the client must walk
+// the first screen and its depths to reach the second.
 func (s *fakeX) setupReply() []byte {
 	vendor := []byte("uxsm fake")
 	body := make([]byte, 32)
 	le.PutUint16(body[16:18], uint16(len(vendor)))
-	body[20] = 2 // pantallas
-	body[21] = 1 // formatos de imagen
+	body[20] = 2 // screens
+	body[21] = 1 // pixmap formats
 	body = appendPadded(body, vendor)
-	body = append(body, make([]byte, 8)...) // el formato de imagen
+	body = append(body, make([]byte, 8)...) // pixmap format
 
 	for i, root := range []uint32{s.root, s.root + 1} {
 		screen := make([]byte, 40)
 		le.PutUint32(screen[:4], root)
-		screen[39] = byte(i) // profundidades, una en la primera pantalla
+		screen[39] = byte(i) // depths, one on the first screen
 		body = append(body, screen...)
 		if i == 0 {
 			depth := make([]byte, 8)
-			le.PutUint16(depth[2:4], 1) // un visual
+			le.PutUint16(depth[2:4], 1) // one visual
 			body = append(body, depth...)
 			body = append(body, make([]byte, 24)...)
 		}

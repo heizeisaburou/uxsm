@@ -14,21 +14,21 @@ import (
 	"github.com/heizeisaburou/uxsm/internal/xdg"
 )
 
-// runEntry genera una entrada de sesión y la instala en dm.LocalXSessions:
+// runEntry generates a session entry and installs it in dm.LocalXSessions:
 //
-//	uxsm entry [opciones] bspwm                  bspwm-uxsm.desktop, que apunta a bspwm.desktop
-//	uxsm entry [opciones] --exec bspwm           bspwm-uxsm.desktop, con la orden de bspwm
-//	uxsm entry [opciones] --exec -- mywm [args]  mywm-uxsm.desktop, con ese comando
-//	uxsm entry [opciones] --plain --from-table bspwm  bspwm.desktop, de la tabla
-//	uxsm entry [opciones] --plain -- mywm [args] mywm.desktop, con ese comando
+//	uxsm entry [options] bspwm                  bspwm-uxsm.desktop, pointing to bspwm.desktop
+//	uxsm entry [options] --exec bspwm           bspwm-uxsm.desktop, with bspwm's command
+//	uxsm entry [options] --exec -- mywm [args]  mywm-uxsm.desktop, with that command
+//	uxsm entry [options] --plain --from-table bspwm  bspwm.desktop, from the table
+//	uxsm entry [options] --plain -- mywm [args] mywm.desktop, with that command
 //
-// La fuente se dice siempre: una entrada instalada, la tabla de escritorios
-// conocidos con --from-table, o un comando detrás de --. Además, la tabla
-// completa lo que la fuente no diga, y con --no-table no lo completa.
+// The source is always explicit: an installed entry, the known-desktop table
+// with --from-table, or a command after --. The table also fills in anything
+// missing from the source; --no-table prevents it from doing so.
 //
-// Sólo escribe en dm.LocalXSessions: ni a la salida estándar ni a otro
-// directorio, y menos en /usr/share/xsessions, que es de los paquetes. Sin -i
-// sólo enseña qué fichero escribiría y con qué contenido.
+// It writes only to dm.LocalXSessions: never to standard output or another
+// directory, especially /usr/share/xsessions, which belongs to packages.
+// Without -i it only shows which file it would write and its contents.
 func runEntry(args []string) error {
 	fs := newFlagSet("entry", "[options] <name>\n"+
 		"       uxsm entry [options] --exec <name> | --exec -- <command> [args...]\n"+
@@ -43,10 +43,10 @@ func runEntry(args []string) error {
 			"                  table of known desktops\n"+
 			"  -- <command>    with --exec or --plain, an entry for that command,\n"+
 			"                  named after its program\n\n"+
-			"The source is always said: an installed entry, uxsm's table of known\n"+
-			"desktops with --from-table, or a command after --. The table also fills\n"+
-			"in what the source does not say ―desktop names, name, comment―, and\n"+
-			"--no-table leaves it out of that too.\n\n"+
+			"Every entry has an explicit source: an installed entry, uxsm's table of\n"+
+			"known desktops selected with --from-table, or a command after --. Unless\n"+
+			"--no-table is used, the table fills in metadata missing from that source:\n"+
+			"desktop names, display name and comment.\n\n"+
 			"Without -i, it only shows the file it would write.")
 	exec := fs.Bool("exec", false, "make a -uxsm entry that starts the command directly")
 	plain := fs.Bool("plain", false, "make the plain entry, without uxsm")
@@ -54,8 +54,8 @@ func runEntry(args []string) error {
 	force := fs.Bool("f", false, "overwrite an entry with the same name in "+dm.LocalXSessions+",\nor hide one in another xsessions directory, such as a package's")
 	names := fs.String("D", "", "desktop `names` to add, separated by ':'")
 	exclusive := fs.Bool("e", false, "use only the names given with -D, dropping the known ones")
-	fromTable := fs.Bool("from-table", false, "take the entry from uxsm's table of known desktops instead of\nfrom an installed one; needs --exec or --plain")
-	noTable := fs.Bool("no-table", false, "do not let the table fill in what the source does not say: the\nrest is what -D, -N and -C give")
+	fromTable := fs.Bool("from-table", false, "use uxsm's table of known desktops as the source instead of\nan installed entry; requires --exec or --plain")
+	noTable := fs.Bool("no-table", false, "do not use the table to fill metadata missing from the source;\n-D, -N and -C can provide it instead")
 	name := fs.String("N", "", "the `name` shown on the login screen")
 	comment := fs.String("C", "", "the `comment` shown on the login screen")
 	if err := parseFlags(fs, args); err != nil {
@@ -67,18 +67,18 @@ func runEntry(args []string) error {
 		return errUsage
 	}
 	if *fromTable && *noTable {
-		return errors.New("--from-table takes the entry from the table and --no-table leaves the table out: use one or the other")
+		return errors.New("--from-table selects the table as the source, while --no-table disables it; use only one")
 	}
 	if *fromTable && dashes {
-		return errors.New("--from-table takes the command from uxsm's table; for a command of your own, leave it out")
+		return errors.New("--from-table selects a command from uxsm's table and cannot be used with an explicit command after --")
 	}
 	if *fromTable && !*exec && !*plain {
 		return errors.New("--from-table makes the entry from uxsm's table instead of from an installed one, so it needs --exec or --plain")
 	}
-	// La entrada normal sólo puede salir de la tabla o de un comando, y de cuál
-	// se dice, como en todo lo demás.
+	// A plain entry can only come from the table or a command, and the source
+	// must be explicit, just as in every other case.
 	if *plain && !dashes && !*fromTable {
-		return errors.New("the plain entry cannot come from an installed one: say where it comes from with `--plain --from-table <name>`, or give the command with `--plain -- <command>`")
+		return errors.New("--plain does not wrap an installed entry; select the table with `--plain --from-table <name>`, or provide a command with `--plain -- <command>`")
 	}
 	if dashes && !*exec && !*plain {
 		return errors.New("an entry that points to another entry needs that entry's name; for a command, use --exec or --plain")
@@ -110,8 +110,8 @@ func runEntry(args []string) error {
 
 	content := e.Render()
 	if !*install {
-		// Sin dos puntos ni punto detrás de una ruta: así se copia de la
-		// terminal con dos clics, sin arrastrar el signo.
+		// Do not put a colon or period after a path: that way it can be copied
+		// from the terminal with a double click without picking up punctuation.
 		fmt.Printf("Would write this file, run it again with -i to write it (as root)\n  %s\n\n%s", dest, content)
 		return nil
 	}
@@ -125,12 +125,12 @@ func runEntry(args []string) error {
 	return nil
 }
 
-// entrySource decide de dónde sale la entrada: un comando, una entrada que
-// existe o la tabla de escritorios conocidos.
+// entrySource decides where the entry comes from: a command, an existing entry,
+// or the known-desktop table.
 //
-// fromTable es --from-table: la entrada sale de la tabla, y no de una instalada.
-// table es lo contrario de --no-table y dice si la tabla puede completar lo que
-// la fuente no traiga.
+// fromTable is --from-table: the entry comes from the table, not an installed
+// entry. table is the inverse of --no-table and says whether the table may fill
+// in anything missing from the source.
 func entrySource(args []string, dashes, exec, fromTable, table bool) (*sessionentry.Source, error) {
 	if dashes {
 		return sessionentry.FromCommand(args, table)
@@ -145,26 +145,27 @@ func entrySource(args []string, dashes, exec, fromTable, table bool) (*sessionen
 	if err == nil {
 		return sessionentry.FromEntry(entry, table)
 	}
-	// Sin entrada instalada no hay fuente, y la tabla no se usa sin pedirlo: se
-	// dice cómo pedirla, si es que conoce ese escritorio.
+	// Without an installed entry there is no source, and the table is not used
+	// unless requested: explain how to request it if that desktop is known.
 	if exec {
 		if _, terr := sessionentry.FromTable(name); terr == nil {
-			return nil, fmt.Errorf("there is no session entry %s to take the command from; take it from uxsm's table with `uxsm entry --exec --from-table %s`, or give the command with `uxsm entry --exec -- <command>`", id, name)
+			return nil, fmt.Errorf("cannot take the command from %s because that session entry is not installed; use uxsm's table with `uxsm entry --exec --from-table %s`, or provide the command with `uxsm entry --exec -- <command>`", id, name)
 		}
-		return nil, fmt.Errorf("there is no session entry %s to take the command from, and %s is not in uxsm's table of known desktops; give the command with `uxsm entry --exec -- <command>`", id, name)
+		return nil, fmt.Errorf("cannot take the command from %s because that session entry is not installed, and %s is not in uxsm's table of known desktops; provide the command with `uxsm entry --exec -- <command>`", id, name)
 	}
-	// Una entrada de uxsm que apunta a otra necesita que la otra exista. No se
-	// crea por su cuenta: se dice cómo seguir.
+	// A uxsm entry that points to another entry needs that entry to exist. It is
+	// not created automatically: explain how to proceed.
 	if _, terr := sessionentry.FromTable(name); terr == nil {
 		return nil, fmt.Errorf("there is no session entry %s to point to; create it first with `uxsm entry --plain --from-table %s`, or make one that starts the command directly with `uxsm entry --exec --from-table %s`", id, name, name)
 	}
 	return nil, fmt.Errorf("there is no session entry %s to point to, and %s is not in uxsm's table of known desktops; make one for its command with `uxsm entry --exec -- <command>`", id, name)
 }
 
-// checkDestination comprueba que escribir dest no pisa ni tapa otra entrada con
-// el mismo nombre, salvo con -f: la de dest misma, o la de otro directorio de
-// xsessions que ésta taparía, porque /usr/local/share va antes, como la de un
-// paquete en /usr/share/xsessions.
+// checkDestination makes sure writing dest neither overwrites nor shadows
+// another entry with the same name unless -f is used: either dest itself or an
+// entry in another xsessions directory that dest would shadow because
+// /usr/local/share takes precedence, such as one in /usr/share/xsessions from a
+// package.
 func checkDestination(dest, id string, force bool) error {
 	if force {
 		return nil
@@ -184,8 +185,8 @@ func checkDestination(dest, id string, force bool) error {
 	return nil
 }
 
-// warnDisplayManager avisa, por la salida de error, si el display manager en
-// uso no lee dm.LocalXSessions: la entrada no saldría en la pantalla de inicio.
+// warnDisplayManager warns on standard error if the active display manager does
+// not read dm.LocalXSessions: the entry would not appear on the login screen.
 func warnDisplayManager() {
 	r, err := dm.Active()
 	if err != nil || r.Reads(dm.LocalXSessions) {
@@ -196,7 +197,7 @@ func warnDisplayManager() {
 		r.Name, dm.LocalXSessions)
 }
 
-// writeError explica un error al escribir la entrada.
+// writeError explains an error while writing the entry.
 func writeError(dest string, err error) error {
 	if errors.Is(err, fs.ErrPermission) {
 		return fmt.Errorf("writing %s: %w (run it as root)", dest, err)

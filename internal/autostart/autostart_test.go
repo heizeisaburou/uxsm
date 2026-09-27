@@ -36,7 +36,7 @@ func TestWriteAndRemove(t *testing.T) {
 		t.Errorf("the drop-in does not tie the entries to their target:\n%s", data)
 	}
 
-	// Escribirlo dos veces no es un error: la sesión puede volver a arrancar.
+	// Writing it twice is not an error: the session may start again.
 	if err := Write(); err != nil {
 		t.Fatalf("Write twice: %v", err)
 	}
@@ -50,12 +50,12 @@ func TestWriteAndRemove(t *testing.T) {
 	if _, err := os.Stat(filepath.Dir(path)); !os.IsNotExist(err) {
 		t.Error("the drop-in directory was left behind, and it was empty")
 	}
-	// Y borrarlo cuando no está tampoco: lo llama cualquier sesión al cerrarse.
+	// Neither is removing it when absent: every session calls this while stopping.
 	if err := Remove(); err != nil {
 		t.Errorf("Remove without a drop-in: %v", err)
 	}
 
-	// Si alguien más dejó algo dentro, el directorio se queda.
+	// If someone else left something inside, the directory remains.
 	if err := Write(); err != nil {
 		t.Fatalf("Write: %v", err)
 	}

@@ -4,25 +4,31 @@
 #   test/publish.sh [--dry-run] [--yes] vX.Y.Z
 #   test/publish.sh --hashes vX.Y.Z
 #
-# The release build is what `make release` already does; this only publishes it,
-# in this order, stopping at the first thing that does not add up:
+# `make release` already builds and tests the distribution packages. This script
+# adds the tag and binary tarball, verifies the complete artifact set, and then
+# publishes it. It stops at the first failed check or command and follows this
+# order:
 #
-#   1. Checks: the version, a clean tree, the branch, the tag nowhere yet, no
-#      release with that name, and gh logged in.
-#   2. The tag, created locally. From then on the version is X.Y.Z, so the
-#      packages and both tarballs have to be built with the tag in place: if
-#      releases/latest is not that version, `make release` runs now.
-#   3. The push of the commit and the tag, and the GitHub release with the five
-#      packages, the source tarball, the binary tarball and SHA256SUMS.
+#   1. Check the version, tree, branch, local and remote tags, GitHub releases,
+#      and gh authentication.
+#   2. Create the tag locally. The tag must precede the build because
+#      test/version.sh reads `git describe`; only then do packages and tarballs
+#      contain the final X.Y.Z version. Run `make release` now if
+#      releases/latest contains another version.
+#   3. Build and test the self-installing binary tarball, then recompute
+#      SHA256SUMS for the complete artifact set.
+#   4. Push the commit and tag, then create the GitHub release with all five
+#      packages, both tarballs, and SHA256SUMS.
 #
-# Steps 1 and 2 change nothing outside this clone; the tag is undone with
-# `git tag -d`. Step 3 is public and cannot be undone, so it asks first unless
-# --yes. With --dry-run nothing runs: it says what it would do.
+# Steps 1 through 3 change nothing outside this clone, and the local tag can be
+# removed with `git tag -d`. Step 4 is public and cannot be undone, so it asks
+# for confirmation unless --yes is used. With --dry-run, no state-changing
+# command runs; the script prints what it would do after completing its checks.
 #
-# --hashes goes afterwards, once GitHub serves the tag: it prints the checksum of
-# that tarball and writes it into the Arch and Nix recipes, which is what the AUR
-# and nixpkgs need. It cannot be done before the tag: GitHub compresses its
-# tarball its own way, so the checksum is only known once it exists.
+# --hashes runs afterwards, once GitHub serves the tag archive. It prints that
+# archive's checksum and writes it to the Arch and Nix recipes consumed by the
+# AUR and nixpkgs. This cannot happen before the tag exists because GitHub
+# creates and compresses the archive itself.
 
 set -eu
 cd "$(dirname "$0")/.."
@@ -52,13 +58,13 @@ run() {
 
 case $tag in
 v[0-9]*.[0-9]*.[0-9]*) ;;
-*) die "the version goes as vX.Y.Z, not ${tag:-nothing}" ;;
+*) die "the version must have the form vX.Y.Z; got ${tag:-nothing}" ;;
 esac
 version=${tag#v}
 repo=heizeisaburou/uxsm
 
-command -v gh >/dev/null 2>&1 || die "gh is not installed, and the release is published with it"
-gh auth status >/dev/null 2>&1 || die "gh is not logged in: run gh auth login"
+command -v gh >/dev/null 2>&1 || die "gh is required to publish a GitHub release but is not installed"
+gh auth status >/dev/null 2>&1 || die "gh is not authenticated; run gh auth login"
 
 if [ -n "$hashes" ]; then
     url="https://github.com/$repo/archive/refs/tags/$tag.tar.gz"
@@ -67,7 +73,7 @@ if [ -n "$hashes" ]; then
     echo "== downloading $url"
     curl -fsSL "$url" -o "$tmp/src.tar.gz" || die "GitHub does not serve $tag yet"
     sum=$(sha256sum "$tmp/src.tar.gz" | cut -d' ' -f1)
-    echo "sha256 of the tag tarball: $sum"
+    echo "SHA-256 of the tag archive: $sum"
     run sed -i "s/^pkgver=.*/pkgver=$version/;s/^sha256sums=.*/sha256sums=('$sum')/" packaging/arch/PKGBUILD
     if command -v nix >/dev/null 2>&1; then
         sri=$(nix hash convert --hash-algo sha256 "$sum" 2>/dev/null ||
@@ -76,24 +82,24 @@ if [ -n "$hashes" ]; then
     if [ -n "${sri:-}" ]; then
         run sed -i "s|hash = lib.fakeHash;|hash = \"$sri\";|;s|hash = \".*\";|hash = \"$sri\";|;s/^  version = \".*\";/  version = \"$version\";/" packaging/nix/package.nix
     else
-        echo "nix is not here: put sha256-<base64> in packaging/nix/package.nix by hand" >&2
+        echo "nix is not installed; put sha256-<base64> in packaging/nix/package.nix manually" >&2
     fi
-    echo "Recipes updated; review and commit them. They are what the AUR and nixpkgs read."
+    echo "Updated the Arch and Nix recipes; review and commit them for the AUR and nixpkgs."
     exit 0
 fi
 
 # 1. Checks.
-[ -z "$(git status --porcelain)" ] || die "the working tree has changes; commit or stash them first"
+[ -z "$(git status --porcelain)" ] || die "the working tree is not clean; commit or stash its changes first"
 branch=$(git rev-parse --abbrev-ref HEAD)
 case $branch in
 main | master) ;;
-*) die "publishing is done from main or master, not from $branch" ;;
+*) die "releases can be published only from main or master, not $branch" ;;
 esac
-! git rev-parse -q --verify "refs/tags/$tag" >/dev/null || die "the tag $tag already exists here; delete it with git tag -d $tag if it is wrong"
-[ -z "$(git ls-remote --tags origin "refs/tags/$tag")" ] || die "the tag $tag is already pushed, so that version is published"
-! gh release view "$tag" --repo "$repo" >/dev/null 2>&1 || die "there is already a GitHub release called $tag"
+! git rev-parse -q --verify "refs/tags/$tag" >/dev/null || die "tag $tag already exists locally; remove it with git tag -d $tag if it is incorrect"
+[ -z "$(git ls-remote --tags origin "refs/tags/$tag")" ] || die "tag $tag already exists on origin, so this version has been published"
+! gh release view "$tag" --repo "$repo" >/dev/null 2>&1 || die "GitHub release $tag already exists"
 [ -z "$(git log "@{upstream}..HEAD" --oneline 2>/dev/null || true)" ] ||
-    echo "publish.sh: note: this commit is not pushed yet; it goes up with the tag" >&2
+    echo "publish.sh: note: the current commit is not on its upstream branch; it will be pushed with the tag" >&2
 
 echo "== uxsm $version from $(git rev-parse --short HEAD) on $branch"
 
@@ -104,10 +110,10 @@ if [ -n "$dry" ]; then
     echo "would run: make release, unless releases/latest is already uxsm $version"
 else
     if [ "$(cat releases/latest/version 2>/dev/null)" = "$version" ]; then
-        echo "== releases/latest is uxsm $version, already built and tested"
+        echo "== releases/latest already contains tested packages for uxsm $version"
     else
-        echo "== releases/latest is not uxsm $version: building and testing every distribution"
-        make release || die "make release failed; the tag is still only here: git tag -d $tag"
+        echo "== releases/latest does not contain uxsm $version; building and testing every distribution"
+        make release || die "make release failed; the tag remains local and can be removed with git tag -d $tag"
     fi
 fi
 
@@ -127,7 +133,7 @@ if [ -z "$dry" ]; then
     [ -f "$tmp/root/usr/share/man/man1/uxsm.1" ] || die "the binary tarball does not install the manual page"
     got=$("$tmp/root/usr/bin/uxsm" version)
     [ "$got" = "$version" ] || die "the binary in the tarball says it is $got, not $version"
-    echo "== the binary tarball installs and reports uxsm $version"
+    echo "== binary tarball installs successfully and reports uxsm $version"
 fi
 
 if [ ! -d releases/latest ]; then
@@ -146,13 +152,13 @@ else
     echo "$artifacts" | sed 's|^|  |'
 fi
 
-# 3. Public, and it cannot be undone.
+# 4. Public, and it cannot be undone.
 if [ -z "$dry" ] && [ -z "$yes" ]; then
-    printf 'Push %s and publish the release of uxsm %s? [y/N] ' "$tag" "$version"
+    printf 'Push %s and publish uxsm %s on GitHub? [y/N] ' "$tag" "$version"
     read -r answer
     case $answer in
     y | Y | yes) ;;
-    *) die "nothing pushed; the tag is still only here: git tag -d $tag" ;;
+    *) die "nothing was pushed; the tag remains local and can be removed with git tag -d $tag" ;;
     esac
 fi
 
@@ -160,8 +166,8 @@ run git push origin "$branch"
 run git push origin "$tag"
 # shellcheck disable=SC2086
 run gh release create "$tag" --repo "$repo" --title "uxsm $version" \
-    --notes "Packages for Ubuntu, Debian, Arch, Fedora and openSUSE, the source tarball, and a binary tarball with its own install.sh for machines with no uxsm package. Checksums in SHA256SUMS." \
+    --notes "Packages for Ubuntu, Debian, Arch, Fedora, and openSUSE; the source tarball; and a self-installing binary tarball for machines without an uxsm package. SHA-256 checksums are provided in SHA256SUMS" \
     $artifacts
 
-echo "== published: https://github.com/$repo/releases/tag/$tag"
-echo "Next, once GitHub serves the tarball: test/publish.sh --hashes $tag"
+echo "== published https://github.com/$repo/releases/tag/$tag"
+echo "Next, once GitHub serves the tag archive, run test/publish.sh --hashes $tag"

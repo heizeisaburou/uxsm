@@ -2,17 +2,17 @@ package session
 
 import "strings"
 
-// IdentityVars son las variables que dicen qué sesión es, calculadas a partir
-// de los nombres del escritorio, en formato "NOMBRE=valor".
+// IdentityVars returns the variables that identify the session, derived from
+// the desktop names and formatted as "NAME=value".
 //
-// Son las mismas que pone uwsm, cambiando el tipo de sesión:
-//   - XDG_CURRENT_DESKTOP: todos los nombres, separados por ":".
-//   - XDG_SESSION_DESKTOP: el primero.
-//   - XDG_MENU_PREFIX: el primero en minúsculas y con "-" detrás, el prefijo
-//     de los ficheros de menú de XDG ("xfce-applications.menu").
-//   - XDG_SESSION_TYPE: siempre "x11".
+// These are the same variables uwsm sets, with a different session type:
+//   - XDG_CURRENT_DESKTOP: all names, separated by ":".
+//   - XDG_SESSION_DESKTOP: the first name.
+//   - XDG_MENU_PREFIX: the lowercase first name followed by "-", the prefix
+//     used by XDG menu files ("xfce-applications.menu").
+//   - XDG_SESSION_TYPE: always "x11".
 //
-// names no puede estar vacío: DesktopNames nunca lo devuelve vacío sin error.
+// names cannot be empty: DesktopNames never returns an empty result without an error.
 func IdentityVars(names []string) []string {
 	first := names[0]
 	return []string{

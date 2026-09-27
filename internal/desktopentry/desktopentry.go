@@ -1,6 +1,6 @@
-// Package desktopentry lee entradas de sesión (.desktop) según la Desktop Entry
-// Specification: sólo lo que uxsm necesita para arrancar una sesión y para
-// generar entradas a partir de otras.
+// Package desktopentry reads session entries (.desktop) according to the
+// Desktop Entry Specification, limited to what uxsm needs to start a session
+// and generate entries from existing ones.
 package desktopentry
 
 import (
@@ -16,54 +16,53 @@ import (
 	"github.com/heizeisaburou/uxsm/internal/xdg"
 )
 
-// Los subdirectorios de cada directorio de datos XDG donde hay entradas: las de
-// sesión X11 y las de aplicación.
+// Subdirectories of each XDG data directory that contain entries: X11 sessions
+// and applications.
 const (
 	XSessions    = "xsessions"
 	Applications = "applications"
 )
 
-// Entry es una entrada de sesión ya leída.
+// Entry is a parsed session entry.
 type Entry struct {
-	// ID es el nombre del fichero, con .desktop: "bspwm.desktop".
+	// ID is the file name including .desktop: "bspwm.desktop".
 	ID string
-	// Path es la ruta del fichero que se ha leído.
+	// Path is the path of the file that was read.
 	Path string
-	// Name es la clave Name=, sin traducciones.
+	// Name is the untranslated Name= key.
 	Name string
-	// Comment es la clave Comment=, sin traducciones.
+	// Comment is the untranslated Comment= key.
 	Comment string
-	// Exec es la clave Exec= tal cual; para ejecutarla, ver SplitExec.
+	// Exec is the raw Exec= key; see SplitExec for execution.
 	Exec string
-	// DesktopNames es la lista de DesktopNames=.
+	// DesktopNames is the DesktopNames= list.
 	DesktopNames []string
-	// Icon es la clave Icon=, que es lo que pone %i en el Exec=.
+	// Icon is the Icon= key, which supplies %i in Exec=.
 	Icon string
-	// WorkingDir es la clave Path=: el directorio desde el que se ejecuta la
-	// aplicación. Se llama así para no confundirlo con Path, que es dónde está
-	// la entrada.
+	// WorkingDir is the Path= key: the directory from which the application is
+	// run. It has a different name to avoid confusion with Path, the entry's
+	// own location.
 	WorkingDir string
-	// Terminal dice si la entrada pide ejecutarse dentro de un terminal.
+	// Terminal says whether the entry requests execution in a terminal.
 	Terminal bool
-	// Actions son las acciones de la entrada, los grupos [Desktop Action X],
-	// por su identificador.
+	// Actions maps entry actions, the [Desktop Action X] groups, by identifier.
 	Actions map[string]Action
 }
 
-// Action es una acción de una entrada: otra cosa que se puede lanzar desde
-// ella, como "abrir una ventana privada".
+// Action is an entry action: another operation that can be launched from the
+// entry, such as "open a private window".
 type Action struct {
-	// ID es lo que va detrás de ":" al pedirla: "new-private-window".
+	// ID is what follows ":" when requesting it: "new-private-window".
 	ID string
-	// Name es su nombre, y Exec lo que ejecuta.
+	// Name is its name, and Exec is what it runs.
 	Name, Exec string
 }
 
-// Find busca la entrada id en el subdirectorio subdir ("xsessions") de cada
-// directorio de datos XDG, por orden de preferencia, y devuelve la primera.
+// Find looks for entry id in subdir ("xsessions") under each XDG data
+// directory in preference order, and returns the first match.
 //
-// Es el mismo orden en que la buscaría un display manager que siga XDG: una
-// entrada en ~/.local/share/xsessions tapa a la del sistema con el mismo ID.
+// This is the order an XDG-compliant display manager would use: an entry in
+// ~/.local/share/xsessions shadows a system entry with the same ID.
 func Find(subdir, id string) (*Entry, error) {
 	if err := checkID(id); err != nil {
 		return nil, err
@@ -78,8 +77,8 @@ func Find(subdir, id string) (*Entry, error) {
 			if err != nil {
 				return nil, err
 			}
-			// El ID es el que se pidió, aunque el fichero esté en un
-			// subdirectorio: es como lo nombra todo el mundo.
+			// The ID is the requested one even when the file is in a
+			// subdirectory: that is the name used everywhere else.
 			e.ID = id
 			return e, nil
 		}
@@ -88,11 +87,11 @@ func Find(subdir, id string) (*Entry, error) {
 	return nil, fmt.Errorf("desktop entry %q not found in any %s directory", id, subdir)
 }
 
-// idPaths son las rutas relativas donde puede estar la entrada id, por orden.
+// idPaths returns the relative paths where entry id may be found, in order.
 //
-// Lo normal es un fichero con ese nombre, pero la especificación dice que el ID
-// de una aplicación es su ruta dentro del directorio con las barras cambiadas
-// por guiones, así que "kde4-konsole.desktop" puede estar en "kde4/konsole.desktop".
+// Usually it is a file with that name, but the specification defines an
+// application's ID as its path within the directory with slashes replaced by
+// dashes, so "kde4-konsole.desktop" may be stored as "kde4/konsole.desktop".
 func idPaths(id string) []string {
 	paths := []string{id}
 	for i, c := range id {
@@ -104,7 +103,7 @@ func idPaths(id string) []string {
 	return paths
 }
 
-// Read lee la entrada del fichero path. Su ID es el nombre del fichero.
+// Read reads the entry from path. Its ID is the file name.
 func Read(path string) (*Entry, error) {
 	id := filepath.Base(path)
 	if err := checkID(id); err != nil {
@@ -123,8 +122,8 @@ func Read(path string) (*Entry, error) {
 	return e, nil
 }
 
-// checkID comprueba que id es el nombre de un fichero .desktop y nada más: sin
-// barras, para que no se pueda salir del directorio de entradas.
+// checkID verifies that id is only the name of a .desktop file, without slashes,
+// so it cannot escape the entry directory.
 func checkID(id string) error {
 	if !strings.HasSuffix(id, ".desktop") || id == ".desktop" {
 		return fmt.Errorf("%q is not a desktop entry ID: it must end in .desktop", id)
@@ -135,10 +134,10 @@ func checkID(id string) error {
 	return nil
 }
 
-// parse lee el grupo [Desktop Entry], y de los demás grupos, las acciones.
+// parse reads the [Desktop Entry] group and actions from the other groups.
 //
-// Las claves traducidas (Name[es]=) se ignoran. Exec= tiene que estar: una
-// entrada sin él no se puede lanzar.
+// Localized keys (Name[es]=) are ignored. Exec= is required because an entry
+// without it cannot be launched.
 func parse(r io.Reader) (*Entry, error) {
 	var e Entry
 	inMain := false
@@ -214,7 +213,7 @@ func parse(r io.Reader) (*Entry, error) {
 	return &e, nil
 }
 
-// unescape deshace los escapes de los valores de tipo cadena: \s, \n, \t, \r y \\.
+// unescape decodes escapes in string values: \s, \n, \t, \r, and \\.
 func unescape(s string) string {
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {
@@ -242,8 +241,8 @@ func unescape(s string) string {
 	return b.String()
 }
 
-// splitList parte una lista separada por ";", donde "\;" es un ";" literal.
-// Los elementos vacíos, como el que deja el ";" final, se descartan.
+// splitList splits a semicolon-separated list where "\;" is a literal ";".
+// Empty elements, including the one left by a trailing ";", are discarded.
 func splitList(s string) []string {
 	var items []string
 	var cur strings.Builder

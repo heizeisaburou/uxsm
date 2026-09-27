@@ -13,23 +13,22 @@ import (
 	"github.com/heizeisaburou/uxsm/internal/session"
 )
 
-// loaderScript es loader.sh, metido en el binario al compilar: así no hay que
-// instalar un script aparte ni buscarlo en tiempo de ejecución.
+// loaderScript is loader.sh embedded in the binary at build time, avoiding a
+// separate installed script and runtime lookup.
 //
 //go:embed loader.sh
 var loaderScript string
 
-// auxPrefix marca las variables auxiliares que uxsm le pasa al cargador. No son
-// de la sesión y se quitan del resultado.
+// auxPrefix identifies auxiliary variables uxsm passes to the loader. They are
+// not session variables and are removed from the result.
 const auxPrefix = "__UXSM_"
 
-// runLoader ejecuta loader.sh con el entorno base y la identidad de la sesión, y
-// devuelve el entorno que queda después de cargar el perfil y los ficheros de
-// entorno.
+// runLoader runs loader.sh with the base environment and session identity, then
+// returns the environment left after loading the profile and environment files.
 //
-// Los ficheros de entorno son scripts de shell ―pueden calcular valores, no sólo
-// asignarlos―, así que la única forma de saber qué dejan es ejecutarlos en una
-// shell y leer el entorno al final. Es lo que hace uwsm con su prepare-env.sh.
+// Environment files are shell scripts—they may compute values rather than only
+// assign them—so the only way to know their result is to run them in a shell and
+// read the final environment. This is what uwsm does with prepare-env.sh.
 func runLoader(base, identity []string) ([]string, error) {
 	mark, err := randomMark()
 	if err != nil {
@@ -61,8 +60,8 @@ func runLoader(base, identity []string) ([]string, error) {
 	return parseEnvDump(dump), nil
 }
 
-// randomMark es la marca que separa los mensajes del cargador de su entorno. Es
-// aleatoria para que ningún mensaje ni fichero de entorno pueda contenerla.
+// randomMark is the marker separating loader messages from its environment. It
+// is random so no message or environment file can contain it.
 func randomMark() (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
@@ -71,11 +70,11 @@ func randomMark() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// splitAtMark separa la salida del cargador en los mensajes de antes de la marca
-// y el volcado del entorno de detrás.
+// splitAtMark divides loader output into messages before the marker and the
+// environment dump after it.
 //
-// Busca la primera aparición: la marca vuelve a salir dentro del volcado, en la
-// propia variable __UXSM_MARK__.
+// It uses the first occurrence because the marker appears again inside the dump
+// in the __UXSM_MARK__ variable itself.
 func splitAtMark(out []byte, mark string) (messages, dump []byte, err error) {
 	i := bytes.Index(out, []byte(mark))
 	if i < 0 {
@@ -84,8 +83,8 @@ func splitAtMark(out []byte, mark string) (messages, dump []byte, err error) {
 	return out[:i], out[i+len(mark):], nil
 }
 
-// parseEnvDump lee la salida de `env -0`: asignaciones separadas por caracteres
-// nulos. Quita las variables auxiliares y las que no son de la sesión.
+// parseEnvDump reads `env -0` output: null-separated assignments. It removes
+// auxiliary variables and variables unrelated to the session.
 func parseEnvDump(dump []byte) []string {
 	var env []string
 	for _, kv := range strings.Split(strings.TrimRight(string(dump), "\x00"), "\x00") {

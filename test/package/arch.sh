@@ -1,19 +1,19 @@
 #!/bin/sh
-# Compila el paquete de Arch dentro de una máquina de Arch desechable, con el
-# PKGBUILD de packaging/arch y makepkg, como en el AUR. Lo ejecuta
-# test/release.sh con ~/uxsm/version y ~/uxsm/uxsm-<versión>.tar.gz ya subidos, y
-# deja el paquete en ~/uxsm/out.
+# Build the Arch package in a disposable Arch VM using packaging/arch's PKGBUILD
+# and makepkg, as in the AUR. test/release.sh runs this after uploading
+# ~/uxsm/version and ~/uxsm/uxsm-<version>.tar.gz; the package is left in
+# the ~/uxsm/out directory.
 #
-# El PKGBUILD descarga el tarball de la etiqueta de GitHub; makepkg no descarga
-# nada si ya hay un fichero con ese nombre junto al PKGBUILD, así que basta con
-# ponerle la versión y dejar ahí el tarball.
+# The PKGBUILD downloads the GitHub tag tarball. makepkg downloads nothing when
+# a file with that name already sits beside the PKGBUILD, so setting the version
+# and placing the tarball there is sufficient.
 
 set -eu
 cd "$HOME/uxsm"
 v=$(cat version)
 
 echo "== updating the system"
-# Una imagen vieja puede traer un llavero que ya no firma los paquetes nuevos.
+# An old image may contain a keyring that no longer signs current packages.
 sudo pacman -Sy --noconfirm --needed archlinux-keyring >/dev/null
 sudo pacman -Su --noconfirm >/dev/null
 sudo pacman -S --noconfirm --needed base-devel >/dev/null
@@ -24,7 +24,7 @@ cd build
 tar -xzf "../uxsm-$v.tar.gz" --strip-components=3 "uxsm-$v/packaging/arch/PKGBUILD"
 sed -i "s/^pkgver=.*/pkgver=$v/" PKGBUILD
 cp "../uxsm-$v.tar.gz" .
-# -s instala los makedepends del PKGBUILD: si falta alguno, falla aquí.
+# -s installs PKGBUILD makedepends, so a missing dependency fails here.
 makepkg -s --noconfirm
 
 mkdir -p "$HOME/uxsm/out"

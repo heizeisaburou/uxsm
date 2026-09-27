@@ -1,8 +1,8 @@
 #!/bin/sh
-# Paso 3b: uxsm-env@.service monta el entorno de la sesión en el gestor antes del
-# escritorio ―perfil, ficheros uxsm/env y env-<escritorio> con sus .d― y al
-# cerrar deja el entorno del gestor exactamente como estaba, venga de donde venga
-# el cierre.
+# Step 3b: uxsm-env@.service builds the session environment in the manager before
+# the desktop—profile, uxsm/env, env-<desktop>, and their .d directories—and
+# restores the manager environment exactly on shutdown, regardless of the
+# shutdown trigger.
 
 set -eu
 . "$(dirname "$0")/lib.sh"
@@ -25,16 +25,16 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# snapshot: el entorno completo del gestor, ordenado. Dos fotos iguales con el
-# mismo formato se comparan bien aunque systemctl escape algunos valores.
+# snapshot: the complete sorted manager environment. Snapshots in the same
+# format compare correctly even when systemctl escapes some values.
 snapshot() {
     systemctl --user show-environment | sort
 }
 
 start_xvfb :5
 
-# Basura de una sesión anterior que no limpió: la sesión no debe verla, y al
-# cerrar tiene que volver, porque estaba en la foto.
+# Stale data from a previous session that failed to clean up: the session must
+# not see it, and shutdown must restore it because it was in the snapshot.
 systemctl --user set-environment WAYLAND_DISPLAY=wayland-stale
 before=$(snapshot)
 

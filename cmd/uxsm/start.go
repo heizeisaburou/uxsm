@@ -15,29 +15,30 @@ import (
 	"github.com/heizeisaburou/uxsm/internal/systemd"
 )
 
-// runStart arranca una sesión, de una entrada o de un comando, como uwsm:
+// runStart starts a session from an entry or command, like uwsm:
 //
-//	uxsm start [-e] [-D nombres] bspwm.desktop
-//	uxsm start [-e] [-D nombres] [--] bspwm [argumentos…]
+//	uxsm start [-e] [-D names] bspwm.desktop
+//	uxsm start [-e] [-D names] [--] bspwm [arguments...]
 //
-// Es lo que ejecuta el display manager, así que el proceso que vigila es éste:
-//  1. Decide qué arranca (resolveTarget): la entrada, buscada en los directorios
-//     xsessions, o el comando. Comprueba también que hay bus de sesión de
-//     D-Bus. Así falla ya si algo no existe o está mal, antes de tocar systemd.
-//  2. Calcula la identidad de la sesión ―los nombres del escritorio y las
-//     variables XDG_* que los dicen― con -D y -e.
-//  3. Espera a que no quede nada de una sesión anterior que todavía se esté
-//     apagando: su limpieza borraría los ficheros de ésta.
-//  4. Guarda en $XDG_RUNTIME_DIR/uxsm el entorno que le ha dado el display
-//     manager y esa identidad, y con un comando, también el comando. Con eso,
-//     uxsm-env@.service monta el entorno de la sesión en el gestor antes de que
-//     arranque el escritorio, y lo limpia al cerrar. Deja ahí también la marca
-//     que dice si esta sesión lanza el autostart XDG (markAutostart).
-//  5. Arranca uxsm-bindpid@<pid>.service con su propio PID, para que la sesión se
-//     apague si el display manager mata este proceso.
-//  6. Se sustituye por `systemctl --user start --wait uxsm-desktop@<id>.service`,
-//     que no vuelve hasta que el escritorio termina. Con exec el PID no cambia,
-//     así que el PID que vigila bindpid sigue siendo el de la sesión.
+// The display manager executes this function, so this is the process it watches:
+//  1. Decide what to start (resolveTarget): an entry found in the xsessions
+//     directories, or a command. Also verify that a D-Bus session bus exists.
+//     Missing or malformed input therefore fails before systemd is touched.
+//  2. Compute the session identity—the desktop names and corresponding XDG_*
+//     variables—from -D and -e.
+//  3. Wait until no previous session remains in the middle of shutdown: its
+//     cleanup would otherwise remove this session's files.
+//  4. Save the display manager's environment and the identity under
+//     $XDG_RUNTIME_DIR/uxsm, plus the command for direct-command sessions. This
+//     lets uxsm-env@.service install the session environment in the user manager
+//     before starting the desktop and clean it at shutdown. Also leave the marker
+//     that records whether uxsm starts XDG autostart for this session
+//     (markAutostart).
+//  5. Start uxsm-bindpid@<pid>.service with this process's PID so the session
+//     shuts down if the display manager kills it.
+//  6. Replace this process with `systemctl --user start --wait
+//     uxsm-desktop@<id>.service`, which returns only after the desktop exits.
+//     exec preserves the PID, so bindpid continues watching the session process.
 func runStart(args []string) error {
 	fs := newFlagSet("start", "[-e] [-D names] [--no-autostart] <entry.desktop>\n"+
 		"       uxsm start [-e] [-D names] [--no-autostart] [--] <command> [args...]",
@@ -103,8 +104,8 @@ func runStart(args []string) error {
 			return fmt.Errorf("saving the command: %w", err)
 		}
 	}
-	// Por si quedara encendida de una sesión anterior que no llegó a limpiar:
-	// con ella encendida, ésta se daría por lista sin escritorio en pantalla.
+	// Clear a signal possibly left by a previous session that never cleaned up;
+	// otherwise this session would become ready with no desktop on screen.
 	if err := session.ClearReady(); err != nil {
 		return fmt.Errorf("clearing the ready signal of a previous session: %w", err)
 	}
@@ -118,14 +119,14 @@ func runStart(args []string) error {
 	return systemd.ExecStartWait(systemd.DesktopUnit(target.id))
 }
 
-// markAutostart deja escrito en el directorio de runtime si esta sesión lanza
-// el autostart XDG. Es lo que mira `uxsm aux autostart`, el ExecStartPost= del
-// escritorio.
+// markAutostart records in the runtime directory whether uxsm starts XDG
+// autostart for this session. The desktop's ExecStartPost=, `uxsm aux
+// autostart`, reads it.
 //
-// Se lanza siempre salvo que se diga que no, como en uwsm: de una sesión con
-// systemd se espera que las entradas de autostart arranquen solas. uxsm start
-// no mira aquí qué escritorio es; de eso sabe uxsm entry, que pone
-// --no-autostart en las entradas de los escritorios que lanzan el suyo.
+// It is enabled unless explicitly disabled, like uwsm: a systemd-managed
+// session is expected to start autostart entries itself. uxsm start does not
+// identify desktops here; uxsm entry knows that and writes --no-autostart for
+// desktops that start their own entries.
 func markAutostart(dir string, disabled bool) error {
 	path := filepath.Join(dir, session.AutostartFile)
 	if disabled {
@@ -138,27 +139,27 @@ func markAutostart(dir string, disabled bool) error {
 	return os.WriteFile(path, []byte("uxsm start, without --no-autostart\n"), 0o600)
 }
 
-// startTarget es lo que arranca uxsm start.
+// startTarget describes what uxsm start will launch.
 type startTarget struct {
-	// id es la instancia de las unidades de la sesión: el ID de la entrada,
-	// "bspwm.desktop", o el nombre del programa del comando, "bspwm".
+	// id is the session-unit instance: the entry ID, "bspwm.desktop", or the
+	// command's program name, "bspwm".
 	id string
-	// argv es lo que ejecutará el escritorio.
+	// argv is what the desktop service will execute.
 	argv []string
-	// names son los DesktopNames= de la entrada; con un comando, ninguno.
+	// names are the entry's DesktopNames=; a command has none.
 	names []string
-	// command dice si es un comando: entonces uxsm start lo guarda para que lo
-	// lea uxsm aux exec, que con una entrada vuelve a leer la entrada.
+	// command says this is a direct command. uxsm start then saves it for uxsm
+	// aux exec; for an entry, aux exec reads the entry again instead.
 	command bool
 }
 
-// resolveTarget decide qué arranca uxsm start a partir de los argumentos que
-// quedan detrás de las opciones. dashes dice si venían detrás de "--".
+// resolveTarget decides what uxsm start launches from the arguments remaining
+// after its options. dashes says whether they followed "--".
 //
-// Un único argumento acabado en .desktop, sin "--", es una entrada; todo lo
-// demás es un comando, con sus argumentos. Es la misma regla de uwsm, y "--"
-// sirve para lo mismo que allí: pasarle al programa argumentos que empiezan
-// por "-", que si no se tomarían por opciones de uxsm.
+// A single argument ending in .desktop without "--" is an entry; everything
+// else is a command and its arguments. This matches uwsm. "--" also has the
+// same purpose: passing program arguments beginning with "-" that uxsm would
+// otherwise parse as its own options.
 func resolveTarget(args []string, dashes bool) (*startTarget, error) {
 	if !dashes && len(args) == 1 && strings.HasSuffix(args[0], ".desktop") {
 		entry, err := desktopentry.Find(desktopentry.XSessions, args[0])
@@ -172,59 +173,59 @@ func resolveTarget(args []string, dashes bool) (*startTarget, error) {
 		return &startTarget{id: entry.ID, argv: argv, names: entry.DesktopNames}, nil
 	}
 
-	// Como con una entrada que no existe: mejor fallar ahora que cuando el
-	// servicio del escritorio intente ejecutarlo.
+	// As with a missing entry, fail now rather than when the desktop service
+	// attempts to execute it.
 	if _, err := exec.LookPath(args[0]); err != nil {
 		return nil, err
 	}
 	return &startTarget{id: filepath.Base(args[0]), argv: args, command: true}, nil
 }
 
-// afterDashes dice si los n últimos argumentos de args venían detrás de "--".
-// Hace falta porque el paquete flag se come el "--" sin avisar.
+// afterDashes reports whether the last n arguments in args followed "--". It
+// is needed because package flag consumes "--" without reporting it.
 func afterDashes(args []string, n int) bool {
 	i := len(args) - n
 	return i > 0 && args[i-1] == "--"
 }
 
-// previousSessionTimeout es cuánto espera uxsm start a que termine de apagarse
-// una sesión anterior. Una sesión que se apaga tarda poco más de lo que tarda su
-// limpieza; si pasado este tiempo sigue ahí, es que hay otra sesión en marcha.
+// previousSessionTimeout is how long uxsm start waits for a previous session to
+// finish shutting down. Shutdown should take little longer than cleanup; if a
+// session remains after this interval, another session is running.
 const previousSessionTimeout = 10 * time.Second
 
-// sessionUnits son las unidades de una sesión gráfica de este usuario: las de
-// uxsm y las de uwsm, que es el otro que hace esto. Si alguna sigue viva, hay
-// una sesión arrancada o todavía apagándose.
+// sessionUnits are the units of this user's graphical session: those of uxsm
+// and uwsm, the other manager using this model. A live unit means a session is
+// either running or still shutting down.
 //
-// Dos sesiones gráficas de un mismo usuario no encajan, las gestione quien las
-// gestione: el gestor de systemd es uno por usuario, así que comparten
-// graphical-session.target y el entorno. Cerrar una apagaría el target de la
-// otra, y la limpieza del entorno de una borraría lo que la otra acaba de
-// poner.
+// Two graphical sessions for one user are incompatible regardless of their
+// manager: there is one systemd manager per user, so both would share
+// graphical-session.target and the environment. Closing one would stop the
+// other's target, and one session's cleanup would erase the other's new values.
 //
-// Aquí van nombres concretos y no graphical-session.target, que es de systemd y
-// lo enciende cualquiera: el envoltorio de sesión de NixOS lo activa antes de
-// ejecutar el Exec= de la entrada, así que mirarlo hacía que uxsm se tomara a
-// sí mismo por una sesión anterior y se negara a arrancar.
+// This uses concrete unit names instead of graphical-session.target, which is
+// owned by systemd and may be activated by anyone. The NixOS session wrapper
+// activates it before running the entry's Exec=; checking it made uxsm mistake
+// itself for a previous session and refuse to start.
 var sessionUnits = append(uxsmUnits,
-	// Las de uwsm, que gestiona así las sesiones de Wayland.
+	// uwsm's units, which manage Wayland sessions using the same model.
 	"wayland-session-shutdown.target", "wayland-wm@*.service", "wayland-wm-env@*.service",
 	"wayland-session@*.target", "wayland-session-pre@*.target", "wayland-session-bindpid@*.service",
 )
 
-// uxsmUnits son las de una sesión de uxsm, las que dice `uxsm check is-active`.
+// uxsmUnits belong to an uxsm session and are reported by `uxsm check is-active`.
 var uxsmUnits = []string{
 	"uxsm-shutdown.target",
 	"uxsm-desktop@*.service", "uxsm-env@*.service", "uxsm-session@*.target", "uxsm-bindpid@*.service",
 }
 
-// waitForPreviousSession espera hasta timeout a que no quede viva ninguna unidad
-// de otra sesión gráfica.
+// waitForPreviousSession waits up to timeout until no unit from another
+// graphical session remains alive.
 //
-// Hace falta porque el cierre de una sesión no es instantáneo: su servicio de
-// entorno limpia el gestor y borra los ficheros de $XDG_RUNTIME_DIR/uxsm mientras
-// se para. Si una sesión nueva empezara en ese momento ―un autologin rápido―, esa
-// limpieza le borraría los ficheros recién escritos.
+// Session shutdown is not instantaneous: while stopping, its environment
+// service cleans the manager and removes files from the $XDG_RUNTIME_DIR/uxsm
+// directory. If a new session started at that moment—for example through fast
+// autologin—the old
+// cleanup would remove the new files.
 func waitForPreviousSession(timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for {

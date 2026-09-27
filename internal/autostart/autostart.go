@@ -1,17 +1,16 @@
-// Package autostart lleva las entradas de autostart XDG a los slices de la
-// sesión, que es lo único que el generador de systemd no hace por nosotros.
+// Package autostart places XDG autostart entries in the session slices, the one
+// thing systemd's generator does not do for us.
 //
-// `systemd-xdg-autostart-generator` crea una `app-<nombre>@autostart.service`
-// por entrada y las deja en `app.slice`, el estándar. Para que caigan en
-// `app-uxsm.slice`, como todo lo que lanza uxsm, hace falta un añadido sobre la
-// plantilla `app-@autostart.service`, que es la que comparten todas. No puede
-// venir en el paquete: un añadido en /usr/lib se aplicaría también a las
-// sesiones que no son de uxsm ―las de uwsm, las de GNOME― y les cambiaría el
-// slice. Así que se escribe al arrancar la sesión y se borra al cerrarla, igual
-// que hace uwsm con el suyo.
+// `systemd-xdg-autostart-generator` creates one
+// `app-<name>@autostart.service` per entry and leaves them in the standard
+// `app.slice`. Placing them in `app-uxsm.slice`, like everything uxsm launches,
+// requires a drop-in for the shared `app-@autostart.service` template. The
+// package cannot ship that drop-in: one in /usr/lib would also apply to non-uxsm
+// sessions—uwsm and GNOME sessions—and change their slice. It is therefore
+// written when the session starts and removed when it ends, as uwsm does.
 //
-// Quien escriba o borre tiene que pedirle a systemd que recargue después
-// (systemd.DaemonReload): los añadidos se leen al cargar la unidad.
+// Whoever writes or removes it must ask systemd to reload afterwards
+// (systemd.DaemonReload), because drop-ins are read when the unit is loaded.
 package autostart
 
 import (
@@ -23,18 +22,18 @@ import (
 	"github.com/heizeisaburou/uxsm/internal/appunit"
 )
 
-// dropInDir es el directorio de añadidos de la plantilla, dentro del directorio
-// de unidades de runtime del gestor: lo que se deja ahí no sobrevive al usuario.
+// dropInDir is the template's drop-in directory inside the manager's runtime
+// unit directory; anything left there does not outlive the user session.
 const dropInDir = "systemd/user/app-@autostart.service.d"
 
-// dropInName va detrás del "slice-tweak.conf" de uwsm por orden alfabético, que
-// es el orden en que systemd aplica los añadidos. Así, si una sesión anterior de
-// uwsm dejó el suyo sin borrar, manda el nuestro mientras dura la nuestra.
+// dropInName sorts after uwsm's "slice-tweak.conf", which matters because
+// systemd applies drop-ins alphabetically. If a previous uwsm session failed to
+// remove its drop-in, ours therefore takes precedence while our session lasts.
 const dropInName = "uxsm-tweaks.conf"
 
-// dropIn es lo que se escribe. Las dos líneas de [Unit] son las de uwsm y hacen
-// que las entradas se puedan parar y arrancar con su target, en vez de sólo con
-// la sesión entera.
+// dropIn is the content written to disk. The two [Unit] lines match uwsm and let
+// entries start and stop with their target instead of only with the whole
+// session.
 var dropIn = []byte(`# Escrito por uxsm mientras dura la sesión; se borra al cerrarla.
 [Unit]
 PartOf=xdg-desktop-autostart.target
@@ -44,7 +43,7 @@ After=xdg-desktop-autostart.target
 Slice=` + appunit.AppSlice + `
 `)
 
-// Path es el fichero del añadido.
+// Path is the drop-in file.
 func Path() (string, error) {
 	base := os.Getenv("XDG_RUNTIME_DIR")
 	if !filepath.IsAbs(base) {
@@ -53,7 +52,7 @@ func Path() (string, error) {
 	return filepath.Join(base, dropInDir, dropInName), nil
 }
 
-// Write escribe el añadido, creando su directorio si hace falta.
+// Write writes the drop-in, creating its directory if necessary.
 func Write() error {
 	path, err := Path()
 	if err != nil {
@@ -65,8 +64,9 @@ func Write() error {
 	return os.WriteFile(path, dropIn, 0o644)
 }
 
-// Remove borra el añadido, y su directorio si queda vacío. No es un error que no
-// esté: se llama al cerrar cualquier sesión, también una que no lo escribió.
+// Remove deletes the drop-in and its directory if empty. A missing drop-in is
+// not an error: this runs whenever any session ends, including one that did not
+// write it.
 func Remove() error {
 	path, err := Path()
 	if err != nil {
@@ -75,8 +75,8 @@ func Remove() error {
 	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	// El directorio es de la plantilla, no nuestro: se intenta quitar y si no
-	// está vacío ―otro dejó su añadido― se queda, que no es asunto nuestro.
+	// The directory belongs to the template, not to us: attempt to remove it,
+	// but leave it alone if another drop-in keeps it nonempty.
 	os.Remove(filepath.Dir(path))
 	return nil
 }

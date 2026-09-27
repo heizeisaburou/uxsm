@@ -8,40 +8,39 @@ import (
 	"strings"
 )
 
-// Estos ficheros viven en RuntimeDir y permiten pasar el entorno, y con un
-// comando también la orden, desde `uxsm start` a los servicios de systemd que
-// se ejecutan después y que no heredan directamente el entorno del display
-// manager.
+// These files live in RuntimeDir and pass the environment, and for a command
+// also its arguments, from `uxsm start` to systemd services that run later and
+// do not directly inherit the display manager's environment.
 //
-// Este mecanismo sigue el usado por uwsm: upstream también guarda el entorno
-// de login en `env_login` dentro de su directorio de runtime. UXSM añade
-// `env_identity` para separar las variables de identidad calculadas por start.
+// This follows uwsm's mechanism: upstream also stores the login environment in
+// `env_login` inside its runtime directory. uxsm adds `env_identity` to keep
+// identity variables computed by start separate.
 //
-// El servicio de entorno crea además sus propios ficheros de estado para poder
-// restaurar y limpiar el entorno al cerrar la sesión.
+// The environment service also creates its own state files so it can restore
+// and clean the environment when the session ends.
 const (
-	// LoginFile es el entorno con el que el display manager lanzó la sesión,
-	// pasado por FilterEnv (función de este archivo)
+	// LoginFile is the environment with which the display manager launched the
+	// session, filtered by FilterEnv (defined in this file).
 	LoginFile = "env_login"
-	// IdentityFile son las variables de identidad que ha calculado uxsm start:
-	// lo que devuelve IdentityVars (función en identity.go).
+	// IdentityFile contains the identity variables computed by uxsm start: the
+	// result of IdentityVars (defined in identity.go).
 	IdentityFile = "env_identity"
-	// AutostartFile es la marca de que esta sesión lanza el autostart XDG.
-	// La escribe uxsm start cuando le toca a uxsm lanzarlo y la mira
-	// `uxsm aux autostart`, que si no está no arranca nada. Su contenido es
-	// la razón de la decisión, para el diario.
+	// AutostartFile marks that this session launches XDG autostart. uxsm start
+	// writes it when uxsm is responsible for autostart, and `uxsm aux autostart`
+	// checks it and starts nothing if absent. Its content records the reason for
+	// the journal.
 	AutostartFile = "autostart"
-	// CommandFile es la línea de órdenes del escritorio cuando la sesión se
-	// arranca con un comando (`uxsm start -- bspwm`) en vez de con una entrada:
-	// uxsm aux exec la lee de aquí. Va en el mismo formato que los entornos, un
-	// argumento detrás de otro separados por un carácter nulo.
+	// CommandFile contains the desktop command line when the session starts from
+	// a command (`uxsm start -- bspwm`) instead of an entry. uxsm aux exec reads
+	// it here. It uses the same format as environment files: arguments separated
+	// by null bytes.
 	CommandFile = "command"
 )
 
-// RuntimeDir es $XDG_RUNTIME_DIR/uxsm: el directorio de trabajo de la sesión.
+// RuntimeDir is $XDG_RUNTIME_DIR/uxsm, the session's working directory.
 //
-// XDG_RUNTIME_DIR lo crea logind al abrir la sesión y lo borra al cerrar la
-// última, así que lo que se deja aquí no sobrevive al usuario.
+// logind creates XDG_RUNTIME_DIR when opening a session and removes it after the
+// last one closes, so anything left here does not outlive the user session.
 func RuntimeDir() (string, error) {
 	base := os.Getenv("XDG_RUNTIME_DIR")
 	if !filepath.IsAbs(base) {
@@ -50,15 +49,15 @@ func RuntimeDir() (string, error) {
 	return filepath.Join(base, "uxsm"), nil
 }
 
-// varName es un nombre de variable de entorno válido en una shell.
+// varName matches a shell-valid environment variable name.
 var varName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
-// dropVars son variables propias de la shell o del proceso, no de la sesión.
+// dropVars are shell- or process-specific variables, not session variables.
 var dropVars = map[string]bool{"_": true, "SHELL": true, "PWD": true, "OLDPWD": true}
 
-// FilterEnv se queda con las asignaciones "NOMBRE=valor" que son de la sesión:
-// quita las que no tienen un nombre válido y las propias de la shell (_, SHELL,
-// PWD, OLDPWD). Es el mismo filtro que aplica uwsm a su entorno de login.
+// FilterEnv retains session-related "NAME=value" assignments: it removes
+// assignments without a valid name and shell-specific variables (_, SHELL,
+// PWD, OLDPWD). This is the same filter uwsm applies to its login environment.
 func FilterEnv(env []string) []string {
 	var out []string
 	for _, kv := range env {
@@ -70,11 +69,11 @@ func FilterEnv(env []string) []string {
 	return out
 }
 
-// WriteEnvFile guarda env en path, una asignación detrás de otra separadas por
-// un carácter nulo: es el único carácter que no puede aparecer en un valor.
+// WriteEnvFile stores env at path as null-separated assignments; a null byte is
+// the only character that cannot appear in a value.
 //
-// Escribe primero un fichero temporal y lo renombra, para que quien lo lea no
-// encuentre nunca uno a medias. Sólo el usuario puede leerlo.
+// It writes a temporary file first and renames it so readers never see a
+// partial file. Only the user can read it.
 func WriteEnvFile(path string, env []string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
@@ -87,7 +86,7 @@ func WriteEnvFile(path string, env []string) error {
 	return os.Rename(tmp, path)
 }
 
-// ReadEnvFile lee un fichero escrito con WriteEnvFile.
+// ReadEnvFile reads a file written by WriteEnvFile.
 func ReadEnvFile(path string) ([]string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

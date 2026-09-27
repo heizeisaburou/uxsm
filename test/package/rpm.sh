@@ -1,12 +1,12 @@
 #!/bin/sh
-# Compila el paquete .rpm de la distribución de la máquina, Fedora u openSUSE,
-# con su .spec de packaging/ y rpmbuild. Lo ejecuta test/release.sh con
-# ~/uxsm/version y ~/uxsm/uxsm-<versión>.tar.gz ya subidos, y deja los paquetes
-# en ~/uxsm/out.
+# Build the VM distribution's .rpm package, Fedora or openSUSE, using its .spec
+# from packaging/ and rpmbuild. test/release.sh runs this after uploading
+# ~/uxsm/version and ~/uxsm/uxsm-<version>.tar.gz; packages are left in
+# the ~/uxsm/out directory.
 #
-# El .spec descarga el tarball de la etiqueta de GitHub; rpmbuild lo busca en
-# SOURCES por el nombre del final de Source0, así que basta con ponerle la
-# versión y dejar ahí el tarball.
+# The .spec downloads the GitHub tag tarball. rpmbuild looks in SOURCES for the
+# final component of Source0, so setting the version and placing the tarball
+# there is sufficient.
 
 set -eu
 cd "$HOME/uxsm"
@@ -29,7 +29,7 @@ sed -i "s/^Version:\( *\).*/Version:\1$v/" "$spec"
 
 echo "== installing build dependencies"
 pm_install rpm-build
-# Las de BuildRequires en el .spec: si falta alguna, falla aquí.
+# Install BuildRequires from the .spec, so a missing dependency fails here.
 buildrequires=$(rpmspec -q --buildrequires "$spec")
 set --
 while IFS= read -r dep; do

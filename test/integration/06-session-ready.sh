@@ -1,10 +1,9 @@
 #!/bin/sh
-# Paso 4: la sesión no está lista hasta que lo dice una de dos cosas, y sólo
-# cuenta la primera: uxsm ve el gestor de ventanas EWMH en la pantalla, o el
-# propio escritorio ejecuta `uxsm finalize`. Hasta entonces el escritorio no
-# cuenta como arrancado, así que graphical-session.target espera con él; y si no
-# llega ninguna de las dos, la sesión no se queda a medias: el servicio falla al
-# agotarse TimeoutStartSec= y todo se apaga.
+# Step 4: the session is not ready until one of two signals arrives, and only the
+# first counts: uxsm sees the EWMH window manager on screen, or the desktop runs
+# `uxsm finalize`. Until then the desktop is not considered started, so
+# graphical-session.target waits; if neither signal arrives, the session is not
+# left half-started: TimeoutStartSec= fails the service and everything stops.
 
 set -eu
 . "$(dirname "$0")/lib.sh"
@@ -17,11 +16,10 @@ slow_unit=uxsm-desktop@uxsm-it-slowwm.desktop.service
 final_unit=uxsm-desktop@uxsm-it-finalize.desktop.service
 nowm=uxsm-desktop@sleep.service
 
-# Las llamadas sueltas a `uxsm aux wait-ready` de aquí abajo no son una sesión:
-# nadie apaga detrás la señal de que la sesión está lista, que dentro de una
-# sesión apagan `uxsm start` al empezar y la limpieza al cerrar. Como una señal
-# encendida es justo lo que la espera busca, hay que apagarla entre llamada y
-# llamada para que cada una empiece de cero.
+# The standalone `uxsm aux wait-ready` calls below are not a session, so nothing
+# clears the ready signal afterwards. In a real session, `uxsm start` clears it
+# at startup and cleanup clears it at shutdown. Because an active signal is
+# exactly what the wait looks for, clear it between calls so each starts fresh.
 clear_ready() { rm -f "$XDG_RUNTIME_DIR/uxsm/ready"; }
 
 cleanup() {
@@ -35,10 +33,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Las pruebas de antes pueden estar todavía cerrando su última sesión.
+# Earlier tests may still be shutting down their last session.
 wait_no_session || fail "a session from an earlier test is still shutting down"
 
-# Sin sesión, no hay nada que dar por listo.
+# Without a session, there is nothing to mark ready.
 if err=$(uxsm finalize 2>&1); then
     fail "uxsm finalize outside a session did not fail"
 fi
@@ -49,7 +47,7 @@ esac
 
 start_xvfb :5
 
-# Sin gestor de ventanas y sin aviso del escritorio, la espera se agota y lo dice.
+# Without a window manager or desktop signal, the wait times out and reports it.
 clear_ready
 if err=$(DISPLAY=:5 uxsm aux wait-ready -timeout 2s 2>&1); then
     fail "uxsm aux wait-ready succeeded on a display with no window manager"
@@ -59,7 +57,7 @@ case $err in
 *) fail "uxsm aux wait-ready on a bare display: $err" ;;
 esac
 
-# Con gestor de ventanas, dice cuál es.
+# With a window manager, report which one answered.
 clear_ready
 systemd-run --user --quiet --collect --unit=uxsm-it-wm -E DISPLAY=:5 bspwm
 got=$(DISPLAY=:5 uxsm aux wait-ready -timeout 10s)
@@ -68,8 +66,8 @@ case $got in
 *) fail "uxsm aux wait-ready with bspwm printed: $got" ;;
 esac
 
-# Y cuando el gestor de ventanas se va, lo que pueda quedar de él en la raíz no
-# cuenta: la ventana a la que apunta la marca ya no existe.
+# After the window manager exits, any marker left on the root does not count:
+# the window referenced by the marker no longer exists.
 systemctl --user stop uxsm-it-wm.service
 clear_ready
 if err=$(DISPLAY=:5 uxsm aux wait-ready -timeout 2s 2>&1); then
@@ -77,9 +75,9 @@ if err=$(DISPLAY=:5 uxsm aux wait-ready -timeout 2s 2>&1); then
 fi
 ok "the mark of a window manager that is gone does not count"
 
-# Un escritorio que tarda en poner su gestor de ventanas: si la sesión no
-# esperara, graphical-session.target estaría activo estos dos segundos antes de
-# que hubiera dónde colocar nada.
+# A desktop that takes time to start its window manager: without the wait,
+# graphical-session.target would be active for these two seconds before there
+# was anywhere to place windows.
 cat >"$slow" <<'DESKTOP'
 #!/bin/sh
 sleep 2
@@ -109,7 +107,7 @@ ok "graphical-session.target waits for the window manager"
 DISPLAY=:5 bspc quit
 wait_stopped 15 uxsm-it-session.service "$slow_unit" || fail "the session did not stop"
 
-# El otro camino: un escritorio sin gestor de ventanas EWMH que lo dice él.
+# The other path: a desktop without an EWMH window manager signals readiness itself.
 cat >"$final" <<'DESKTOP'
 #!/bin/sh
 uxsm finalize
@@ -138,9 +136,9 @@ esac
 uxsm stop
 wait_stopped 15 uxsm-it-session.service "$final_unit" || fail "the finalized session did not stop"
 
-# Ni gestor de ventanas ni aviso: la sesión no se queda a medias. El tiempo de
-# espera de la unidad se acorta con un fichero de anulación, que es además la
-# forma de quitar la espera a quien arranque algo que no es un escritorio.
+# No window manager or signal: the session is not left half-started. A drop-in
+# shortens the unit timeout; the same mechanism lets users remove the wait when
+# launching something that is not a desktop.
 mkdir -p "$dropin"
 cat >"$dropin/uxsm-it-timeout.conf" <<CONF
 [Service]

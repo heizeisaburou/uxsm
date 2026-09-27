@@ -54,7 +54,7 @@ func TestCheckID(t *testing.T) {
 	}
 }
 
-// TestFindOrder comprueba que la entrada de XDG_DATA_HOME tapa a la del sistema.
+// TestFindOrder verifies that the XDG_DATA_HOME entry shadows the system entry.
 func TestFindOrder(t *testing.T) {
 	home, system := t.TempDir(), t.TempDir()
 	write := func(dir, exec string) {

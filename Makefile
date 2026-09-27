@@ -1,6 +1,6 @@
 # Single build and installation recipe. Every package except Nix calls
 # `make build` and `make install`, so any new installed file must be added here
-# and to postInstall in packaging/nix/package.nix.
+# and to postInstall in packaging/nix/package.nix as well.
 
 PREFIX  ?= /usr/local
 BINDIR  ?= $(PREFIX)/bin
@@ -28,7 +28,8 @@ endif
 BIN := bin/uxsm
 SRC := go.mod $(shell find . \( -name '*.go' -o -name '*.sh' \) -path './internal/*' -o -name '*.go' -path './cmd/*')
 UNITS := $(wildcard data/systemd/user/*.in)
-# Man pages, written as .in and installed with @VERSION@ and @BINDIR@ filled in.
+# The manual remains a .in source because installation must substitute @VERSION@
+# and @BINDIR@ for each build and prefix.
 MAN := $(wildcard data/man/*.1.in)
 
 .PHONY: all build check test vet fmt install uninstall test-vm test-nixos release publish hooks dist bindist clean
@@ -40,7 +41,7 @@ build: $(BIN)
 # A file target keeps `make install` immediately after `make build` from
 # rebuilding with different options. vet runs first: a newer local Go silently
 # compiles standard-library functions newer than go.mod, and only vet detects
-# them (docs/development.md).
+# them; docs/development.md explains the compatibility check.
 $(BIN): $(SRC)
 	$(GO) vet ./...
 	$(GO) build -ldflags "-X main.version=$(VERSION) $(GO_LDFLAGS)" -o $(BIN) ./cmd/uxsm
@@ -101,8 +102,9 @@ uninstall:
 
 # Integration tests use real packages in disposable VMs: test/release.sh builds
 # each distribution's package on that distribution, copies it to build/release,
-# and installs it on a clean VM to run test/integration/run.sh. DISTROS is quick,
-# pair, all, or a comma-separated list; only those distributions are built.
+# and installs it on a clean VM to run test/integration/run.sh
+# DISTROS is quick, pair, all, or a comma-separated list; only those
+# distributions are built.
 # FAST=1 builds and tests in the same VM. It is much faster, but no longer checks
 # that the package declares runtime dependencies because build dependencies are
 # already present. It is for development, not publishing.
@@ -124,7 +126,7 @@ test-nixos:
 		'.#checks.$(shell $(NIX) eval --extra-experimental-features "nix-command flakes" --impure --raw --expr builtins.currentSystem).session' -L
 
 # Run the same checks on every distribution and, if all pass, publish
-# build/release as releases/latest.
+# build/release as the releases/latest directory.
 release:
 	test/release.sh --publish
 

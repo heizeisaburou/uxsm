@@ -11,18 +11,18 @@ import (
 	"github.com/heizeisaburou/uxsm/internal/desktopentry"
 )
 
-// runApp lanza una aplicación en su propia unidad de systemd:
+// runApp launches an application in its own systemd unit:
 //
 //	uxsm app -- kitty
 //	uxsm app firefox.desktop
 //	uxsm app firefox.desktop:new-private-window
 //	uxsm app -s b -- fcitx5
 //
-// Es lo mismo que hace `uwsm app` en Wayland. Sin esto, lo que arranca un
-// escritorio cuelga del escritorio y se ve todo junto; con esto, cada aplicación
-// tiene su unidad dentro de uno de los slices de la sesión: se ve por separado
-// en systemctl, se le pueden poner límites, su registro va al diario con su
-// nombre y se para con la sesión.
+// This is what `uwsm app` does on Wayland. Without it, everything started by a
+// desktop hangs off the desktop and appears together; with it, each application
+// has its own unit in one of the session slices: it appears separately in
+// systemctl, can be limited, logs to the journal under its own name, and stops
+// with the session.
 func runApp(args []string) error {
 	fs := newFlagSet("app", "[-s slice] [-t scope|service] [-p Key=Value] [options] [--] <command> [args...]\n"+
 		"       uxsm app [options] <entry.desktop>[:action] [files or URLs...]",
@@ -39,8 +39,8 @@ func runApp(args []string) error {
 	silent := fs.String("S", "", "throw away the application's `output`: out, err or both;\n"+
 		"only for a service, a scope inherits the output of its caller")
 	var properties stringList
-	fs.Var(&properties, "p", "systemd `property` of the unit, as Key=Value, like systemd-run\n"+
-		"takes them: TimeoutStopSec=5, MemoryMax=2G… Can be repeated")
+	fs.Var(&properties, "p", "systemd unit `property` as Key=Value, in the form accepted by\n"+
+		"systemd-run: TimeoutStopSec=5, MemoryMax=2G… Can be repeated")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
@@ -85,14 +85,14 @@ func runApp(args []string) error {
 	if err != nil {
 		return err
 	}
-	// Con exec, el scope se queda con este proceso: la aplicación es hija de
-	// quien pidió lanzarla, que es lo que un scope significa.
+	// With exec, the scope keeps this process: the application is a child of
+	// whoever requested its launch, which is what a scope means.
 	return syscall.Exec(path, runArgs, os.Environ())
 }
 
-// resolveApp decide qué se lanza: una entrada de aplicación, con su acción si se
-// pide, o un comando tal cual. dashes dice si los argumentos venían detrás de
-// "--", que entonces son siempre un comando.
+// resolveApp decides what to launch: an application entry, including the
+// requested action, or a command unchanged. dashes says whether the arguments
+// followed "--", in which case they are always a command.
 func resolveApp(o *appunit.Options, args []string, dashes bool) error {
 	id, action, _ := strings.Cut(args[0], ":")
 	if dashes || !strings.HasSuffix(id, ".desktop") {
@@ -148,14 +148,14 @@ func resolveApp(o *appunit.Options, args []string, dashes bool) error {
 	return nil
 }
 
-// stringList es una opción que se puede repetir, como el -p de systemd-run: cada
-// vez que aparece, añade su valor a la lista.
+// stringList is a repeatable option, like systemd-run's -p: every occurrence
+// appends its value to the list.
 type stringList []string
 
 func (l *stringList) String() string     { return strings.Join(*l, " ") }
 func (l *stringList) Set(v string) error { *l = append(*l, v); return nil }
 
-// first devuelve el primer valor que no está vacío.
+// first returns the first non-empty value.
 func first(values ...string) string {
 	for _, v := range values {
 		if v != "" {

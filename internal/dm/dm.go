@@ -1,13 +1,14 @@
-// Package dm averigua qué display manager usa el sistema y en qué directorios
-// busca las entradas de sesión X11: sus directorios de xsessions.
+// Package dm determines which display manager the system uses and which
+// directories it searches for X11 session entries: its xsessions directories.
 //
-// Hay un adaptador para cada uno de los tres importantes, LightDM, SDDM y GDM,
-// y cada uno sabe dónde guarda su display manager esa lista. De cualquier otro
-// no se puede saber nada, y el paquete lo dice así en vez de suponer.
+// There is an adapter for each of the three major display managers—LightDM,
+// SDDM, and GDM—and each knows where that display manager keeps the list. No
+// reliable answer is available for other display managers, so the package says
+// so instead of guessing.
 //
-// Importa porque uxsm instala sus entradas generadas en LocalXSessions, y un
-// display manager que no lea ese directorio no las enseña en la pantalla de
-// inicio. LightDM, con su configuración de serie, no lo lee.
+// This matters because uxsm installs generated entries in LocalXSessions, and a
+// display manager that does not read that directory will not show them on the
+// login screen. LightDM does not read it with its default configuration.
 package dm
 
 import (
@@ -20,60 +21,59 @@ import (
 	"strings"
 )
 
-// LocalWaylandSessions es el directorio local de entradas de sesión de Wayland.
-// uxsm no genera ninguna ―es cosa de X11―, pero es el sitio donde las pone quien
-// las escribe a mano, y el display manager tiene que leerlo por el mismo motivo
-// que el de X11: si no, están y no salen.
+// LocalWaylandSessions is the local directory for Wayland session entries. uxsm
+// does not generate them—it is for X11—but this is where manually written ones
+// belong, and the display manager must read it for the same reason as the X11
+// directory: otherwise the entries exist but are not shown.
 const LocalWaylandSessions = "/usr/local/share/wayland-sessions"
 
-// LocalSessions son los dos directorios locales que uxsm deja leídos, en el
-// orden en que se añaden. Wayland va delante de X11 a propósito: uxsm es de
-// X11, pero lo que se arregla es la máquina, no lo nuestro.
+// LocalSessions contains the two local directories uxsm arranges to be read, in
+// insertion order. Wayland deliberately precedes X11: uxsm is for X11, but the
+// configuration applies to the machine rather than only to uxsm.
 var LocalSessions = []string{LocalWaylandSessions, LocalXSessions}
 
-// LocalXSessions es el directorio donde uxsm instala las entradas de sesión
-// que genera: el de las entradas locales del sistema, fuera de los paquetes.
+// LocalXSessions is where uxsm installs generated session entries: the system's
+// local entry directory, outside package ownership.
 const LocalXSessions = "/usr/local/share/xsessions"
 
-// root es la raíz desde la que se leen y escriben los ficheros de
-// configuración: "/" salvo en las pruebas, que la cambian por un árbol falso.
+// root is the root from which configuration files are read and written: "/"
+// except in tests, which replace it with a synthetic tree.
 var root = "/"
 
-// systemctl ejecuta systemctl contra el gestor del sistema y devuelve su
-// salida. Las pruebas lo sustituyen.
+// systemctl runs systemctl against the system manager and returns its output.
+// Tests replace it.
 var systemctl = func(args ...string) (string, error) {
 	out, err := exec.Command("systemctl", args...).Output()
 	return string(out), err
 }
 
-// path es p dentro de root.
+// path is p within root.
 func path(p string) string {
 	return filepath.Join(root, p)
 }
 
-// Report es lo que se sabe de los directorios de xsessions de un display
-// manager.
+// Report contains what is known about a display manager's xsessions directories.
 type Report struct {
-	// Name es el nombre para las personas: "LightDM".
+	// Name is the human-readable name: "LightDM".
 	Name string
-	// ID es el nombre para uxsm setup sessions-dir: "lightdm".
+	// ID is the name accepted by uxsm setup sessions-dir: "lightdm".
 	ID string
-	// Dirs son sus directorios de xsessions, en el orden en que los recorre.
+	// Dirs contains its xsessions directories in search order.
 	Dirs []string
-	// Origin dice de dónde sale Dirs, para enseñarlo: el fichero que lo pone,
-	// "compiled default" o "as systemd launches it".
+	// Origin says where Dirs came from for reporting purposes: the file that
+	// sets it, "compiled default", or "as systemd launches it".
 	Origin string
-	// Unit es su unidad de systemd, para nombrarla al decir cómo reiniciarlo;
-	// la de GDM cambia con la distribución.
+	// Unit is its systemd unit, used when explaining how to restart it; GDM's
+	// unit varies by distribution.
 	Unit string
 }
 
-// Reads dice si el display manager busca entradas en dir.
+// Reads says whether the display manager searches dir for entries.
 func (r *Report) Reads(dir string) bool {
 	return slices.Contains(r.Dirs, strings.TrimSuffix(dir, "/"))
 }
 
-// Missing son los directorios locales que el display manager no lee.
+// Missing returns the local directories the display manager does not read.
 func (r *Report) Missing() []string {
 	var missing []string
 	for _, dir := range LocalSessions {
@@ -84,7 +84,7 @@ func (r *Report) Missing() []string {
 	return missing
 }
 
-// adapter sabe leer los directorios de xsessions de un display manager.
+// adapter knows how to read a display manager's xsessions directories.
 type adapter struct {
 	name  string
 	id    string
@@ -98,12 +98,11 @@ var adapters = []adapter{
 	{"GDM", "gdm", []string{"gdm.service", "gdm3.service"}, readGDM},
 }
 
-// ErrNoDisplayManager es el error de Active cuando no hay ningún display
-// manager activado: se arranca la sesión desde una consola, con startx.
+// ErrNoDisplayManager is returned by Active when no display manager is enabled,
+// as when the session is started from a console with startx.
 var ErrNoDisplayManager = errors.New("no display manager is enabled (display-manager.service does not exist)")
 
-// UnknownError es el error de Active con un display manager para el que no
-// hay adaptador.
+// UnknownError is returned by Active for a display manager with no adapter.
 type UnknownError struct {
 	Unit string
 }
@@ -112,8 +111,8 @@ func (e *UnknownError) Error() string {
 	return fmt.Sprintf("the display manager %s is not one uxsm knows (LightDM, SDDM or GDM), so its session directories cannot be determined", e.Unit)
 }
 
-// Active devuelve los directorios de xsessions del display manager que arranca
-// el sistema: el de display-manager.service.
+// Active returns the xsessions directories of the display manager started by
+// the system: the one behind display-manager.service.
 func Active() (*Report, error) {
 	out, err := systemctl("show", "-p", "Id", "-p", "LoadState", "display-manager.service")
 	if err != nil {
@@ -131,8 +130,8 @@ func Active() (*Report, error) {
 	return nil, &UnknownError{Unit: props["Id"]}
 }
 
-// Get devuelve los directorios de xsessions del display manager id ("lightdm",
-// "sddm" o "gdm"), esté en uso o no. Falla si no está instalado.
+// Get returns the xsessions directories of display manager id ("lightdm",
+// "sddm", or "gdm"), whether active or not. It fails if it is not installed.
 func Get(id string) (*Report, error) {
 	for _, a := range adapters {
 		if a.id != id {
@@ -150,7 +149,7 @@ func Get(id string) (*Report, error) {
 	return nil, fmt.Errorf("unknown display manager %q: use lightdm, sddm or gdm", id)
 }
 
-// installed dice si alguna de las unidades del display manager existe.
+// installed says whether any of the display manager's units exists.
 func (a adapter) installed() (bool, error) {
 	for _, u := range a.units {
 		out, err := systemctl("show", "-p", "LoadState", u)
@@ -164,8 +163,7 @@ func (a adapter) installed() (bool, error) {
 	return false, nil
 }
 
-// parseProps lee la salida de `systemctl show -p …`: una línea NOMBRE=valor
-// por propiedad.
+// parseProps reads `systemctl show -p …` output: one NAME=value line per property.
 func parseProps(out string) map[string]string {
 	props := map[string]string{}
 	for _, line := range strings.Split(out, "\n") {
@@ -176,7 +174,7 @@ func parseProps(out string) map[string]string {
 	return props
 }
 
-// readFile lee p dentro de root; un fichero que no existe cuenta como vacío.
+// readFile reads p within root; a missing file counts as empty.
 func readFile(p string) (string, error) {
 	data, err := os.ReadFile(path(p))
 	if errors.Is(err, os.ErrNotExist) {
@@ -185,9 +183,9 @@ func readFile(p string) (string, error) {
 	return string(data), err
 }
 
-// confFiles devuelve, en orden, los ficheros de configuración de un display
-// manager: los *.conf de cada directorio de dirs, ordenados por nombre, y
-// detrás el fichero principal. El último que ponga una opción es el que manda.
+// confFiles returns a display manager's configuration files in order: the
+// name-sorted *.conf files from each directory in dirs, followed by the main
+// file. The last file to set an option takes precedence.
 func confFiles(dirs []string, main string) ([]string, error) {
 	var files []string
 	for _, d := range dirs {

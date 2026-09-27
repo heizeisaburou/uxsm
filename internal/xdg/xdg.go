@@ -1,5 +1,4 @@
-// Package xdg resuelve los directorios de la especificación XDG Base Directory
-// que necesita uxsm.
+// Package xdg resolves the XDG Base Directory locations uxsm needs.
 package xdg
 
 import (
@@ -8,12 +7,12 @@ import (
 	"strings"
 )
 
-// DataDirs devuelve los directorios de datos por orden de preferencia:
-// primero XDG_DATA_HOME y detrás cada uno de XDG_DATA_DIRS.
+// DataDirs returns data directories in preference order: XDG_DATA_HOME first,
+// followed by each directory in XDG_DATA_DIRS.
 //
-// Si una variable no está o está vacía se usa el valor por defecto de la
-// especificación (~/.local/share y /usr/local/share:/usr/share). Las rutas
-// relativas se descartan, porque la especificación las declara inválidas.
+// If a variable is unset or empty, the specification's default is used
+// (~/.local/share and /usr/local/share:/usr/share). Relative paths are discarded
+// because the specification declares them invalid.
 func DataDirs() []string {
 	var dirs []string
 

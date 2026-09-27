@@ -13,8 +13,8 @@ import (
 	"github.com/heizeisaburou/uxsm/internal/systemd"
 )
 
-// fromFile es la fuente de una de las entradas reales de testdata, copiadas de
-// los paquetes de cada distribución con test/xsessions.sh.
+// fromFile builds a source from one of the real entries in testdata, copied from
+// distribution packages through the test/xsessions.sh collector.
 func fromFile(t *testing.T, path string) *Source {
 	t.Helper()
 	e, err := desktopentry.Read(filepath.Join("testdata", path))
@@ -36,22 +36,22 @@ func TestUxsm(t *testing.T) {
 		exec  string
 		names []string
 	}{
-		// Trae DesktopNames=: uxsm start los leerá de la entrada.
+		// It has DesktopNames=: uxsm start will read them from the entry.
 		{"arch/bspwm.desktop", Options{}, "bspwm (uxsm)", "uxsm start bspwm.desktop", []string{"bspwm"}},
-		// La misma sin DesktopNames=: salen de la tabla y van con -D.
+		// The same entry without DesktopNames=: names come from the table via -D.
 		{"ubuntu/bspwm.desktop", Options{}, "bspwm (uxsm)", "uxsm start -D bspwm bspwm.desktop", []string{"bspwm"}},
-		// Sin la tabla serían "cinnamon-session-cinnamon", no lo que pone Cinnamon.
-		// Y como Cinnamon lanza su propio autostart, la entrada lleva --no-autostart.
+		// Without the table they would be "cinnamon-session-cinnamon", not the
+		// value set by Cinnamon. Because Cinnamon launches its own autostart, the
+		// entry also includes --no-autostart.
 		{"arch/cinnamon.desktop", Options{}, "Cinnamon (uxsm)", "uxsm start --no-autostart -D X-Cinnamon cinnamon.desktop", []string{"X-Cinnamon"}},
-		// Un gestor de ventanas dentro de un escritorio: el nombre es el del
-		// escritorio, no el del script sawfish-mate-session, y el autostart lo
-		// lanza el escritorio.
+		// A window manager inside a desktop: the name belongs to the desktop, not
+		// the sawfish-mate-session script, and the desktop launches autostart.
 		{"fedora/sawfish-mate.desktop", Options{}, "Sawfish/MATE (uxsm)", "uxsm start --no-autostart -D MATE sawfish-mate.desktop", []string{"MATE"}},
-		// -D añade al final, y sólo lo que no trae la entrada va en el Exec=.
+		// -D appends names, and only names missing from the entry go in Exec=.
 		{"arch/bspwm.desktop", Options{Names: "Extra"}, "bspwm (uxsm)", "uxsm start -D Extra bspwm.desktop", []string{"bspwm", "Extra"}},
-		// -e con todos los conocidos: no tira nada.
+		// -e with every known name discards nothing.
 		{"arch/bspwm.desktop", Options{Names: "Extra:bspwm", Exclusive: true}, "bspwm (uxsm)", "uxsm start -e -D Extra:bspwm bspwm.desktop", []string{"Extra", "bspwm"}},
-		// -N y -C sustituyen a los de la entrada.
+		// -N and -C replace values from the entry.
 		{"arch/bspwm.desktop", Options{Name: "Mine", Comment: "My bspwm"}, "Mine (uxsm)", "uxsm start bspwm.desktop", []string{"bspwm"}},
 	}
 	for _, tt := range tests {
@@ -71,26 +71,26 @@ func TestUxsm(t *testing.T) {
 }
 
 func TestNames(t *testing.T) {
-	// -e tira los conocidos y se queda con los de -D, como en uxsm start.
+	// -e discards known names and retains -D names, as in uxsm start.
 	e, err := fromFile(t, "arch/cinnamon.desktop").Uxsm(Options{Names: "Cinnamon", Exclusive: true})
-	// Con -e los nombres son sólo los de -D, y "Cinnamon" a secas no está en la
-	// tabla ―el de Cinnamon es "X-Cinnamon"―, así que no hay de dónde saber que
-	// lanza su propio autostart y la entrada sale sin --no-autostart.
+	// With -e, only -D names remain, and plain "Cinnamon" is not in the table—
+	// Cinnamon's name is "X-Cinnamon"—so there is no way to know it launches its
+	// own autostart and the entry omits --no-autostart.
 	if err != nil || e.Exec != "uxsm start -e -D Cinnamon cinnamon.desktop" {
 		t.Errorf("-e dropping X-Cinnamon: %+v, %v", e, err)
 	}
-	// -e sin -D.
+	// -e without -D.
 	if _, err := fromFile(t, "arch/bspwm.desktop").Uxsm(Options{Exclusive: true}); !errors.Is(err, ErrBadNames) {
 		t.Errorf("-e without -D: %v, want ErrBadNames", err)
 	}
-	// Ni DesktopNames= ni en la tabla ni -D: no hay ningún nombre.
+	// No DesktopNames=, table entry, or -D: no name is available.
 	if _, err := fromFile(t, "arch/notion.desktop").Uxsm(Options{}); !errors.Is(err, ErrNoNames) {
 		t.Errorf("notion without -D: %v, want ErrNoNames", err)
 	}
 	if e, err := fromFile(t, "arch/notion.desktop").Uxsm(Options{Names: "notion"}); err != nil || e.Exec != "uxsm start -D notion notion.desktop" {
 		t.Errorf("notion with -D: %+v, %v", e, err)
 	}
-	// Un -D mal escrito.
+	// A malformed -D.
 	if _, err := fromFile(t, "arch/bspwm.desktop").Uxsm(Options{Names: "a b"}); !errors.Is(err, ErrBadNames) {
 		t.Errorf("-D with a space: %v, want ErrBadNames", err)
 	}
@@ -111,7 +111,7 @@ func TestRefuses(t *testing.T) {
 	if _, err := FromEntry(e, true); !errors.Is(err, ErrMetaSession) {
 		t.Errorf("Debian's lightdm-xsession.desktop: %v, want ErrMetaSession", err)
 	}
-	// Lo que cuenta es la orden, no el nombre de la entrada.
+	// The command matters, not the entry name.
 	if _, err := FromEntry(&desktopentry.Entry{ID: "mine.desktop", Exec: "/usr/libexec/xinit-compat"}, true); !errors.Is(err, ErrMetaSession) {
 		t.Errorf("an entry running xinit-compat: %v, want ErrMetaSession", err)
 	}
@@ -132,7 +132,7 @@ func TestRefuses(t *testing.T) {
 			t.Errorf("FromCommand(%q) should fail", argv)
 		}
 	}
-	// Un ID que no vale como instancia de unidad no se podría arrancar.
+	// An ID invalid as a unit instance could not be started.
 	s, err := FromEntry(&desktopentry.Entry{ID: "my wm.desktop", Exec: "mywm"}, true)
 	if err != nil {
 		t.Fatal(err)
@@ -140,7 +140,7 @@ func TestRefuses(t *testing.T) {
 	if _, err := s.Uxsm(Options{Names: "x"}); err == nil {
 		t.Error("an ID with a space should be refused")
 	}
-	// Sólo se puede apuntar a una entrada que existe.
+	// Only an existing entry can be referenced.
 	if s, _ := FromTable("bspwm"); s != nil {
 		if _, err := s.Uxsm(Options{}); err == nil {
 			t.Error("Uxsm from the table should fail: there is no entry to point to")
@@ -189,7 +189,7 @@ X-UXSM-Source=dwm.desktop
 		t.Errorf("Plain Render:\n%s\nwant:\n%s", got, want)
 	}
 
-	// Ni lo que no está en la tabla ni lo que está sin orden.
+	// Neither an absent table item nor one without a command can be used.
 	for _, name := range []string{"nope", "gnome-classic-xorg"} {
 		if _, err := FromTable(name); !errors.Is(err, ErrUnknown) {
 			t.Errorf("FromTable(%q): %v, want ErrUnknown", name, err)
@@ -198,7 +198,7 @@ X-UXSM-Source=dwm.desktop
 }
 
 func TestFromCommand(t *testing.T) {
-	// Un programa de la tabla: sus nombres cuentan como conocidos.
+	// A program in the table: its names count as known.
 	s, err := FromCommand([]string{"/usr/bin/bspwm", "-c", "my config"}, true)
 	if err != nil {
 		t.Fatal(err)
@@ -211,7 +211,7 @@ func TestFromCommand(t *testing.T) {
 		strings.Join(e.DesktopNames, ":") != "other" {
 		t.Errorf("-e dropping bspwm: %+v, %v", e, err)
 	}
-	// Y sin tabla, ese mismo programa no tiene nombres conocidos: los pide.
+	// Without the table, that same program has no known names and requests them.
 	noTable, err := FromCommand([]string{"/usr/bin/bspwm"}, false)
 	if err != nil {
 		t.Fatal(err)
@@ -219,7 +219,7 @@ func TestFromCommand(t *testing.T) {
 	if _, err := noTable.UxsmExec(Options{}); !errors.Is(err, ErrNoNames) {
 		t.Errorf("bspwm without the table: %v, want ErrNoNames", err)
 	}
-	// Uno que no está: hacen falta los nombres.
+	// An absent program requires explicit names.
 	s, err = FromCommand([]string{"mywm"}, true)
 	if err != nil {
 		t.Fatal(err)
@@ -233,8 +233,8 @@ func TestFromCommand(t *testing.T) {
 	}
 }
 
-// Lo que escribe Render lo tiene que leer igual desktopentry, que lee como un
-// display manager: escapes, comillas, % y ";" dentro de un nombre incluidos.
+// desktopentry must read Render output exactly as a display manager would,
+// including escapes, quotes, %, and ";" within a name.
 func TestRenderRoundTrip(t *testing.T) {
 	argv := []string{"/opt/my wm/bin", `quote"d`, `back\slash`, "100%", "$HOME", ""}
 	e := &Entry{
@@ -259,8 +259,8 @@ func TestRenderRoundTrip(t *testing.T) {
 	}
 }
 
-// Todo lo de la tabla tiene que poder acabar en un Exec= con -D, y cada orden
-// en un Exec= tal cual y como instancia de unidad en uxsm start.
+// Every table item must fit in Exec= with -D, and every command must fit in
+// Exec= verbatim and serve as a unit instance in uxsm start.
 func TestKnown(t *testing.T) {
 	for id, k := range known {
 		if err := systemd.CheckInstance(id); err != nil || !strings.HasSuffix(id, ".desktop") {
@@ -272,7 +272,7 @@ func TestKnown(t *testing.T) {
 		if k.Exec == "" {
 			continue
 		}
-		// Sin comillas ni escapes: partida y vuelta a juntar, es la misma.
+		// With no quotes or escapes, splitting and joining returns the same value.
 		argv, err := desktopentry.SplitExec(k.Exec)
 		if err != nil || strings.Join(argv, " ") != k.Exec || quoteExec(argv) != k.Exec || strings.Contains(k.Exec, "/") {
 			t.Errorf("%s: Exec %q needs quoting or has a path", id, k.Exec)

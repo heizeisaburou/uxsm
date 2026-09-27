@@ -1,17 +1,17 @@
 #!/bin/sh
-# Cargador del entorno de la sesión. Lo ejecuta `uxsm aux prepare-env` con el
-# entorno de login de la sesión y unas variables auxiliares __UXSM_*__, y es una
-# copia del prepare-env.sh de uwsm sin plugins:
+# Session environment loader. `uxsm aux prepare-env` runs it with the session's
+# login environment and auxiliary __UXSM_*__ variables. It is a copy of uwsm's
+# prepare-env.sh without plugins:
 #
-#  1. Carga /etc/profile y ~/.profile.
-#  2. Pone los directorios XDG por defecto y la identidad de la sesión.
-#  3. Carga los ficheros de entorno de uxsm de menos a más prioridad.
-#  4. Escribe la marca __UXSM_MARK__ y detrás el entorno resultante, separado
-#     por caracteres nulos, para que uxsm lo lea.
+#  1. Load /etc/profile and the ~/.profile file.
+#  2. Set default XDG directories and the session identity.
+#  3. Load uxsm environment files from lowest to highest priority.
+#  4. Write the __UXSM_MARK__ marker followed by the null-separated resulting
+#     environment for uxsm to read.
 #
-# Lo que escriba antes de la marca son mensajes, y acaban en el journal.
+# Anything written before the marker is a message and ends up in the journal.
 
-# reverse LISTA: la lista separada por ":" al revés, sin elementos vacíos.
+# reverse LIST: reverse a colon-separated list, omitting empty elements.
 reverse() {
 	__reverse_out__=''
 	IFS=':'
@@ -29,7 +29,7 @@ lowercase() {
 	printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
 }
 
-# source_file FICHERO: lo carga si existe, se puede leer y su sintaxis es válida.
+# source_file FILE: load it if it exists, is readable, and has valid syntax.
 source_file() {
 	if [ -f "$1" ]; then
 		if [ ! -r "$1" ]; then
@@ -44,8 +44,7 @@ source_file() {
 	fi
 }
 
-# source_dir DIRECTORIO: carga cada fichero del directorio por orden de nombre,
-# salvo copias y ejemplos.
+# source_dir DIRECTORY: load each file in name order except backups and examples.
 source_dir() {
 	if [ -d "$1" ]; then
 		for __env_file__ in "$1/"*; do
@@ -60,13 +59,13 @@ source_dir() {
 
 __UXSM_OIFS__=$IFS
 
-# 1. Perfil de la shell.
+# 1. Shell profile.
 printf '%s\n' "Loading shell profile."
 [ -f /etc/profile ] && . /etc/profile
 [ -f "${HOME}/.profile" ] && . "${HOME}/.profile"
 export PATH
 
-# 2. Directorios XDG e identidad de la sesión.
+# 2. XDG directories and session identity.
 export XDG_CONFIG_DIRS="${XDG_CONFIG_DIRS:-/etc/xdg}"
 export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-${HOME}/.config}"
 export XDG_DATA_DIRS="${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
@@ -81,10 +80,9 @@ export XDG_MENU_PREFIX="${__UXSM_XDG_MENU_PREFIX__}"
 export XDG_SESSION_TYPE="${__UXSM_XDG_SESSION_TYPE__}"
 export XDG_BACKEND="x11"
 
-# 3. Ficheros de entorno: en cada directorio de configuración y de datos, de
-# menos a más prioridad, uxsm/env, un uxsm/env-<escritorio> por cada nombre de
-# XDG_CURRENT_DESKTOP en minúsculas y en su orden, y detrás de cada fichero su
-# directorio .d.
+# 3. Environment files: in each configuration and data directory, from lowest
+# to highest priority, uxsm/env, then one uxsm/env-<desktop> for each lowercased
+# XDG_CURRENT_DESKTOP name in order, followed by each file's .d directory.
 __env_files__='uxsm/env'
 IFS=':'
 for __name__ in $(lowercase "${XDG_CURRENT_DESKTOP}"); do
@@ -101,6 +99,6 @@ done
 IFS="${__UXSM_OIFS__}"
 unset __env_files__ __env_file__ __name__ __dir__
 
-# 4. Marca y entorno resultante.
+# 4. Marker and resulting environment.
 printf '%s' "${__UXSM_MARK__}"
 exec env -0

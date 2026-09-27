@@ -1,42 +1,41 @@
 #!/bin/sh
-# Arranca máquinas virtuales desechables con QEMU, ejecuta una orden en cada una
-# por ssh, como un usuario con sudo sin contraseña, y las destruye.
+# Start disposable QEMU virtual machines, run a command in each over SSH as a
+# user with passwordless sudo, and destroy them.
 #
-#   test/vm.sh [distros] [orden]
+#   test/vm.sh [distros] [command]
 #
-#   distros    quick  ubuntu (por defecto)
-#              pair   ubuntu y arch, las dos más distintas
-#              all    todas las de image_url
-#              o una lista separada por comas: ubuntu,fedora
-#   orden      lo que se ejecuta; por defecto, qué máquina es
+#   distros    quick  ubuntu (default)
+#              pair   ubuntu and arch, the two most different
+#              all    every distribution in image_url
+#              or a comma-separated list: ubuntu,fedora
+#   command    what to run; by default, identify the machine
 #
-# La orden recibe en UXSM_VM_DISTRO el nombre de la máquina: ubuntu, fedora…
+# The command receives the machine name in UXSM_VM_DISTRO: ubuntu, fedora…
 #
-# UXSM_VM_COMMAND_TIMEOUT=segundos es lo que se le da a la orden antes de darla
-# por colgada; por defecto, media hora.
-# UXSM_VM_UPLOAD=dir copia dir a ~/uxsm en cada máquina antes de la orden.
-# UXSM_VM_DOWNLOAD=dir trae ~/uxsm/out de cada máquina a dir si la orden termina
-# bien.
+# UXSM_VM_COMMAND_TIMEOUT=seconds is the time allowed before considering the
+# command hung; the default is half an hour.
+# UXSM_VM_UPLOAD=dir copies dir to ~/uxsm on each machine before the command.
+# UXSM_VM_DOWNLOAD=dir copies ~/uxsm/out from each machine to dir after success.
 #
 #   test/vm.sh all
 #   test/vm.sh pair 'uname -r'
 #
-# Necesita qemu-system-x86_64, qemu-img, cloud-localds (cloud-image-utils), ssh y
-# curl. Usa KVM si /dev/kvm se puede usar; sin él, cada máquina va muy lenta.
-# Las imágenes se descargan una vez a $XDG_CACHE_HOME/uxsm/vm.
+# Requires qemu-system-x86_64, qemu-img, cloud-localds (cloud-image-utils), ssh,
+# and curl. It uses KVM when /dev/kvm is available; without it, VMs are very slow.
+# Images are downloaded once under $XDG_CACHE_HOME/uxsm/vm
 
 set -eu
 
 CACHE=${XDG_CACHE_HOME:-$HOME/.cache}/uxsm/vm
 SSH_PORT=${UXSM_VM_SSH_PORT:-2222}
 BOOT_TIMEOUT=${UXSM_VM_BOOT_TIMEOUT:-300}
-# Lo que se le da a la orden dentro de la máquina antes de darla por colgada.
+# Time allowed for the command inside the VM before considering it hung.
 COMMAND_TIMEOUT=${UXSM_VM_COMMAND_TIMEOUT:-1800}
 VM_USER=uxsm
 
 DEFAULT_COMMAND='. /etc/os-release; echo "$PRETTY_NAME, kernel $(uname -r)"; id; sudo -n true && echo "sudo: ok"; echo "system: $(systemctl is-system-running --wait)"'
 
-# Imágenes «cloud» oficiales, todas con cloud-init.
+# Official cloud images, all with cloud-init.
 image_url() {
     case "$1" in
     ubuntu)   echo https://cloud-images.ubuntu.com/releases/noble/release/ubuntu-24.04-server-cloudimg-amd64.img ;;
@@ -63,10 +62,10 @@ for tool in qemu-system-x86_64 qemu-img cloud-localds ssh ssh-keygen curl; do
     command -v "$tool" >/dev/null 2>&1 || { echo "vm.sh: $tool not found" >&2; exit 1; }
 done
 
-# Con KVM, el procesador que ve la máquina es el de verdad. Antes era "max", que
-# es todo lo que QEMU sabe emular, y con él una máquina de Ubuntu se llevó por
-# delante su propio núcleo nada más arrancar ("Attempted to kill the idle
-# task!"). Sin KVM no hay procesador real que pasar, así que queda "max".
+# With KVM, expose the real host CPU to the guest. This used to be "max", every
+# feature QEMU can emulate, which made an Ubuntu guest crash its own kernel at
+# boot ("Attempted to kill the idle task!"). Without KVM there is no real CPU
+# to pass through, so "max" remains the fallback.
 accel=tcg
 cpu=max
 if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
@@ -82,8 +81,8 @@ cleanup() {
         if [ -f "$work/qemu.pid" ]; then
             pid=$(cat "$work/qemu.pid")
             kill "$pid" 2>/dev/null || true
-            # Esperar a que termine de verdad: si no, la máquina siguiente
-            # puede encontrarse el puerto de ssh todavía ocupado.
+            # Wait for full termination; otherwise the next VM may find the SSH
+            # port still occupied.
             while kill -0 "$pid" 2>/dev/null; do sleep 0.2; done
         fi
         rm -rf "$work"
@@ -93,11 +92,11 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 
-# vm_ssh [--timeout SEGUNDOS] ORDEN…: ejecuta la orden dentro de la máquina.
+# vm_ssh [--timeout SECONDS] COMMAND…: run the command inside the VM.
 #
-# El límite hace falta porque una máquina que se cuelga ―un kernel panic del
-# invitado, por ejemplo― deja la conexión abierta y callada: sin él, la tanda se
-# queda esperando una respuesta que no va a llegar nunca.
+# The limit is necessary because a hung VM—for example after a guest kernel
+# panic—leaves the connection open and silent. Without it, the run waits forever
+# for a reply that will never arrive.
 vm_ssh() {
     limit=
     if [ "${1:-}" = --timeout ]; then
@@ -111,7 +110,7 @@ vm_ssh() {
         "$VM_USER@127.0.0.1" "$@"
 }
 
-# run_vm DISTRO: arranca la máquina, ejecuta $command y la destruye.
+# run_vm DISTRO: start the VM, run $command, and destroy it.
 run_vm() {
     distro=$1
     url=$(image_url "$distro")
@@ -126,10 +125,10 @@ run_vm() {
 
     work=$(mktemp -d)
 
-    # Disco: una capa temporal encima, para no modificar nunca la imagen guardada.
+    # Disk: use a temporary overlay so the cached image is never modified.
     qemu-img create -q -f qcow2 -F qcow2 -b "$image" "$work/disk.qcow2" 10G
 
-    # Acceso: una clave de un solo uso, que se le pasa a cloud-init.
+    # Access: pass a single-use key to cloud-init.
     ssh-keygen -q -t ed25519 -N '' -C uxsm-vm -f "$work/key"
     cat > "$work/user-data" <<EOF
 #cloud-config
@@ -166,19 +165,19 @@ EOF
     done
     echo "vm.sh[$distro]: ssh up after $(( $(date +%s) - start ))s" >&2
 
-    # UXSM_VM_UPLOAD: un directorio que se copia a ~/uxsm antes de la orden.
+    # UXSM_VM_UPLOAD: a directory copied to ~/uxsm before the command.
     if [ -n "${UXSM_VM_UPLOAD:-}" ]; then
         tar -C "$UXSM_VM_UPLOAD" -cf - . | vm_ssh 'mkdir -p ~/uxsm && tar -C ~/uxsm -xf -'
     fi
 
-    # El código de salida de la orden, no el de sed.
+    # Return the command's exit status, not sed's.
     { vm_ssh --timeout "$COMMAND_TIMEOUT" "export UXSM_VM_DISTRO=$distro; $command" 2>&1
       echo $? > "$work/status"
     } | sed -u "s/^/[$distro] /"
     rc=$(cat "$work/status")
     if [ "$rc" -ne 0 ]; then
-        # 124 es lo que devuelve timeout; y con la máquina caída, la causa está
-        # en la consola, no en la salida de la orden.
+        # timeout returns 124; when the VM has crashed, the cause is on the
+        # console rather than in command output.
         if [ "$rc" -eq 124 ]; then
             echo "vm.sh[$distro]: the command did not finish in ${COMMAND_TIMEOUT}s" >&2
         fi
@@ -189,7 +188,7 @@ EOF
         return "$rc"
     fi
 
-    # UXSM_VM_DOWNLOAD: lo que la orden haya dejado en ~/uxsm/out.
+    # UXSM_VM_DOWNLOAD retrieves what the command left in the ~/uxsm/out directory.
     if [ -n "${UXSM_VM_DOWNLOAD:-}" ]; then
         mkdir -p "$UXSM_VM_DOWNLOAD"
         vm_ssh 'tar -C ~/uxsm/out -cf - .' | tar -C "$UXSM_VM_DOWNLOAD" -xf - || {

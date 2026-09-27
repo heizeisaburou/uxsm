@@ -1,19 +1,19 @@
 #!/bin/sh
-# La sesión abierta por un display manager de verdad, no por la unidad pasajera
-# de las demás pruebas: LightDM con autologin sobre Xvfb.
+# A session opened by a real display manager rather than the transient unit used
+# elsewhere: LightDM with autologin on Xvfb.
 #
-# Es lo único que prueba el camino real: PAM, logind creando la sesión, el
-# XAUTHORITY que escribe LightDM, el DESKTOP_SESSION que deja puesto, la entrada
-# generada leída desde el directorio de sesiones, y el cierre forzado cuando el
-# display manager se lleva la sesión por delante.
+# This alone tests the real path: PAM, logind creating the session, XAUTHORITY
+# written by LightDM, DESKTOP_SESSION left by it, the generated entry read from
+# the session directory, and forced shutdown when the display manager terminates
+# the session.
 #
-# La configuración va donde LightDM la busca, no dentro de $HOME: en Fedora corre
-# confinado por SELinux y leer su configuración desde el home de un usuario no es
-# lo que su política permite. La máquina es desechable, así que configurar el
-# LightDM del sistema es más sencillo y se parece más a lo que hay fuera.
+# Configuration goes where LightDM expects it, not under $HOME: on Fedora it is
+# confined by SELinux, whose policy does not permit reading configuration from a
+# user's home. The VM is disposable, so configuring system LightDM is simpler
+# and closer to a real installation.
 #
-# Va la última a propósito: instala LightDM, y las pruebas anteriores comprueban
-# lo que hace uxsm en una máquina sin display manager.
+# This deliberately runs last because it installs LightDM, while earlier tests
+# verify uxsm on a machine without a display manager.
 
 set -eu
 . "$(dirname "$0")/lib.sh"
@@ -36,8 +36,8 @@ wait_no_session || fail "a session from an earlier test is still shutting down"
 echo "  installing LightDM"
 install_log=$HOME/uxsm-it-lightdm-install.log
 if command -v apt-get >/dev/null 2>&1; then
-    # En Debian y Ubuntu, instalar un display manager lo arranca; policy-rc.d se
-    # lo impide, que aquí lo arrancamos nosotros con nuestra configuración.
+    # Debian and Ubuntu start a display manager when installing it; policy-rc.d
+    # prevents that because this test starts it with its own configuration.
     printf '#!/bin/sh\nexit 101\n' | sudo tee /usr/sbin/policy-rc.d >/dev/null
     sudo chmod 755 /usr/sbin/policy-rc.d
     sudo DEBIAN_FRONTEND=noninteractive apt-get -y -qq install lightdm >"$install_log" 2>&1 || true
@@ -51,9 +51,9 @@ elif command -v zypper >/dev/null 2>&1; then
 fi
 sudo systemctl disable --now lightdm.service display-manager.service 2>/dev/null || true
 
-# Sólo para saber si está instalado: se arranca por su unidad. En Debian,
-# /usr/sbin no está en el PATH de un usuario normal, así que hay que buscar el
-# programa donde cada distribución lo ponga.
+# This only determines whether it is installed; startup uses its unit. On Debian,
+# /usr/sbin is absent from a normal user's PATH, so search wherever each
+# distribution installs the program.
 lightdm=$(command -v lightdm 2>/dev/null || true)
 if [ -z "$lightdm" ]; then
     for p in /usr/sbin/lightdm /usr/bin/lightdm /sbin/lightdm; do
@@ -70,13 +70,13 @@ if [ -z "$lightdm" ]; then
 fi
 rm -f "$install_log"
 
-# El autologin de LightDM pasa por PAM, y en algunas distribuciones su fichero
-# pide que el usuario esté en el grupo autologin.
+# LightDM autologin goes through PAM, and some distributions require membership
+# in the autologin group.
 sudo groupadd -f -r autologin 2>/dev/null || true
 sudo gpasswd -a "$USER" autologin >/dev/null 2>&1 || true
 
-# LightDM llama al servidor X como si fuera Xorg, con opciones de VT que Xvfb no
-# entiende; este envoltorio se queda con lo que sí: el display y la cookie.
+# LightDM invokes the X server as if it were Xorg, with VT options Xvfb does not
+# understand; this wrapper retains only the supported display and cookie.
 sudo tee "$xserver" >/dev/null <<'XSERVER'
 #!/bin/sh
 display=:0
@@ -102,8 +102,8 @@ sudo mkdir -p "$(dirname "$dropin")"
 sudo tee "$dropin" >/dev/null <<CONF
 [LightDM]
 sessions-directory=/usr/local/share/xsessions
-# Estas máquinas no tienen tarjeta gráfica, así que logind no da su asiento por
-# gráfico y LightDM se quedaría esperando uno para siempre.
+# These VMs have no graphics card, so logind does not mark their seat graphical
+# and LightDM would otherwise wait forever.
 logind-check-graphical=false
 
 [Seat:*]
@@ -114,9 +114,9 @@ autologin-session=bspwm-uxsm
 user-session=bspwm-uxsm
 CONF
 
-# Y el directorio de Wayland lo deja leído uxsm setup, contra un LightDM de
-# verdad: cambia la línea del fichero que pone la opción, que aquí es el de la
-# prueba, y la sesión sigue arrancando igual. Lo que no hace es reiniciarlo.
+# Against a real LightDM, uxsm setup also makes it read the Wayland directory:
+# it changes the line in the file that sets the option, here the test file, and
+# the session still starts. It does not restart LightDM.
 out=$(sudo uxsm setup sessions-dir -i lightdm) || fail "uxsm setup sessions-dir -i failed: $out"
 case $out in
 *"systemctl restart lightdm.service"*) ok "uxsm setup sessions-dir -i says how to restart LightDM" ;;
@@ -131,25 +131,25 @@ case $(uxsm setup sessions-dir lightdm) in
 *) fail "after setup, LightDM still does not read them: $(uxsm setup sessions-dir lightdm)" ;;
 esac
 
-# La entrada que arranca la sesión es la que genera uxsm, en el directorio que
-# sólo trae /usr/local: el camino entero de uxsm entry.
+# The session starts from the entry generated by uxsm in the directory present
+# only under /usr/local, exercising the complete uxsm entry path.
 sudo uxsm entry -i bspwm >/dev/null 2>&1 || fail "uxsm entry -i bspwm failed"
 [ -f "$entry" ] || fail "$entry was not installed"
 
-# Sus directorios de trabajo: en Debian no están recién instalado el paquete, y
-# sin ellos LightDM arranca, se queja y no llega a abrir ninguna sesión.
+# LightDM's working directories are absent after installation on Debian; without
+# them it starts, complains, and never opens a session.
 sudo mkdir -p /var/lib/lightdm/data /var/lib/lightdm-data /var/cache/lightdm /var/log/lightdm /run/lightdm
 if id lightdm >/dev/null 2>&1; then
     sudo chown -R lightdm:lightdm /var/lib/lightdm /var/lib/lightdm-data \
         /var/cache/lightdm /var/log/lightdm /run/lightdm 2>/dev/null || true
 fi
 
-# Se arranca por su unidad, que es como corre en cualquier máquina.
+# Start it through its unit, as on a normal machine.
 sudo systemctl start lightdm.service || fail "lightdm did not start"
 
 wait_for 60 systemctl --user is-active "$desktop" || {
-    # Todo lo que puede decir algo: lo que systemd vio del display manager, lo
-    # que escribió él, lo que dijo la sesión al morir y lo que sabe logind.
+    # Every useful diagnostic: systemd's view of the display manager, its own
+    # output, the session's final output, and logind state.
     sudo journalctl -u lightdm -n 20 --no-pager 2>/dev/null | sed 's/^/  journal: /' || true
     sudo tail -n 30 /var/log/lightdm/*.log 2>/dev/null | sed 's/^/  lightdm: /' || true
     tail -n 20 "$HOME/.xsession-errors" 2>/dev/null | sed 's/^/  xsession-errors: /' || true
@@ -166,10 +166,10 @@ env_of() { tr '\0' '\n' <"/proc/$pid/environ" | sed -n "s/^$1=//p"; }
 
 [ "$(cat "/proc/$pid/comm")" = bspwm ] || fail "the main process is $(cat "/proc/$pid/comm"), not bspwm"
 
-# La cookie es la que deje el display manager, y dónde la deja es cosa suya: en
-# Debian y Ubuntu, el wrapper de sesión la copia a ~/.Xauthority. Lo que importa
-# es que el escritorio la recibió y sirve: con ella se conectaron al servidor X
-# tanto bspwm como la espera de uxsm, que es lo que activó la sesión gráfica.
+# The display manager chooses the cookie and its location; on Debian and Ubuntu,
+# the session wrapper copies it to ~/.Xauthority before launch. What matters is that the
+# desktop received a working cookie: both bspwm and uxsm's readiness wait used
+# it to connect to the X server, which activated the graphical session.
 xauth=$(env_of XAUTHORITY)
 [ -n "$xauth" ] && [ -f "$xauth" ] ||
     fail "the desktop has XAUTHORITY='$xauth', which is not a file that exists"
@@ -179,11 +179,11 @@ ok "the desktop got a working XAUTHORITY ($xauth) on DISPLAY=$(env_of DISPLAY)"
     fail "DESKTOP_SESSION is $(env_of DESKTOP_SESSION), expected bspwm-uxsm"
 ok "and DESKTOP_SESSION says the session is uxsm's"
 
-# La sesión es de logind, no un proceso suelto: es lo que decide lo que puede
-# hacer polkit y lo que ve el resto del sistema. Se le pregunta a logind y no al
-# entorno del escritorio: XDG_SESSION_ID es de la sesión de login, y uxsm no lo
-# sube al gestor de systemd, que es de todo el usuario y no de una sesión
-# (internal/sessionenv, sessionSpecific).
+# This is a logind session, not a standalone process; that determines polkit
+# permissions and system-wide visibility. Query logind rather than the desktop
+# environment: XDG_SESSION_ID belongs to the login session, and uxsm does not
+# import it into the per-user systemd manager (internal/sessionenv,
+# sessionSpecific).
 session=""
 for id in $(loginctl list-sessions --no-legend | awk '{print $1}'); do
     case $(loginctl show-session "$id" -p Service --value 2>/dev/null) in
@@ -197,7 +197,7 @@ type=$(loginctl show-session "$session" -p Type --value)
 leader=$(loginctl show-session "$session" -p Leader --value)
 ok "logind has an x11 session from LightDM, led by $(tr '\0' ' ' <"/proc/$leader/cmdline" | cut -c1-60)"
 
-# Y el cierre que sólo hace un display manager: se lleva la sesión por delante.
+# Finally, test display-manager-only shutdown by terminating the whole session.
 sudo systemctl stop lightdm.service
 wait_stopped 30 "$desktop" uxsm-env@bspwm.desktop.service graphical-session.target ||
     fail "the session outlived the display manager"

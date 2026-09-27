@@ -49,7 +49,7 @@ func TestDesktopNamesErrors(t *testing.T) {
 		if err == nil {
 			t.Errorf("%s: expected an error", name)
 		}
-		// Sólo los errores de -D y -e son errores de argumentos.
+		// Only -D and -e errors are argument errors.
 		if isArgs := name != "nothing at all"; errors.Is(err, ErrBadNames) != isArgs {
 			t.Errorf("%s: errors.Is(err, ErrBadNames) = %v, want %v", name, !isArgs, isArgs)
 		}
@@ -104,8 +104,8 @@ func TestRuntimeDir(t *testing.T) {
 	}
 }
 
-// TestReadySignal comprueba lo que hace que la señal sea una sola: la enciende
-// quien llega primero, y quien llega después se la encuentra encendida.
+// TestReadySignal verifies the signal's single-winner behavior: the first caller
+// turns it on, and later callers find it already on.
 func TestReadySignal(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 

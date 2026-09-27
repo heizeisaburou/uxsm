@@ -8,22 +8,21 @@ import (
 	"strings"
 )
 
-// ReadyFile es la señal de que la sesión está lista: hay escritorio en
-// pantalla, y lo que arranque detrás tiene dónde colocarse.
+// ReadyFile signals that the session is ready: a desktop is on screen and
+// anything started afterwards has somewhere to appear.
 //
-// Se enciende por dos caminos que valen lo mismo: uxsm ve el gestor de ventanas
-// EWMH, o el propio escritorio ejecuta `uxsm finalize`, como en uwsm. Lo que va
-// detrás ―el target de la sesión, graphical-session.target y el autostart― no
-// distingue cuál de los dos ha sido.
+// Two equivalent paths can turn it on: uxsm sees an EWMH window manager, or the
+// desktop runs `uxsm finalize`, as with uwsm. Downstream units—the session
+// target, graphical-session.target, and autostart—do not distinguish the path.
 const ReadyFile = "ready"
 
-// SignalReady enciende la señal de que la sesión está lista. reason dice quién
-// la enciende, y queda escrito para el diario.
+// SignalReady turns on the session-ready signal. reason identifies who turned
+// it on and is recorded for the journal.
 //
-// Devuelve si la ha encendido esta llamada. Un false no es ningún error: es que
-// el otro camino llegó antes, y la señal se enciende una sola vez. Eso lo
-// decide el sistema, no uxsm: el fichero se crea con O_EXCL, así que de dos
-// caminos a la vez sólo puede ganar uno.
+// It reports whether this call turned the signal on. false is not an error: the
+// other path arrived first, and the signal is enabled only once. The system,
+// not uxsm, resolves the race: the file is created with O_EXCL, so only one of
+// two simultaneous paths can win.
 func SignalReady(reason string) (bool, error) {
 	path, err := readyPath()
 	if err != nil {
@@ -46,7 +45,7 @@ func SignalReady(reason string) (bool, error) {
 	return true, nil
 }
 
-// Ready dice si la señal está encendida, y con qué razón se encendió.
+// Ready says whether the signal is on and why it was turned on.
 func Ready() (bool, string, error) {
 	path, err := readyPath()
 	if err != nil {
@@ -62,8 +61,8 @@ func Ready() (bool, string, error) {
 	return true, strings.TrimSpace(string(data)), nil
 }
 
-// ClearReady apaga la señal. La sesión que empieza lo hace por si quedara
-// encendida de una anterior que no llegó a limpiar.
+// ClearReady turns the signal off. A starting session calls it in case a
+// previous session failed to clean up.
 func ClearReady() error {
 	path, err := readyPath()
 	if err != nil {

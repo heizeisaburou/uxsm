@@ -10,11 +10,11 @@ import (
 	"github.com/heizeisaburou/uxsm/internal/session"
 )
 
-// TestDispatch comprueba que un grupo reparte igual en cualquier nivel: la
-// suborden recibe el resto de argumentos, y la ayuda, una orden vacía o una
-// desconocida se tratan igual.
+// TestDispatch verifies that a group dispatches consistently at every level:
+// the subcommand receives the remaining arguments, and help, an empty command,
+// or an unknown command are handled the same way.
 func TestDispatch(t *testing.T) {
-	// La ayuda de los grupos va a un fichero descartable, no a la salida del test.
+	// Group help goes to a disposable file, not the test output.
 	devnull, err := os.Open(os.DevNull)
 	if err != nil {
 		t.Fatal(err)
@@ -64,8 +64,8 @@ func TestWantsHelp(t *testing.T) {
 	}
 }
 
-// TestAfterDashes comprueba que se sabe si los argumentos venían detrás de
-// "--", que el paquete flag se come sin avisar.
+// TestAfterDashes verifies that arguments can be identified as coming after
+// "--", which package flag silently consumes.
 func TestAfterDashes(t *testing.T) {
 	tests := []struct {
 		args []string
@@ -85,8 +85,8 @@ func TestAfterDashes(t *testing.T) {
 	}
 }
 
-// TestResolveTarget comprueba las dos formas de uxsm start: una entrada, que
-// se busca en xsessions, y un comando, que no.
+// TestResolveTarget verifies both forms of uxsm start: an entry, which is looked
+// up in xsessions, and a command, which is not.
 func TestResolveTarget(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", dir)
@@ -107,9 +107,9 @@ func TestResolveTarget(t *testing.T) {
 		names   []string
 		command bool
 	}{
-		// Una entrada: su Exec= y sus DesktopNames=.
+		// An entry: its Exec= and DesktopNames=.
 		{[]string{"test.desktop"}, false, "test.desktop", []string{"sh", "-c", "true"}, []string{"Test"}, false},
-		// Un comando, con o sin "--": la instancia es el nombre del programa.
+		// A command, with or without "--": the instance is the program name.
 		{[]string{"sh"}, false, "sh", []string{"sh"}, nil, true},
 		{[]string{"sh", "-c", "true"}, true, "sh", []string{"sh", "-c", "true"}, nil, true},
 		{[]string{"/bin/sh"}, true, "sh", []string{"/bin/sh"}, nil, true},
@@ -126,8 +126,8 @@ func TestResolveTarget(t *testing.T) {
 		}
 	}
 
-	// Detrás de "--", un nombre acabado en .desktop es un programa, no una
-	// entrada; y ni una entrada ni un programa que no existan se aceptan.
+	// After "--", a name ending in .desktop is a program, not an entry; neither
+	// a missing entry nor a missing program is accepted.
 	for _, bad := range []struct {
 		args   []string
 		dashes bool
@@ -142,10 +142,10 @@ func TestResolveTarget(t *testing.T) {
 	}
 }
 
-// TestWaitReadyAlreadyOn comprueba el atajo de la espera: si el escritorio ya
-// ha ejecutado uxsm finalize, la sesión está lista y no hay nada que esperar.
-// Sin ese atajo, la espera intentaría hablar con el servidor X, que en esta
-// prueba no existe.
+// TestWaitReadyAlreadyOn verifies the wait shortcut: if the desktop has already
+// run uxsm finalize, the session is ready and there is nothing to wait for.
+// Without that shortcut, the wait would try to contact the X server, which does
+// not exist in this test.
 func TestWaitReadyAlreadyOn(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 	t.Setenv("DISPLAY", "")

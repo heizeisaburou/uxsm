@@ -10,18 +10,18 @@ import (
 	"strings"
 )
 
-// display es un DISPLAY ya desmenuzado: "localhost:10.1" es la pantalla 1 del
-// display 10 de la máquina localhost.
+// display is a parsed DISPLAY: "localhost:10.1" is screen 1 of display 10 on
+// machine localhost.
 type display struct {
-	// display es el valor original, para los mensajes de error.
+	// display is the original value, used in error messages.
 	display string
 	host    string
 	number  int
 	screen  int
 }
 
-// parseDisplay desmenuza un DISPLAY, "[host]:número[.pantalla]". Con s vacía usa
-// la variable DISPLAY.
+// parseDisplay parses a DISPLAY in "[host]:number[.screen]" form. If s is empty,
+// it uses the DISPLAY variable.
 func parseDisplay(s string) (display, error) {
 	if s == "" {
 		s = os.Getenv("DISPLAY")
@@ -50,15 +50,15 @@ func parseDisplay(s string) (display, error) {
 	return d, nil
 }
 
-// local dice si el display es de esta máquina, y entonces se llega a él por un
-// socket de unix. "localhost" no lo es: con un DISPLAY reenviado por ssh, el
-// servidor está al otro lado de un socket de red.
+// local says whether the display belongs to this machine and is therefore
+// reached through a Unix socket. "localhost" is not local in this sense: with
+// DISPLAY forwarded over SSH, the server is across a network socket.
 func (d display) local() bool { return d.host == "" || d.host == "unix" }
 
-// socketDir es donde los servidores X de la máquina tienen su socket.
+// socketDir is where local X servers keep their sockets.
 const socketDir = "/tmp/.X11-unix"
 
-// dial abre la conexión con el servidor X del display.
+// dial opens a connection to the display's X server.
 func dial(d display) (net.Conn, error) {
 	if !d.local() {
 		return net.Dial("tcp", net.JoinHostPort(d.host, strconv.Itoa(6000+d.number)))
@@ -69,10 +69,10 @@ func dial(d display) (net.Conn, error) {
 	if err == nil {
 		return nc, err
 	}
-	// Los servidores X de Linux escuchan además en un socket abstracto, del
-	// espacio de nombres del núcleo, con el mismo nombre. Si el del sistema
-	// de ficheros no está ―un servidor arrancado con -nolisten unix, o dentro
-	// de otro espacio de nombres de montaje―, queda ése.
+	// Linux X servers also listen on an abstract socket in the kernel namespace
+	// under the same name. If the filesystem socket is absent—for a server
+	// started with -nolisten unix or in another mount namespace—that socket
+	// remains available.
 	if abstract, aerr := net.Dial("unix", "@"+path); aerr == nil {
 		return abstract, nil
 	}

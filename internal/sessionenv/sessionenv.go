@@ -12,25 +12,26 @@ import (
 	"github.com/heizeisaburou/uxsm/internal/systemd"
 )
 
-// Ficheros de trabajo en session.RuntimeDir, además de los que deja uxsm start.
+// Working files in session.RuntimeDir in addition to those left by uxsm start.
 const (
-	// preFile es la foto del gestor antes de preparar la sesión.
+	// preFile is the manager snapshot from before session preparation.
 	preFile = "env_pre"
-	// cleanupFile son los nombres que hay que borrar al cerrar.
+	// cleanupFile contains names to remove at shutdown.
 	cleanupFile = "env_cleanup"
 )
 
-// Prepare monta el entorno de la sesión en el gestor. Es `uxsm aux prepare-env`,
-// el ExecStart= de uxsm-env@.service, y corre antes que el escritorio.
+// Prepare builds the session environment in the manager. It is
+// `uxsm aux prepare-env`, the ExecStart= of uxsm-env@.service, and runs before
+// the desktop.
 //
-//  1. Guarda la foto del entorno del gestor.
-//  2. Ejecuta el cargador con la foto, el entorno de login por encima y la
-//     identidad de la sesión, y obtiene el entorno resultante.
-//  3. Calcula qué subir y qué borrar (computeChanges), apunta lo que habrá que
-//     borrar al cerrar, y lo aplica en el gestor y, si hace falta, en D-Bus.
+//  1. Save a snapshot of the manager environment.
+//  2. Run the loader with the snapshot, overlaid by the login environment and
+//     session identity, and obtain the resulting environment.
+//  3. Compute what to import and remove (computeChanges), record what must be
+//     removed at shutdown, and apply it to the manager and, if needed, D-Bus.
 //
-// Apunta la limpieza antes de tocar el gestor: si algo falla a medias, la
-// limpieza sabe qué deshacer.
+// Cleanup is recorded before modifying the manager so it knows what to undo if
+// an operation fails halfway through.
 func Prepare() error {
 	dir, err := session.RuntimeDir()
 	if err != nil {
@@ -45,8 +46,9 @@ func Prepare() error {
 		return fmt.Errorf("reading the session identity saved by uxsm start: %w", err)
 	}
 
-	// La foto se filtra igual que el entorno resultante: si no, lo que el filtro
-	// quita del resultado (SHELL…) parecería desaparecido y se borraría del gestor.
+	// Filter the snapshot like the resulting environment; otherwise values the
+	// filter removes from the result (SHELL…) would appear missing and be removed
+	// from the manager.
 	pre, err := systemd.Environment()
 	if err != nil {
 		return err
@@ -56,7 +58,7 @@ func Prepare() error {
 		return fmt.Errorf("saving the systemd environment snapshot: %w", err)
 	}
 
-	// El entorno de login pisa al del gestor, igual que en uwsm.
+	// The login environment overrides the manager environment, as in uwsm.
 	base := assignments(mergeEnv(envMap(pre), envMap(login)))
 	post, err := runLoader(base, identity)
 	if err != nil {
@@ -86,15 +88,15 @@ func Prepare() error {
 	return nil
 }
 
-// Cleanup deja el entorno del gestor como estaba antes de la sesión. Es `uxsm
-// aux cleanup-env`, el ExecStopPost= de uxsm-env@.service, así que corre al
-// parar el servicio por cualquier motivo, también si la preparación falló.
+// Cleanup restores the manager environment to its state before the session. It
+// is `uxsm aux cleanup-env`, the ExecStopPost= of uxsm-env@.service, so it runs
+// whenever the service stops, including after failed preparation.
 //
-//  1. Borra lo que decida cleanupNames.
-//  2. Restaura la foto.
-//  3. Borra los ficheros de trabajo de la sesión.
+//  1. Remove names selected by cleanupNames.
+//  2. Restore the snapshot.
+//  3. Remove the session's working files.
 //
-// Sin foto no hay nada que deshacer: la preparación no llegó a empezar.
+// Without a snapshot there is nothing to undo: preparation never began.
 func Cleanup() error {
 	dir, err := session.RuntimeDir()
 	if err != nil {
@@ -147,7 +149,7 @@ func Cleanup() error {
 	return nil
 }
 
-// mergeEnv devuelve base con las variables de over por encima.
+// mergeEnv returns base with variables from over taking precedence.
 func mergeEnv(base, over map[string]string) map[string]string {
 	m := make(map[string]string, len(base)+len(over))
 	for k, v := range base {
@@ -159,7 +161,7 @@ func mergeEnv(base, over map[string]string) map[string]string {
 	return m
 }
 
-// names son los nombres de unas asignaciones, para los mensajes.
+// names extracts assignment names for messages.
 func names(env []string) []string {
 	out := make([]string, 0, len(env))
 	for name := range envMap(env) {

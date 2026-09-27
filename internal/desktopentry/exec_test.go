@@ -18,7 +18,7 @@ func TestSplitExec(t *testing.T) {
 		{`prog ""`, []string{"prog", ""}},
 		{"prog %f %U", []string{"prog"}},
 		{"prog 100%%", []string{"prog", "100%"}},
-		// \s se deshace antes de separar: da dos argumentos, no uno con espacio.
+		// \s is decoded before splitting: it yields two arguments, not one with a space.
 		{`prog a\sb`, []string{"prog", "a", "b"}},
 	}
 	for _, tt := range tests {

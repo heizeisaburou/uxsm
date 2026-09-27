@@ -8,42 +8,41 @@ import (
 	"strings"
 )
 
-// dirList es una lista de directorios de sesiones en la configuración de un
-// display manager: en qué opción está, qué vale si nadie la pone, y qué
-// directorios locales tienen que estar dentro.
+// dirList describes a session-directory list in a display manager's
+// configuration: which option holds it, its default, and which local
+// directories it must contain.
 type dirList struct {
 	section, key, defaults string
-	// locals son los directorios locales de esta lista. LightDM tiene una sola
-	// para todo, así que lleva los dos; SDDM tiene una por tipo de sesión.
+	// locals contains the local directories for this list. LightDM has one list
+	// for everything, so it contains both; SDDM has one per session type.
 	locals []string
 }
 
-// keyfileDM describe un display manager que guarda sus directorios de sesiones
-// en opciones de sus ficheros INI, como LightDM y SDDM.
+// keyfileDM describes a display manager that stores session directories in INI
+// file options, such as LightDM and SDDM.
 type keyfileDM struct {
 	name, id string
-	// sep es el separador de sus listas.
+	// sep is its list separator.
 	sep string
-	// lists son las opciones donde están los directorios.
+	// lists contains the options that hold the directories.
 	lists []dirList
-	// dirs son sus directorios de ficheros *.conf, en el orden en que los lee,
-	// y main, el fichero principal, que lee el último.
+	// dirs contains its *.conf directories in read order, while main is the main
+	// file, read last.
 	dirs []string
 	main string
-	// own es el fichero que crea uxsm setup sessions-dir cuando no puede
-	// cambiar el que pone la opción.
+	// own is the file created by uxsm setup sessions-dir when it cannot modify
+	// the file that sets the option.
 	own string
-	// unit es su unidad de systemd, para decir cómo reiniciarlo.
+	// unit is its systemd unit, used to explain how to restart it.
 	unit string
 }
 
-// lightdm guarda una sola lista, para las sesiones de X11 y las de Wayland, en
-// sessions-directory, separada por ":". Lee los
-// ficheros en este orden, comprobado con `lightdm --show-config` en Debian 13:
-// los lightdm.conf.d de los directorios de datos XDG (primero /usr/share, que
-// es el de menos preferencia), el de /etc/xdg, el de /etc/lightdm y por último
-// lightdm.conf. Su valor de serie, compilado en el binario, no incluye
-// LocalXSessions.
+// lightdm stores one colon-separated sessions-directory list for both X11 and
+// Wayland sessions. It reads files in this order, verified with
+// `lightdm --show-config` on Debian 13: lightdm.conf.d under the XDG data
+// directories (/usr/share first because it has the lowest priority), then the
+// directories under /etc/xdg and /etc/lightdm, and finally lightdm.conf. Its
+// compiled-in default does not include LocalXSessions.
 var lightdm = keyfileDM{
 	name: "LightDM", id: "lightdm",
 	sep: ":",
@@ -63,10 +62,10 @@ var lightdm = keyfileDM{
 	unit: "lightdm.service",
 }
 
-// sddm guarda una lista por tipo de sesión: SessionDir en [X11] y
-// WaylandSessionDir en [Wayland], separadas por comas. Lee sus ficheros de
-// sistema, los locales y por último sddm.conf, según sddm.conf(5), que da
-// también los valores de serie, que ya incluyen los directorios locales.
+// sddm stores one comma-separated list per session type: SessionDir under [X11]
+// and WaylandSessionDir under [Wayland]. According to sddm.conf(5), it reads
+// system files, local files, and finally sddm.conf; the same manual lists the
+// defaults, which already include the local directories.
 var sddm = keyfileDM{
 	name: "SDDM", id: "sddm",
 	sep: ",",
@@ -91,8 +90,8 @@ var sddm = keyfileDM{
 func readLightDM() (*Report, error) { return lightdm.read() }
 func readSDDM() (*Report, error)    { return sddm.read() }
 
-// read lee las listas en vigor: de cada opción, la del último fichero que la
-// pone o, si ninguno la pone, la de serie.
+// read reads the effective lists: for each option, the value from the last file
+// that sets it, or the default if no file does.
 func (k keyfileDM) read() (*Report, error) {
 	r := &Report{Name: k.name, ID: k.id, Unit: k.unit}
 	var origins []string
@@ -122,15 +121,15 @@ func (k keyfileDM) lookup(l dirList) (setting, error) {
 	return lookup(files, l.section, l.key)
 }
 
-// Change es un cambio en un fichero de configuración.
+// Change is a configuration-file change.
 type Change struct {
-	// File es el fichero que se escribe.
+	// File is the file to write.
 	File string
-	// Old es su contenido actual, "" si no existe; New, el que tendrá.
+	// Old is its current content, or "" if absent; New is its resulting content.
 	Old, New string
 }
 
-// Apply escribe el cambio.
+// Apply writes the change.
 func (c *Change) Apply() error {
 	p := path(c.File)
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
@@ -139,23 +138,23 @@ func (c *Change) Apply() error {
 	return os.WriteFile(p, []byte(c.New), 0o644)
 }
 
-// SetupSessionsDir calcula los cambios para que el display manager id,
-// "lightdm" o "sddm", lea los directorios locales de sesiones. Devuelve nil si
-// ya los lee todos.
+// SetupSessionsDir computes the changes needed for display manager id,
+// "lightdm" or "sddm", to read the local session directories. It returns nil
+// if all are already read.
 //
-// Si un fichero pone la opción, el directorio se añade en ese mismo fichero,
-// aunque sea del usuario: otro fichero que la pisara dejaría dos sitios con la
-// misma opción, y cambiar el primero no haría nada. La excepción son los
-// ficheros de los paquetes, bajo /usr, que la próxima actualización pisaría:
-// entonces, o si nadie pone la opción, se escribe el fichero propio de uxsm,
-// que se lee después. Como una opción puede venir de un fichero y otra de otro,
-// puede salir más de un cambio.
+// If a file sets the option, the directory is added to that same file even if
+// it belongs to the user: writing the option again in another file would leave
+// two definitions, and changing the earlier one would have no effect. Package
+// files under /usr are the exception because an upgrade would overwrite them;
+// in that case, or when no file sets the option, uxsm writes its own file, which
+// is read later. Because different options may come from different files, more
+// than one change may be required.
 //
-// Los directorios locales van delante de todo, como en XDG_DATA_DIRS, donde
-// /usr/local/share va antes que /usr/share: así una entrada local tapa a la del
-// paquete con el mismo nombre, igual que en todos los demás sitios. Y entre
-// ellos, el de Wayland delante del de X11, para no inclinar la máquina hacia
-// X11 sólo porque uxsm sea de X11.
+// Local directories precede everything else, as in XDG_DATA_DIRS. Because
+// /usr/local/share precedes /usr/share in that search order, a local entry can
+// shadow a package entry with the same name, consistently with other lookups.
+// Among the local directories, Wayland precedes X11 so the machine is not
+// biased toward X11 merely because uxsm itself is for X11.
 func SetupSessionsDir(id string) ([]Change, error) {
 	var k keyfileDM
 	switch id {
@@ -167,8 +166,8 @@ func SetupSessionsDir(id string) ([]Change, error) {
 		return nil, fmt.Errorf("uxsm cannot change the session directories of %q", id)
 	}
 
-	// Lo que hay que escribir en el fichero propio, si hace falta: puede ser
-	// más de una opción, cada una en su grupo.
+	// Content to write to the dedicated file if needed: it may contain more
+	// than one option, each in its own group.
 	var ownLines []string
 	var changes []Change
 
@@ -183,7 +182,7 @@ func SetupSessionsDir(id string) ([]Change, error) {
 		}
 		with := addLocals(dirs, l.locals)
 		if len(with) == len(dirs) {
-			continue // ya los lee todos
+			continue // it already reads all of them
 		}
 		line := l.key + "=" + strings.Join(with, k.sep)
 
@@ -212,9 +211,9 @@ func SetupSessionsDir(id string) ([]Change, error) {
 	return changes, nil
 }
 
-// addLocals pone delante de dirs los directorios locales que falten, en el
-// orden de locals. Los que ya estén se quedan donde estén: si alguien los puso
-// en otro sitio a propósito, no somos quién para moverlos.
+// addLocals prepends missing local directories to dirs in locals order.
+// Existing ones remain where they are: if someone deliberately placed them
+// elsewhere, it is not our place to move them.
 func addLocals(dirs, locals []string) []string {
 	var add []string
 	for _, local := range locals {
@@ -225,15 +224,15 @@ func addLocals(dirs, locals []string) []string {
 	return slices.Concat(add, dirs)
 }
 
-// readGDM calcula los directorios de xsessions de GDM a partir de cómo lo
-// arranca systemd. GDM los busca en el subdirectorio xsessions de cada
-// directorio de su XDG_DATA_DIRS, más /usr/share/xsessions, que lleva
-// compilado. Ese XDG_DATA_DIRS es el del entorno del gestor del sistema, con
-// lo que añadan las líneas Environment= y EnvironmentFile= de su unidad.
+// readGDM computes GDM's xsessions directories from the way systemd starts it.
+// GDM searches the xsessions subdirectory of each XDG_DATA_DIRS directory plus
+// its compiled-in /usr/share/xsessions directory. XDG_DATA_DIRS comes from the
+// system manager's environment with additions from the unit's Environment= and
+// EnvironmentFile= lines.
 //
-// No se lee del proceso de GDM: haría falta root y que estuviera en marcha. A
-// cambio, no se ve lo que GDM pudiera cambiar por su cuenta después, y por
-// eso Origin lo dice.
+// The environment is not read from GDM's process because that would require
+// root and a running GDM. As a tradeoff, changes made later by GDM itself are
+// not visible, which is why Origin describes the source.
 func readGDM() (*Report, error) {
 	unit, err := gdmUnit()
 	if err != nil {
@@ -257,7 +256,7 @@ func readGDM() (*Report, error) {
 	return &Report{Name: "GDM", ID: "gdm", Dirs: dirs, Origin: "as systemd launches " + unit, Unit: unit}, nil
 }
 
-// gdmUnit es la unidad de GDM: gdm.service o, en Debian, gdm3.service.
+// gdmUnit returns GDM's unit: gdm.service or, on Debian, gdm3.service.
 func gdmUnit() (string, error) {
 	for _, u := range []string{"gdm.service", "gdm3.service"} {
 		out, err := systemctl("show", "-p", "LoadState", u)
@@ -271,8 +270,8 @@ func gdmUnit() (string, error) {
 	return "", fmt.Errorf("GDM is not installed")
 }
 
-// gdmEnvironment es el entorno con el que systemd arranca unit: el del gestor
-// del sistema, pisado por Environment= y éste, por EnvironmentFile=.
+// gdmEnvironment is the environment with which systemd starts unit: the system
+// manager's environment overridden by Environment=, then by EnvironmentFile=.
 func gdmEnvironment(unit string) (map[string]string, error) {
 	env := map[string]string{}
 	out, err := systemctl("show-environment")
@@ -324,9 +323,9 @@ func gdmEnvironment(unit string) (map[string]string, error) {
 	return env, nil
 }
 
-// splitQuoted parte el valor de Environment= como lo enseña systemctl show:
-// asignaciones separadas por espacios, las que llevan espacios entre comillas
-// dobles.
+// splitQuoted splits an Environment= value as displayed by systemctl show:
+// space-separated assignments, with assignments containing spaces enclosed in
+// double quotes.
 func splitQuoted(s string) []string {
 	var out []string
 	var cur strings.Builder

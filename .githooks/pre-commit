@@ -1,10 +1,9 @@
 #!/bin/sh
-# Antes de cada commit, lo que tarda segundos: formato, go vet, pruebas unitarias
-# y la sintaxis de los scripts, que es lo que hace `make check`. Las máquinas
-# virtuales van en pre-push.
+# Before every commit, run checks that take seconds: formatting, go vet, unit
+# tests, and script syntax, all through `make check`. VMs belong in pre-push.
 #
-# Mira el árbol de trabajo, no sólo lo preparado para el commit.
-# `git commit --no-verify` se lo salta.
+# This checks the working tree, not only staged changes.
+# `git commit --no-verify` skips it.
 
 set -eu
 cd "$(git rev-parse --show-toplevel)"

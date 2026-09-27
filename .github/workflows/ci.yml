@@ -1,6 +1,5 @@
-# Las mismas comprobaciones que el hook pre-commit, en cada push, más las de
-# máquinas virtuales a petición: ésas tardan minutos y necesitan KVM, así que no
-# se ejecutan solas.
+# Run the same checks as the pre-commit hook on every push, plus optional VM
+# checks. VM checks take minutes and require KVM, so they do not run automatically.
 name: CI
 
 on:
@@ -18,13 +17,13 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
-      # La Go de go.mod, que es la mínima que uxsm admite: así se compila aquí
-      # con la misma que en Ubuntu 24.04 (docs/development.md).
+      # Use the Go version from go.mod, the oldest uxsm supports, matching the
+      # version used to build on Ubuntu 24.04 (docs/development.md).
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          # uxsm sólo usa la biblioteca estándar, así que no hay go.sum y no hay
-          # dependencias que guardar en caché.
+          # uxsm uses only the standard library, so there is no go.sum and no
+          # dependency cache to populate.
           cache: false
       - run: make check
       - run: make build
@@ -36,7 +35,7 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v5
-      # Las máquinas van con KVM o no van: sin él, QEMU emula y esto tarda horas.
+      # VMs require KVM: without it, QEMU emulates the CPU and takes hours.
       - name: comprobar KVM
         run: |
           test -e /dev/kvm || { echo "este runner no tiene /dev/kvm"; exit 1; }

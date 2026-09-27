@@ -1,8 +1,8 @@
 #!/bin/sh
-# Paso 2: la sesión activa graphical-session.target, vigila el proceso de la
-# sesión y se apaga entera venga de donde venga el cierre: saliendo del
-# escritorio, matando el proceso de la sesión como haría el display manager, o
-# con `uxsm stop`.
+# Step 2: the session activates graphical-session.target, watches the session
+# process, and shuts down completely regardless of the trigger: desktop exit,
+# termination of the session process as a display manager would do, or
+# `uxsm stop`.
 
 set -eu
 . "$(dirname "$0")/lib.sh"
@@ -15,9 +15,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# start_session arranca uxsm como lo haría el display manager y comprueba que la
-# sesión está entera: escritorio, target de sesión, graphical-session.target y
-# la vigilancia del PID del proceso de la sesión.
+# start_session starts uxsm as the display manager would and verifies the whole
+# session: desktop, session target, graphical-session.target, and the session
+# process PID watcher.
 start_session() {
     systemd-run --user --quiet --collect --unit=uxsm-it-session -E DISPLAY=:5 uxsm start bspwm.desktop
     wait_for 15 systemctl --user is-active graphical-session.target ||
@@ -29,7 +29,7 @@ start_session() {
         fail "uxsm-bindpid@$pid.service is not watching the session process"
 }
 
-# expect_down CÓMO comprueba que no queda nada de la sesión tras cerrarla así.
+# expect_down HOW verifies that nothing remains after closing the session that way.
 expect_down() {
     units="$desktop $session graphical-session.target uxsm-it-session.service"
     # shellcheck disable=SC2086

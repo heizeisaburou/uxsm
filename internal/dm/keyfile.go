@@ -4,19 +4,18 @@ import (
 	"strings"
 )
 
-// setting es dónde está puesta una opción de un fichero INI, como las de
-// LightDM y SDDM.
+// setting records where an INI option, such as a LightDM or SDDM option, is set.
 type setting struct {
 	value string
-	// file es el fichero que la pone; "" si ninguno la pone.
+	// file is the file that sets it, or "" if none does.
 	file string
-	// line es su número de línea en file, desde 0.
+	// line is its zero-based line number in file.
 	line int
 }
 
-// lookup busca la opción key del grupo section en files, en orden, y devuelve
-// la última que la pone: es la que manda, porque cada fichero pisa a los
-// anteriores.
+// lookup searches files in order for option key in group section and returns
+// the last setting, which takes precedence because each file overrides earlier
+// ones.
 func lookup(files []string, section, key string) (setting, error) {
 	var found setting
 	for _, f := range files {
@@ -31,8 +30,8 @@ func lookup(files []string, section, key string) (setting, error) {
 	return found, nil
 }
 
-// findKey busca key en el grupo section de un texto INI y devuelve la línea de
-// la última aparición y su valor.
+// findKey searches INI text for key in group section and returns the line and
+// value of its last occurrence.
 func findKey(text, section, key string) (int, string, bool) {
 	line, value, ok := -1, "", false
 	in := false
@@ -53,15 +52,15 @@ func findKey(text, section, key string) (int, string, bool) {
 	return line, value, ok
 }
 
-// replaceLine devuelve text con la línea i cambiada por l.
+// replaceLine returns text with line i replaced by l.
 func replaceLine(text string, i int, l string) string {
 	lines := strings.Split(text, "\n")
 	lines[i] = l
 	return strings.Join(lines, "\n")
 }
 
-// splitList parte una lista de directorios con el separador sep, sin
-// elementos vacíos y sin la barra final.
+// splitList splits a directory list on sep, removing empty elements and
+// trailing slashes.
 func splitList(s, sep string) []string {
 	var dirs []string
 	for _, d := range strings.Split(s, sep) {

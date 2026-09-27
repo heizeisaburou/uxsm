@@ -11,10 +11,10 @@ import (
 func TestComputeChanges(t *testing.T) {
 	pre := []string{
 		"HOME=/home/u",
-		"PATH=/usr/bin",               // igual en post, pero está en alwaysExport
+		"PATH=/usr/bin",               // unchanged in post, but in alwaysExport
 		"WAYLAND_DISPLAY=wayland-old", // alwaysUnset
-		"XDG_SESSION_ID=7",            // alwaysUnset y neverExport
-		"GONE=x",                      // no está en post
+		"XDG_SESSION_ID=7",            // alwaysUnset and neverExport
+		"GONE=x",                      // absent from post
 		"SSH_AUTH_SOCK=/run/ssh",      // neverCleanup
 	}
 	post := []string{
@@ -44,14 +44,14 @@ func TestComputeChanges(t *testing.T) {
 }
 
 func TestCleanupNames(t *testing.T) {
-	pre := []string{"PATH=/usr/bin", "DISPLAY=:0"} // DISPLAY viejo en la foto
+	pre := []string{"PATH=/usr/bin", "DISPLAY=:0"} // old DISPLAY in the snapshot
 	now := []string{"PATH=/usr/bin:/extra", "DISPLAY=:5", "NEW=1", "XDG_SESSION_TYPE=x11",
 		"SSH_AUTH_SOCK=/run/ssh", "UNRELATED=1"}
 	marked := []string{"PATH", "NEW", "DISPLAY", "SSH_AUTH_SOCK"}
 
-	// PATH y DISPLAY estaban en la foto: no se borran, se restauran.
-	// XDG_SESSION_TYPE no se apuntó, pero está en alwaysCleanup.
-	// SSH_AUTH_SOCK está en neverCleanup. UNRELATED no es de la sesión.
+	// PATH and DISPLAY were in the snapshot: restore them instead of removing them.
+	// XDG_SESSION_TYPE was not recorded, but it is in alwaysCleanup.
+	// SSH_AUTH_SOCK is in neverCleanup. UNRELATED does not belong to the session.
 	want := []string{"NEW", "XDG_SESSION_TYPE"}
 	if got := cleanupNames(pre, now, marked); !reflect.DeepEqual(got, want) {
 		t.Errorf("got %q, want %q", got, want)
@@ -76,9 +76,9 @@ func TestSplitAtMark(t *testing.T) {
 	}
 }
 
-// TestRunLoader ejecuta loader.sh de verdad, con un HOME y unos directorios XDG
-// de prueba: comprueba el orden de carga de los ficheros de entorno y que la
-// identidad llega al resultado.
+// TestRunLoader runs loader.sh for real with a test HOME and XDG directories;
+// it verifies environment-file load order and that the identity reaches the
+// result.
 func TestRunLoader(t *testing.T) {
 	home, sys := t.TempDir(), t.TempDir()
 	write := func(path, content string) {
@@ -89,7 +89,7 @@ func TestRunLoader(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// ORDER acumula el orden de carga.
+	// ORDER accumulates the load order.
 	write(filepath.Join(sys, "uxsm/env"), `export ORDER="${ORDER}sys-env "`)
 	write(filepath.Join(home, ".config/uxsm/env"), `export ORDER="${ORDER}home-env "`)
 	write(filepath.Join(home, ".config/uxsm/env-testde"), `export ORDER="${ORDER}home-env-testde "`)

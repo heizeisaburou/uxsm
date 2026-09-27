@@ -6,43 +6,42 @@ import (
 	"strings"
 )
 
-// Fields son los valores con los que se sustituyen los códigos de campo de un
-// Exec= al lanzar una aplicación. Con todo vacío, los códigos desaparecen, que
-// es lo que quiere una sesión: no recibe ficheros ni iconos.
+// Fields contains the values substituted for field codes in Exec= when an
+// application is launched. If every field is empty, the codes disappear, which
+// is appropriate for a session because it receives no files or icons.
 type Fields struct {
-	// Args son los ficheros o URLs que se le pasan a la aplicación: %f y %u
-	// toman el primero, %F y %U los toman todos.
+	// Args contains files or URLs passed to the application: %f and %u use the
+	// first, while %F and %U use all of them.
 	Args []string
-	// Icon es el Icon= de la entrada. %i se convierte en dos argumentos,
-	// "--icon" y el icono; sin icono, en ninguno.
+	// Icon is the entry's Icon=. %i becomes two arguments, "--icon" and the
+	// icon; without an icon, it becomes no arguments.
 	Icon string
-	// Name es el Name= de la entrada, que es lo que pone %c.
+	// Name is the entry's Name=, which supplies %c.
 	Name string
-	// Path es la ruta del fichero de la entrada, que es lo que pone %k.
+	// Path is the entry file's path, which supplies %k.
 	Path string
 }
 
-// SplitExec convierte el valor de Exec= en la lista de argumentos que se
-// ejecutaría, sin sustituir los códigos de campo.
+// SplitExec converts an Exec= value into the argument list to execute without
+// substituting field codes.
 func SplitExec(exec string) ([]string, error) {
 	return SplitExecFields(exec, Fields{})
 }
 
-// SplitExecFields es SplitExec sustituyendo los códigos de campo por f,
-// siguiendo la Desktop Entry Specification:
+// SplitExecFields is SplitExec with field codes substituted from f according
+// to the Desktop Entry Specification:
 //
-//   - Primero se deshacen los escapes generales de las cadenas (\s, \\…).
-//   - Los argumentos se separan por espacios.
-//   - Un argumento entre comillas dobles puede llevar espacios; dentro, la
-//     comilla doble, la comilla invertida, el dólar y la barra invertida van
-//     escapados con una barra invertida.
-//   - %% queda como un % literal.
-//   - Los códigos que la especificación da por obsoletos (%d, %D, %n, %N, %v,
-//     %m) se quitan, como pide ella misma.
+//   - General string escapes (\s, \\…) are decoded first.
+//   - Arguments are separated by spaces.
+//   - A double-quoted argument may contain spaces; within it, double quotes,
+//     backticks, dollar signs, and backslashes are escaped with a backslash.
+//   - %% becomes a literal %.
+//   - Field codes deprecated by the specification (%d, %D, %n, %N, %v, %m)
+//     are removed as required by the specification itself.
 //
-// Los códigos que pueden dar varios argumentos ―%f, %F, %u, %U, %i― los dan
-// sueltos, sin pegarse a lo que tengan al lado: la especificación pide que
-// vayan solos en su argumento.
+// Codes that may produce multiple arguments—%f, %F, %u, %U, and %i—produce
+// separate arguments instead of attaching them to adjacent text, because the
+// specification requires them to occupy an argument by themselves.
 func SplitExecFields(exec string, f Fields) ([]string, error) {
 	s := unescape(exec)
 
@@ -50,7 +49,7 @@ func SplitExecFields(exec string, f Fields) ([]string, error) {
 	var cur strings.Builder
 	inArg, inQuotes := false, false
 
-	// flush cierra el argumento que se esté construyendo, si hay alguno.
+	// flush finishes the argument currently being built, if any.
 	flush := func() {
 		if inArg {
 			args = append(args, cur.String())
@@ -96,7 +95,7 @@ func SplitExecFields(exec string, f Fields) ([]string, error) {
 				cur.WriteString(f.Path)
 				inArg = true
 			case 'd', 'D', 'n', 'N', 'v', 'm':
-				// obsoletos: la especificación dice que se quiten
+				// deprecated: the specification requires them to be removed
 			default:
 				return nil, fmt.Errorf("invalid field code %%%c in Exec=%q", s[i], exec)
 			}

@@ -10,14 +10,14 @@ func TestStartsOwnAutostart(t *testing.T) {
 		names []string
 		own   bool
 	}{
-		{names: []string{"bspwm"}},                    // gestor de ventanas
+		{names: []string{"bspwm"}},                    // window manager
 		{names: []string{"i3"}},                       //
-		{names: []string{"leftwm"}},                   // no está en la tabla: no se supone nada
-		{names: []string{"XFCE"}, own: true},          // escritorio con gestor de sesión
-		{names: []string{"xfce"}, own: true},          // sin distinguir mayúsculas
-		{names: []string{"MATE"}, own: true},          // sawfish-mate acaba en mate-session
-		{names: []string{"bspwm", "XFCE"}, own: true}, // basta uno
-		{names: []string{"bspwm", "Custom"}},          // el desconocido no cuenta
+		{names: []string{"leftwm"}},                   // absent from the table: assume nothing
+		{names: []string{"XFCE"}, own: true},          // desktop with a session manager
+		{names: []string{"xfce"}, own: true},          // case-insensitive
+		{names: []string{"MATE"}, own: true},          // sawfish-mate ends in mate-session
+		{names: []string{"bspwm", "XFCE"}, own: true}, // one is enough
+		{names: []string{"bspwm", "Custom"}},          // an unknown name does not count
 	}
 	for _, c := range cases {
 		name, own := startsOwnAutostart(c.names)
@@ -27,9 +27,9 @@ func TestStartsOwnAutostart(t *testing.T) {
 	}
 }
 
-// TestUxsmEntryNoAutostart comprueba lo que se apoya en la tabla: la entrada de
-// un escritorio que lanza su propio autostart sale con --no-autostart, y la de
-// un gestor de ventanas, sin ella.
+// TestUxsmEntryNoAutostart verifies table-dependent behavior: an entry for a
+// desktop that launches its own autostart includes --no-autostart, while a
+// window manager entry does not.
 func TestUxsmEntryNoAutostart(t *testing.T) {
 	for _, c := range []struct {
 		desktop string
@@ -54,10 +54,10 @@ func TestUxsmEntryNoAutostart(t *testing.T) {
 	}
 }
 
-// TestAutostartTable comprueba la marca de la tabla, que dice lo que la sesión
-// hace y no lo que es: la llevan las que lanzan ellas mismas el autostart XDG,
-// y no la llevan las demás, aunque tengan su propio fichero de arranque, como
-// icewm-session, o sean un escritorio entero, como Enlightenment.
+// TestAutostartTable verifies the table marker, which describes what a session
+// does rather than what it is: sessions that launch XDG autostart themselves
+// have it, while others do not, even if they have their own startup file like
+// icewm-session or form a complete desktop like Enlightenment.
 func TestAutostartTable(t *testing.T) {
 	for id, k := range known {
 		if k.OwnAutostart && len(k.DesktopNames) == 0 {

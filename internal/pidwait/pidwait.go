@@ -1,4 +1,4 @@
-// Package pidwait espera a que termine un proceso cualquiera, no sólo un hijo.
+// Package pidwait waits for any process to exit, not only a child process.
 package pidwait
 
 import (
@@ -7,20 +7,19 @@ import (
 	"syscall"
 )
 
-// sysPidfdOpen es el número de la llamada pidfd_open(2), de Linux 5.3. El
-// paquete syscall no le pone nombre en la mayoría de arquitecturas, pero las
-// llamadas añadidas desde Linux 5.1 tienen el mismo número en todas.
+// sysPidfdOpen is the syscall number for pidfd_open(2), introduced in Linux 5.3.
+// Package syscall does not name it on most architectures, but syscalls added
+// since Linux 5.1 use the same number on all architectures.
 const sysPidfdOpen = 434
 
-// Wait bloquea hasta que termina el proceso pid. Si ya no existe, vuelve sin
-// error.
+// Wait blocks until process pid exits. If it no longer exists, Wait returns
+// without an error.
 //
-// waitpid(2) sólo sirve con procesos hijos, y el que vigila uxsm es hijo del
-// display manager. pidfd_open(2) da un descriptor de fichero para cualquier
-// proceso, y ese descriptor se vuelve legible cuando el proceso termina: basta
-// con esperar a que lo sea, sin preguntar en bucle. Es lo mismo que hace
-// `uwsm aux waitpid` y el comando waitpid de util-linux, que Ubuntu 24.04 no
-// trae.
+// waitpid(2) only works for child processes, while the process uxsm watches is
+// a child of the display manager. pidfd_open(2) returns a file descriptor for
+// any process, and that descriptor becomes readable when the process exits, so
+// it can be awaited without polling. This is what `uwsm aux waitpid` and the
+// util-linux waitpid command do; Ubuntu 24.04 does not ship the latter.
 func Wait(pid int) error {
 	if pid <= 0 {
 		return fmt.Errorf("invalid PID %d", pid)
@@ -37,8 +36,8 @@ func Wait(pid int) error {
 	defer syscall.Close(fd)
 
 	for {
-		// FdSet guarda un bit por descriptor en palabras de 64 bits, que es
-		// su tamaño en x86_64 y aarch64, las arquitecturas de los paquetes.
+		// FdSet stores one bit per descriptor in 64-bit words, their size on
+		// x86_64 and aarch64, the architectures targeted by the packages.
 		var set syscall.FdSet
 		set.Bits[fd/64] |= 1 << (uint(fd) % 64)
 

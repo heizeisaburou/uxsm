@@ -6,16 +6,16 @@ import (
 	"github.com/heizeisaburou/uxsm/internal/systemd"
 )
 
-// runIsActive dice si hay una sesión de uxsm en marcha: `uxsm check is-active`.
+// runIsActive says whether a uxsm session is running: `uxsm check is-active`.
 //
-// Se llama igual que en uwsm y sirve para lo mismo: que un script sepa dónde
-// está. Lo natural para un fichero de arranque del escritorio, o para algo que
-// se lance desde fuera y quiera saber si puede usar `uxsm app`.
+// It has the same name and purpose as in uwsm: letting a script know where it
+// is running. This is useful in a desktop startup file, or for something
+// launched from outside that needs to know whether it can use `uxsm app`.
 //
-// A diferencia del informe de `uxsm check`, ésta contesta con el código de
-// salida y no escribe nada, salvo que se le pida con -v.
+// Unlike the `uxsm check` report, it answers through the exit status and writes
+// nothing unless -v is requested.
 func runIsActive(args []string) error {
-	fs := newFlagSet("check is-active", "",
+	fs := newFlagSet("check is-active", "[-v]",
 		"Exit with 0 if a uxsm session is running or starting, and with 1 if not.")
 	verbose := fs.Bool("v", false, "write the units that are up")
 	if err := parseFlags(fs, args); err != nil {

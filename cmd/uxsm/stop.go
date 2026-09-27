@@ -2,11 +2,11 @@ package main
 
 import "github.com/heizeisaburou/uxsm/internal/systemd"
 
-// runStop apaga la sesión desde fuera: `uxsm stop`.
+// runStop shuts the session down externally: `uxsm stop`.
 //
-// Arranca uxsm-shutdown.target, el mismo target que usan el escritorio y bindpid
-// cuando terminan. systemd para todo lo que choca con él, así que la sesión se
-// cierra por el mismo camino venga de donde venga el cierre.
+// It starts uxsm-shutdown.target, the same target used when the desktop or
+// bindpid exits. systemd stops every unit that conflicts with it, so every
+// source of shutdown follows the same path.
 func runStop(args []string) error {
 	fs := newFlagSet("stop", "", "Stop the running uxsm session.")
 	if err := parseFlags(fs, args); err != nil {

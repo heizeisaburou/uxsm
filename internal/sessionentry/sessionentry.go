@@ -1,29 +1,28 @@
-// Package sessionentry genera entradas de sesión X11: las de uxsm, que el
-// display manager enseña al lado de las demás, y las entradas normales de los
-// escritorios de su tabla que no instalan la suya.
+// Package sessionentry generates X11 session entries: uxsm entries displayed
+// alongside the others by the display manager, and normal entries for desktops
+// in its table that do not install their own.
 //
-// Una entrada sale de una fuente (Source): una entrada que ya existe, un
-// escritorio de la tabla de escritorios conocidos (known.go) o un comando. De
-// cualquier fuente se pueden generar tres ficheros:
+// An entry comes from a Source: an existing entry, a desktop in the known
+// desktop table (known.go), or a command. Any source can generate three files:
 //
-//   - La entrada normal, bspwm.desktop con Exec=bspwm (Source.Plain).
-//   - La de uxsm que apunta a otra entrada, bspwm-uxsm.desktop con
-//     Exec=uxsm start bspwm.desktop (Source.Uxsm). Sólo de una entrada que
-//     exista. Es lo que recomienda uwsm para Wayland (su README, «From a
-//     display manager»): uxsm start lee de ella el Exec=, que así no hay que
-//     copiar en argumentos que algunos display managers no saben entrecomillar.
-//   - La de uxsm con el comando directo, bspwm-uxsm.desktop con
-//     Exec=uxsm start -D bspwm -- bspwm (Source.UxsmExec), que no necesita
-//     ninguna otra entrada.
+//   - The normal entry, bspwm.desktop with Exec=bspwm (Source.Plain).
+//   - A uxsm entry pointing to another entry, bspwm-uxsm.desktop with
+//     Exec=uxsm start bspwm.desktop (Source.Uxsm). This requires an existing
+//     entry. It is the approach uwsm recommends for Wayland ("From a display
+//     manager" in its README): uxsm start reads Exec= from that entry, avoiding
+//     arguments that some display managers cannot quote correctly.
+//   - A uxsm entry with a direct command, bspwm-uxsm.desktop with
+//     Exec=uxsm start -D bspwm -- bspwm (Source.UxsmExec), which needs no other
+//     entry.
 //
-// Las entradas de uxsm llevan TryExec=uxsm, para que el display manager las
-// esconda si uxsm no está.
+// uxsm entries include TryExec=uxsm so the display manager hides them when uxsm
+// is unavailable.
 //
-// Nunca se genera nada a partir de una entrada o un comando que ya use uxsm
-// (se arrancaría a sí mismo), que ya arranque su escritorio como servicio de
-// systemd --user, como la de qtile en Arch (habría dos gestores para la misma
-// sesión), o que sea una meta-sesión, que arranca el script personal del
-// usuario en vez de un escritorio (IsMetaSession).
+// Nothing is generated from an entry or command that already uses uxsm (it
+// would start itself), already starts its desktop as a systemd --user service,
+// as qtile's Arch entry does (two managers would control the same session), or
+// is a meta-session that starts the user's personal script instead of a desktop
+// (IsMetaSession).
 package sessionentry
 
 import (
@@ -38,85 +37,83 @@ import (
 	"github.com/heizeisaburou/uxsm/internal/systemd"
 )
 
-// noAutostartFlag es la opción que se añade al Exec= de las entradas de los
-// escritorios que lanzan ellos mismos el autostart XDG (startsOwnAutostart).
+// noAutostartFlag is added to Exec= for entries whose desktops launch XDG
+// autostart themselves (startsOwnAutostart).
 const noAutostartFlag = "--no-autostart"
 
-// Suffix termina el ID de toda entrada de uxsm: bspwm.desktop da
-// bspwm-uxsm.desktop.
+// Suffix ends every uxsm entry ID: bspwm.desktop becomes bspwm-uxsm.desktop.
 const Suffix = "-uxsm.desktop"
 
-// ErrUsesUxsm es el error con una entrada o un comando que ya arranca uxsm.
+// ErrUsesUxsm is returned for an entry or command that already starts uxsm.
 var ErrUsesUxsm = errors.New("it already uses uxsm")
 
-// ErrUsesSystemd es el error con una entrada o un comando que ya arranca su
-// escritorio como servicio de systemd --user.
+// ErrUsesSystemd is returned for an entry or command that already starts its
+// desktop as a systemd --user service.
 var ErrUsesSystemd = errors.New("it already starts its desktop as a systemd user service")
 
-// ErrMetaSession es el error con una meta-sesión: una entrada que no arranca un
-// escritorio, sino el script personal del usuario.
+// ErrMetaSession is returned for a meta-session: an entry that starts the user's
+// personal script rather than a desktop.
 var ErrMetaSession = errors.New("it is a meta-session that runs the user's own script, not a desktop")
 
-// ErrUnknown es el error de FromTable con un escritorio que no está en la
-// tabla o del que no se conoce la orden.
+// ErrUnknown is returned by FromTable for a desktop absent from the table or
+// without a known command.
 var ErrUnknown = errors.New("not in uxsm's table of known desktops, or no command known for it")
 
-// ErrNoNames es el error cuando no se sabe ningún nombre del escritorio: no
-// hay DesktopNames=, no está en la tabla y no se han dado con -D.
+// ErrNoNames is returned when no desktop name is known: DesktopNames= is absent,
+// the desktop is not in the table, and no name was passed with -D.
 var ErrNoNames = errors.New("no desktop names known")
 
-// ErrBadNames es el error con nombres que no se pueden pasar con -D.
+// ErrBadNames is returned for names that cannot be passed with -D.
 var ErrBadNames = errors.New("invalid desktop names")
 
-// metaPrograms son los programas que convierten una entrada en meta-sesión. Se
-// mira el programa y no el nombre de la entrada, porque es lo que la hace
-// meta-sesión. Son los dos casos que hay entre las cien entradas de Arch,
-// Debian, Ubuntu y Fedora (test/xsessions.sh):
+// metaPrograms are the programs that make an entry a meta-session. The program,
+// rather than the entry name, is what makes it a meta-session. These are the two
+// cases among the hundred Arch, Debian, Ubuntu, and Fedora entries
+// (test/xsessions.sh):
 //
-//   - default: el Exec= de lightdm-xsession.desktop, de LightDM en Debian. No
-//     es un programa, sino una palabra que sólo entiende LightDM y que quiere
-//     decir «la sesión que tenga configurada el usuario», normalmente
-//     ~/.xsession.
-//   - xinit-compat: el Exec= de xinit-compat.desktop, de Fedora, un script que
-//     ejecuta ~/.xsession, ~/.Xclients o /etc/X11/xinit/Xclients.
+//   - default: Exec= from LightDM's lightdm-xsession.desktop on Debian. It is
+//     not a program, but a word understood only by LightDM meaning "the session
+//     configured by the user", normally the ~/.xsession file.
+//   - xinit-compat: Exec= from Fedora's xinit-compat.desktop, a script that runs
+//     the ~/.xsession, ~/.Xclients, or /etc/X11/xinit/Xclients file.
 //
-// No hay forma de saber qué escritorio correrá, y si el script del usuario
-// arranca uxsm, la sesión se arrancaría a sí misma. uxsm start no las
-// comprueba, como tampoco uwsm.
+// There is no way to know which desktop will run, and if the user's script
+// starts uxsm, the session would start itself. uxsm start does not reject them,
+// nor does uwsm.
 var metaPrograms = map[string]bool{
 	"default":      true,
 	"xinit-compat": true,
 }
 
-// IsMetaSession dice si la orden argv es la de una meta-sesión.
+// IsMetaSession says whether argv is a meta-session command.
 func IsMetaSession(argv []string) bool {
 	return len(argv) > 0 && metaPrograms[filepath.Base(argv[0])]
 }
 
-// Source es de dónde sale una entrada generada: un escritorio, su orden y lo
-// que se sabe de él.
+// Source describes where a generated entry comes from: a desktop, its command,
+// and what is known about it.
 type Source struct {
-	// ID es el de su entrada: "bspwm.desktop".
+	// ID is its entry ID: "bspwm.desktop".
 	ID string
-	// Name y Comment son los de su entrada, o los de la tabla.
+	// Name and Comment come from its entry or the table.
 	Name, Comment string
-	// Argv es la orden que arranca el escritorio.
+	// Argv is the command that starts the desktop.
 	Argv []string
-	// Known son los nombres del escritorio que se conocen: los del
-	// DesktopNames= de la entrada o, si no trae, los de la tabla.
+	// Known contains the known desktop names: DesktopNames= from the entry or,
+	// if absent, names from the table.
 	Known []string
-	// entryNames son los DesktopNames= de la entrada, que uxsm start leerá de
-	// ella; vacío si la fuente no es una entrada.
+	// entryNames contains DesktopNames= from the entry, which uxsm start will
+	// read from it; empty if the source is not an entry.
 	entryNames []string
-	// entry dice si la fuente es una entrada que existe.
+	// entry says whether the source is an existing entry.
 	entry bool
-	// origin dice de dónde sale, para el comentario de la entrada generada.
+	// origin describes the source for the generated entry's comment.
 	origin string
 }
 
-// FromEntry es la fuente de una entrada que existe. Con table, lo que no traiga
-// lo completa la tabla de escritorios conocidos; sin table, lo que no esté en la
-// entrada no está.
+// FromEntry builds a source from an existing entry. With table, missing values
+// are filled from the known-desktop table; without it, values absent from the
+// entry remain absent.
 func FromEntry(e *desktopentry.Entry, table bool) (*Source, error) {
 	argv, err := desktopentry.SplitExec(e.Exec)
 	if err != nil {
@@ -149,16 +146,16 @@ func FromEntry(e *desktopentry.Entry, table bool) (*Source, error) {
 	return s, nil
 }
 
-// FromTable es la fuente de un escritorio de la tabla, por el nombre de su
-// entrada, con .desktop o sin él: "bspwm". Sólo si la tabla conoce su orden.
+// FromTable builds a source from a desktop in the table, identified by its entry
+// name with or without .desktop, such as "bspwm". It requires a known command.
 func FromTable(name string) (*Source, error) {
 	id := strings.TrimSuffix(name, ".desktop") + ".desktop"
 	k, ok := known[id]
 	if !ok || k.Exec == "" {
 		return nil, fmt.Errorf("%s: %w", strings.TrimSuffix(id, ".desktop"), ErrUnknown)
 	}
-	// La orden de la tabla no lleva nada que haya que entrecomillar
-	// (TestKnown), así que se parte tal cual.
+	// Table commands contain nothing requiring quotes (TestKnown), so splitting
+	// them directly is safe.
 	argv, err := desktopentry.SplitExec(k.Exec)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", id, err)
@@ -169,9 +166,9 @@ func FromTable(name string) (*Source, error) {
 	}, nil
 }
 
-// FromCommand es la fuente de un comando: la entrada se llama como el programa.
-// Con table, si ese nombre está en la tabla, sus nombres y su descripción cuentan
-// como conocidos.
+// FromCommand builds a source from a command; the entry is named after the
+// program. With table, names and a description from a matching table entry are
+// treated as known.
 func FromCommand(argv []string, table bool) (*Source, error) {
 	if len(argv) == 0 {
 		return nil, errors.New("empty command")
@@ -191,9 +188,10 @@ func FromCommand(argv []string, table bool) (*Source, error) {
 	}, nil
 }
 
-// checkCommand rechaza lo que no se debe envolver: lo que ya usa uxsm, lo que
-// ya arranca su escritorio como servicio de systemd y las meta-sesiones. exec
-// es la orden como texto, para buscar systemctl dentro de un sh -c.
+// checkCommand rejects commands that must not be wrapped: commands already
+// using uxsm, commands already starting their desktop as a systemd service, and
+// meta-sessions. exec is the command as text, used to find systemctl inside
+// sh -c.
 func checkCommand(what, exec string, argv []string) error {
 	if filepath.Base(argv[0]) == "uxsm" {
 		return fmt.Errorf("%s: %w", what, ErrUsesUxsm)
@@ -207,19 +205,19 @@ func checkCommand(what, exec string, argv []string) error {
 	return nil
 }
 
-// Options son las opciones de uxsm entry que cambian la entrada.
+// Options contains uxsm entry options that alter the generated entry.
 type Options struct {
-	// Names son los nombres de -D, separados por ":". Se añaden al final de
-	// los conocidos, como en uxsm start.
+	// Names contains colon-separated names from -D. They are appended to known
+	// names, as in uxsm start.
 	Names string
-	// Exclusive es -e: sólo cuentan los nombres de -D, igual que en uxsm start.
+	// Exclusive is -e: only names from -D count, as in uxsm start.
 	Exclusive bool
-	// Name y Comment, si no están vacíos, sustituyen a los de la fuente.
+	// Name and Comment replace source values when nonempty.
 	Name, Comment string
 }
 
-// names calcula los nombres del escritorio de la entrada generada: los
-// conocidos y detrás los de -D, sin repetidos; o, con -e, sólo los de -D.
+// names computes desktop names for the generated entry: known names followed by
+// -D names without duplicates, or only -D names with -e.
 func (s *Source) names(o Options) ([]string, error) {
 	if o.Names != "" && !session.ValidNames(o.Names) {
 		return nil, fmt.Errorf("%w: %q: use letters, digits, '_', '.' and '-', separated by ':'", ErrBadNames, o.Names)
@@ -242,27 +240,27 @@ func (s *Source) names(o Options) ([]string, error) {
 	return names, nil
 }
 
-// Entry es una entrada generada. Render la escribe.
+// Entry is a generated entry. Render writes it.
 type Entry struct {
-	// ID es el nombre de su fichero: "bspwm-uxsm.desktop".
+	// ID is its file name: "bspwm-uxsm.desktop".
 	ID string
-	// Name y Comment son los que ve el usuario en el display manager.
+	// Name and Comment are displayed to the user by the display manager.
 	Name, Comment string
-	// Exec es la orden, ya entrecomillada como pide el formato; TryExec, el
-	// programa sin el que el display manager la esconde.
+	// Exec is the command, already quoted as required by the format; TryExec is
+	// the program whose absence makes the display manager hide the entry.
 	Exec, TryExec string
-	// DesktopNames es la lista de DesktopNames=.
+	// DesktopNames is the DesktopNames= list.
 	DesktopNames []string
-	// Source es el ID de la fuente, para X-UXSM-Source=.
+	// Source is the source ID used for X-UXSM-Source=.
 	Source string
-	// origin dice de dónde sale, para el comentario del fichero.
+	// origin describes where it came from for the file comment.
 	origin string
 }
 
-// Plain genera la entrada normal del escritorio: la que debería haber instalado
-// su paquete, con el mismo ID que la fuente.
+// Plain generates the normal desktop entry: the one its package should have
+// installed, with the same ID as the source.
 func (s *Source) Plain(o Options) (*Entry, error) {
-	// Con ese ID la arrancaría uxsm start, que lo usa como instancia.
+	// uxsm start would launch that ID and use it as the instance.
 	if err := systemd.CheckInstance(s.ID); err != nil {
 		return nil, err
 	}
@@ -277,13 +275,14 @@ func (s *Source) Plain(o Options) (*Entry, error) {
 	}, nil
 }
 
-// Uxsm genera la entrada de uxsm que apunta a la entrada de la fuente:
-// `uxsm start bspwm.desktop`. Sólo si la fuente es una entrada que existe.
+// Uxsm generates a uxsm entry pointing to the source entry:
+// `uxsm start bspwm.desktop`. The source must be an existing entry.
 //
-// Los nombres van en el Exec= con -D cuando no los trae la entrada, porque
-// uxsm start lee la entrada original, no la generada, y no todos los display
-// managers pasan el DesktopNames= de la generada a XDG_CURRENT_DESKTOP. Con -e
-// van todos con -e -D, para que uxsm start no añada los de la entrada.
+// Names are included in Exec= with -D when the source entry lacks them because
+// uxsm start reads the original entry, not the generated one, and not all
+// display managers pass the generated entry's DesktopNames= to
+// XDG_CURRENT_DESKTOP. With -e, every name is passed through -e -D so uxsm
+// start does not add names from the source entry.
 func (s *Source) Uxsm(o Options) (*Entry, error) {
 	if !s.entry {
 		return nil, fmt.Errorf("%s: no such session entry to point to", s.ID)
@@ -315,11 +314,11 @@ func (s *Source) Uxsm(o Options) (*Entry, error) {
 	return s.uxsmEntry(o, names, strings.Join(append(exec, s.ID), " ")), nil
 }
 
-// UxsmExec genera la entrada de uxsm que arranca la orden de la fuente como un
-// comando: `uxsm start -D bspwm -- bspwm`. Los nombres van siempre en el
-// Exec=, porque no hay entrada de la que uxsm start pueda leerlos.
+// UxsmExec generates a uxsm entry that starts the source command directly:
+// `uxsm start -D bspwm -- bspwm`. Names are always included in Exec= because
+// uxsm start has no entry from which to read them.
 func (s *Source) UxsmExec(o Options) (*Entry, error) {
-	// Con un comando, la instancia de las unidades es el nombre del programa.
+	// With a command, the unit instance is the program name.
 	if err := systemd.CheckInstance(filepath.Base(s.Argv[0])); err != nil {
 		return nil, err
 	}
@@ -347,19 +346,19 @@ func (s *Source) uxsmEntry(o Options, names []string, exec string) *Entry {
 	}
 }
 
-// Render escribe la entrada en el formato de la Desktop Entry Specification.
+// Render writes the entry in Desktop Entry Specification format.
 func (e *Entry) Render() []byte {
 	var b strings.Builder
 	b.WriteString("[Desktop Entry]\n")
-	// Sin punto detrás del nombre: así se copia con dos clics.
+	// No period after the name, so it can be copied with a double click.
 	fmt.Fprintf(&b, "# Generated by uxsm from %s\n", e.origin)
 	b.WriteString("Type=Application\n")
 	fmt.Fprintf(&b, "Name=%s\n", escape(e.Name))
 	if e.Comment != "" {
 		fmt.Fprintf(&b, "Comment=%s\n", escape(e.Comment))
 	}
-	// Los escapes generales de las cadenas van por encima del entrecomillado:
-	// una barra invertida dentro de unas comillas se escribe doble.
+	// General string escaping applies on top of quoting: a backslash inside
+	// quotes is written twice.
 	fmt.Fprintf(&b, "Exec=%s\n", escape(e.Exec))
 	fmt.Fprintf(&b, "TryExec=%s\n", escape(e.TryExec))
 	b.WriteString("DesktopNames=")
@@ -367,16 +366,16 @@ func (e *Entry) Render() []byte {
 		b.WriteString(strings.ReplaceAll(escape(n), ";", `\;`) + ";")
 	}
 	b.WriteString("\n")
-	// Marca las entradas generadas por uxsm, para distinguirlas de las que
-	// haya escrito alguien a mano.
+	// Mark entries generated by uxsm so they can be distinguished from manually
+	// written ones.
 	fmt.Fprintf(&b, "X-UXSM-Source=%s\n", escape(e.Source))
 	return []byte(b.String())
 }
 
-// quoteExec escribe argv como el valor de un Exec=: cada argumento que lleve
-// algún carácter reservado va entre comillas dobles, con las comillas, la
-// comilla invertida, el dólar y la barra invertida escapados, y los % van
-// dobles, porque el % solo empieza un código de campo.
+// quoteExec writes argv as an Exec= value: each argument containing a reserved
+// character is enclosed in double quotes, with double quotes, backticks, dollar
+// signs, and backslashes escaped. Percent signs are doubled because a lone %
+// starts a field code.
 func quoteExec(argv []string) string {
 	out := make([]string, len(argv))
 	for i, a := range argv {
@@ -389,12 +388,12 @@ func quoteExec(argv []string) string {
 	return strings.Join(out, " ")
 }
 
-// escape pone los escapes de los valores de tipo cadena: \\, \n, \t y \r.
+// escape applies string-value escapes: \\, \n, \t, and \r.
 func escape(s string) string {
 	return strings.NewReplacer(`\`, `\\`, "\n", `\n`, "\t", `\t`, "\r", `\r`).Replace(s)
 }
 
-// first devuelve el primer valor no vacío.
+// first returns the first nonempty value.
 func first(values ...string) string {
 	for _, v := range values {
 		if v != "" {
@@ -404,7 +403,7 @@ func first(values ...string) string {
 	return ""
 }
 
-// splitNames parte una lista separada por ":" sin dejar elementos vacíos.
+// splitNames splits a colon-separated list without retaining empty elements.
 func splitNames(s string) []string {
 	var names []string
 	for _, n := range strings.Split(s, ":") {
@@ -415,7 +414,7 @@ func splitNames(s string) []string {
 	return names
 }
 
-// dedupe quita los repetidos y deja cada nombre donde apareció por primera vez.
+// dedupe removes duplicates and keeps each name at its first occurrence.
 func dedupe(names []string) []string {
 	var out []string
 	for _, n := range names {

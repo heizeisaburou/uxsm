@@ -8,17 +8,17 @@ import (
 	"github.com/heizeisaburou/uxsm/internal/dm"
 )
 
-// checkResult es el resultado de una comprobación de uxsm check.
+// checkResult is the result of one uxsm check.
 type checkResult struct {
-	// status es "ok", "warning" o "unknown", cuando no se puede determinar.
+	// status is "ok", "warning", or "unknown" when it cannot be determined.
 	status string
-	// summary es la frase con el resultado; details, lo que lo explica.
+	// summary states the result; details explain it.
 	summary string
 	details []string
 }
 
-// checks son las comprobaciones de uxsm check, en el orden en que se enseñan.
-// Cada una tiene el nombre con el que empieza su línea.
+// checks are the uxsm checks in display order. Each carries the name that
+// starts its output line.
 var checks = []struct {
 	name string
 	run  func() checkResult
@@ -26,16 +26,16 @@ var checks = []struct {
 	{"sessions dirs", checkSessionsDirs},
 }
 
-// errWarnings es el error de uxsm check cuando alguna comprobación da aviso:
-// sale con código 1, para poder usarlo en scripts.
+// errWarnings is returned when any uxsm check produces a warning. It maps to
+// exit status 1 so scripts can use the result.
 var errWarnings = errors.New("some checks gave warnings")
 
-// runCheck ejecuta todas las comprobaciones: `uxsm check`. Sin suborden las
-// ejecuta todas, y cada línea dice qué ha comprobado y con qué resultado.
+// runCheck runs every check for `uxsm check`. Without a subcommand it runs them
+// all, and each line states what was checked and the result.
 //
-// La única suborden es `is-active`, que no es una comprobación del sistema sino
-// una pregunta sobre la sesión de ahora mismo. Está aquí porque es donde la
-// busca quien viene de uwsm, que la tiene igual.
+// The only subcommand is `is-active`, which asks about the current session
+// rather than checking system configuration. It lives here because this is
+// where uwsm users expect to find the equivalent command.
 func runCheck(args []string) error {
 	if len(args) > 0 && args[0] == "is-active" {
 		return runIsActive(args[1:])
@@ -73,9 +73,9 @@ func runCheck(args []string) error {
 	return nil
 }
 
-// checkSessionsDirs comprueba si el display manager en uso lee
-// dm.LocalXSessions: si no, las entradas que instala uxsm entry no salen en la
-// pantalla de inicio.
+// checkSessionsDirs checks whether the active display manager reads
+// dm.LocalXSessions. If it does not, entries installed by uxsm entry do not
+// appear on the login screen.
 func checkSessionsDirs() checkResult {
 	r, err := dm.Active()
 	if errors.Is(err, dm.ErrNoDisplayManager) {

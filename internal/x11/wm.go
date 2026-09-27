@@ -2,11 +2,11 @@ package x11
 
 import "fmt"
 
-// WindowManager es el gestor de ventanas que gobierna la pantalla.
+// WindowManager is the window manager controlling the screen.
 type WindowManager struct {
-	// Window es la ventana con la que se anuncia, que no se ve.
+	// Window is the invisible window through which it announces itself.
 	Window Window
-	// Name es lo que dice llamarse, si lo dice: "bspwm", "Xfwm4".
+	// Name is the name it reports, if any: "bspwm", "Xfwm4".
 	Name string
 }
 
@@ -17,14 +17,13 @@ func (wm *WindowManager) String() string {
 	return wm.Name
 }
 
-// Manager devuelve el gestor de ventanas de la pantalla, o nil si todavía no
-// hay ninguno.
+// Manager returns the screen's window manager, or nil if none is present yet.
 //
-// Es la comprobación de EWMH: la ventana raíz tiene _NET_SUPPORTING_WM_CHECK
-// apuntando a una ventana del gestor, y esa ventana tiene la misma propiedad
-// apuntando a sí misma. Lo segundo hace falta porque la marca de la raíz
-// sobrevive a un gestor de ventanas que muera de golpe; la suya, no, porque el
-// servidor destruye sus ventanas al cerrarse su conexión.
+// This is the EWMH check: the root window has _NET_SUPPORTING_WM_CHECK pointing
+// to a manager window, and that window has the same property pointing to itself.
+// The second check is necessary because the root marker survives a window
+// manager that exits abruptly, while its own marker does not because the server
+// destroys its windows when the connection closes.
 func (c *Conn) Manager() (*WindowManager, error) {
 	check, err := c.Atom("_NET_SUPPORTING_WM_CHECK")
 	if err != nil {
@@ -42,7 +41,7 @@ func (c *Conn) Manager() (*WindowManager, error) {
 
 	value, err = c.Property(win, check, atomWindow, 1)
 	if isError(err, BadWindow) {
-		return nil, nil // marca de un gestor de ventanas que ya no está
+		return nil, nil // marker from a window manager that is no longer present
 	}
 	if err != nil || len(value) < 4 || Window(le.Uint32(value[:4])) != win {
 		return nil, err
@@ -55,9 +54,9 @@ func (c *Conn) Manager() (*WindowManager, error) {
 	return &WindowManager{Window: win, Name: name}, nil
 }
 
-// windowName lee el nombre de una ventana, primero el de EWMH y si no lo tiene
-// el de siempre. Sólo sirve para decir en el diario quién ha contestado, así
-// que una ventana sin nombre no es ningún error.
+// windowName reads a window's name, preferring the EWMH name and falling back
+// to the traditional one. It is only used to identify the responder in the
+// journal, so an unnamed window is not an error.
 func (c *Conn) windowName(w Window) (string, error) {
 	utf8, err := c.Atom("UTF8_STRING")
 	if err != nil {

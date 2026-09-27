@@ -1,10 +1,10 @@
-// Package appunit arma la unidad de systemd con la que se lanza una aplicación
-// dentro de una sesión gráfica, y la orden que la crea.
+// Package appunit builds the systemd unit used to launch an application inside
+// a graphical session, and the command that creates it.
 //
-// Es lo que hace `uwsm app` en Wayland: cada aplicación en su propia unidad,
-// dentro de uno de los slices de la sesión, en vez de todas juntas colgando del
-// escritorio. Así se ven por separado, se les pueden poner límites, su registro
-// va al diario con su nombre y se paran con la sesión.
+// This is what `uwsm app` does on Wayland: each application gets its own unit
+// in one of the session slices instead of all of them hanging off the desktop.
+// This makes them visible separately, allows individual limits, records their
+// logs under their names in the journal, and stops them with the session.
 package appunit
 
 import (
@@ -15,19 +15,19 @@ import (
 	"strings"
 )
 
-// Los slices de la sesión, uno por clase de aplicación. El guion es jerarquía
-// en systemd, así que cuelgan de los app.slice, background.slice y
-// session.slice estándar. Los nombres llevan uxsm porque el paquete los
-// instala, y dos paquetes no pueden traer el mismo fichero: los de uwsm, que
-// gestiona así las sesiones de Wayland, se llaman *-graphical.slice.
+// Session slices, one per application class. A dash denotes hierarchy in
+// systemd, so they are children of the standard app.slice, background.slice,
+// and session.slice. Their names include uxsm because the package installs
+// them and two packages cannot ship the same file; uwsm's equivalents for
+// Wayland sessions are named *-graphical.slice.
 const (
 	AppSlice        = "app-uxsm.slice"
 	BackgroundSlice = "background-uxsm.slice"
 	SessionSlice    = "session-uxsm.slice"
 )
 
-// Slice traduce lo que se pide con -s al nombre del slice: las tres letras de
-// uwsm, o un nombre entero para cualquier otro.
+// Slice translates the value passed to -s into a slice name: uwsm's three
+// single-letter forms, or a full name for any other slice.
 func Slice(s string) (string, error) {
 	switch s {
 	case "", "a":
@@ -43,37 +43,37 @@ func Slice(s string) (string, error) {
 	return s, nil
 }
 
-// Options es lo que hay que saber para lanzar una aplicación.
+// Options contains everything needed to launch an application.
 type Options struct {
-	// Argv es la orden ya resuelta, con sus argumentos.
+	// Argv is the resolved command and its arguments.
 	Argv []string
-	// Slice es el slice donde va, ya traducido por Slice.
+	// Slice is the destination slice, already translated by Slice.
 	Slice string
-	// Service la lanza como servicio en vez de como scope, que es lo de serie.
-	// Un scope es la aplicación tal cual, lanzada por quien llama; un servicio
-	// lo arranca el gestor, y sobrevive a quien lo pidió.
+	// Service launches it as a service instead of the default scope. A scope is
+	// the application itself, launched by the caller; a service is started by
+	// the manager and outlives the process that requested it.
 	Service bool
-	// Entry es el ID de la entrada de la que sale, sin .desktop, si sale de una.
+	// Entry is the ID, without .desktop, of the entry it came from, if any.
 	Entry string
-	// AppName sustituye al nombre que uxsm pondría en la unidad (-a), y
-	// UnitName al nombre de unidad entero (-u).
+	// AppName replaces the name uxsm would put in the unit (-a), while UnitName
+	// replaces the entire unit name (-u).
 	AppName, UnitName string
-	// Description es la descripción de la unidad (-d).
+	// Description is the unit description (-d).
 	Description string
-	// Silent es "out", "err" o "both": qué salida se tira. Sólo con servicio;
-	// un scope hereda la del proceso que lo lanza, que es quien la puede
-	// redirigir.
+	// Silent is "out", "err", or "both": which output to discard. It only
+	// applies to services; a scope inherits output from the launching process,
+	// which is responsible for redirecting it.
 	Silent string
-	// Properties son directivas de systemd para la unidad, "Clave=Valor", tal
-	// como las toma systemd-run: TimeoutStopSec, MemoryMax, CPUQuota… Un scope
-	// admite las de control de recursos y los plazos; las propias de un
-	// servicio necesitan Service.
+	// Properties are systemd unit directives in "Key=Value" form, as accepted
+	// by systemd-run: TimeoutStopSec, MemoryMax, CPUQuota… A scope accepts
+	// resource-control and timeout properties; service-specific properties
+	// require Service.
 	Properties []string
-	// WorkingDir es el Path= de la entrada, si lo trae.
+	// WorkingDir is the entry's Path=, if present.
 	WorkingDir string
 }
 
-// suffix es el final del nombre de unidad de cada tipo.
+// suffix is the ending of each unit type's name.
 func (o Options) suffix() string {
 	if o.Service {
 		return "service"
@@ -81,12 +81,13 @@ func (o Options) suffix() string {
 	return "scope"
 }
 
-// Name es el nombre de la unidad: app-uxsm-<aplicación>-<azar>.scope, o con
-// @<azar>.service si es un servicio.
+// Name is the unit name: app-uxsm-<application>-<random>.scope, or with
+// @<random>.service for a service.
 //
-// El formato es el que pide systemd para las aplicaciones: app-<quien la
-// lanza>-<qué aplicación>-<algo que la distingue>. Lo del azar es porque la
-// misma aplicación se puede lanzar varias veces, y cada vez necesita su unidad.
+// This is systemd's application naming format:
+// app-<launcher>-<application>-<unique identifier>. The random component is
+// needed because the same application may be launched more than once and each
+// launch needs its own unit.
 func (o Options) Name() (string, error) {
 	if o.UnitName != "" {
 		if !strings.HasSuffix(o.UnitName, "."+o.suffix()) {
@@ -107,8 +108,8 @@ func (o Options) Name() (string, error) {
 	}
 	name = escape(name)
 
-	// 255 es el máximo de systemd; lo que no es el nombre de la aplicación
-	// ocupa "app-uxsm--12345678." más el sufijo.
+	// systemd's limit is 255; everything except the application name occupies
+	// "app-uxsm--12345678." plus the suffix.
 	room := 255 - len("app-uxsm--12345678.") - len(o.suffix())
 	if len(name) > room {
 		name = name[:room]
@@ -124,12 +125,12 @@ func (o Options) Name() (string, error) {
 	return fmt.Sprintf("app-uxsm-%s-%s.scope", name, random), nil
 }
 
-// RunArgs devuelve la orden entera: systemd-run con sus opciones y, detrás, la
-// aplicación.
+// RunArgs returns the complete command: systemd-run with its options followed
+// by the application.
 //
-// Un servicio se lanza con Type=exec y ExitType=cgroup: el gestor lo da por
-// arrancado en cuanto ejecuta el programa, y lo da por terminado cuando no
-// queda ningún proceso suyo, no cuando se va el primero.
+// A service uses Type=exec and ExitType=cgroup: the manager considers it
+// started once it executes the program, and finished when none of its processes
+// remain, rather than when the first process exits.
 func (o Options) RunArgs() ([]string, error) {
 	if len(o.Argv) == 0 {
 		return nil, fmt.Errorf("no command to run")
@@ -173,8 +174,8 @@ func (o Options) RunArgs() ([]string, error) {
 	return append(append(args, "--"), o.Argv...), nil
 }
 
-// escape deja el nombre en algo que systemd admite en el nombre de una unidad:
-// letras, números y ":", "_", "." y "-". Lo demás pasa a "_".
+// escape turns the name into something systemd accepts in a unit name: letters,
+// digits, and ":", "_", ".", and "-". Everything else becomes "_".
 func escape(s string) string {
 	var b strings.Builder
 	for _, c := range []byte(s) {
@@ -190,8 +191,8 @@ func escape(s string) string {
 	return b.String()
 }
 
-// randomHex son los ocho dígitos que distinguen una unidad de otra de la misma
-// aplicación.
+// randomHex returns the eight digits that distinguish units for separate
+// launches of the same application.
 func randomHex() (string, error) {
 	var b [4]byte
 	if _, err := rand.Read(b[:]); err != nil {

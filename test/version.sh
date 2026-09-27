@@ -1,11 +1,11 @@
 #!/bin/sh
-# Escribe la versión de los paquetes que se compilarían con el árbol de trabajo
-# actual. Vale tanto como pkgver de Arch, que no admite guiones, como versión
-# upstream de Debian:
+# Print the package version that would be built from the current working tree.
+# It is valid both as an Arch pkgver, which forbids dashes, and as a Debian
+# upstream version:
 #
-#   X.Y.Z                 justo en la etiqueta vX.Y.Z (0.0.0 si no hay ninguna)
-#   X.Y.Z.rN.gHASH        N commits después de ella, HASH el último
-#   ….dirty               con cambios sin commitear o ficheros nuevos
+#   X.Y.Z                 exactly at tag vX.Y.Z (0.0.0 if no tag exists)
+#   X.Y.Z.rN.gHASH        N commits after it, with HASH from the latest commit
+#   ….dirty               with uncommitted changes or new files
 
 set -eu
 cd "$(dirname "$0")/.."
