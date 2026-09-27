@@ -98,11 +98,24 @@ case $branch in
 main | master) ;;
 *) die "releases can be published only from main or master, not $branch" ;;
 esac
-! git rev-parse -q --verify "refs/tags/$tag" >/dev/null || die "tag $tag already exists locally; remove it with git tag -d $tag if it is incorrect"
-[ -z "$(git ls-remote --tags origin "refs/tags/$tag")" ] || die "tag $tag already exists on origin, so this version has been published"
-! gh release view "$tag" --repo "$repo" >/dev/null 2>&1 || die "GitHub release $tag already exists"
-[ -z "$(git log "@{upstream}..HEAD" --oneline 2>/dev/null || true)" ] ||
-    echo "publish.sh: note: the current commit is not on its upstream branch; it will be pushed with the tag" >&2
+# The tag may already be here from a --build run, or from a push that failed
+# halfway: that is the same tag, and the work carries on. Pointing anywhere else,
+# it is not ours.
+tagged=
+if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+    [ "$(git rev-parse "$tag^{commit}")" = "$(git rev-parse HEAD)" ] ||
+        die "tag $tag already exists locally and points elsewhere; remove it with git tag -d $tag if it is incorrect"
+    tagged=1
+    echo "publish.sh: tag $tag is already here, from an earlier run" >&2
+fi
+if [ -z "$build" ]; then
+    # A remote that cannot be reached is not an answer: without this check, a
+    # broken connection would read as "the tag is not published".
+    remote_tags=$(git ls-remote --tags origin "refs/tags/$tag") ||
+        die "cannot ask origin about tags; publish where the push key is available, or build first with --build"
+    [ -z "$remote_tags" ] || die "tag $tag already exists on origin, so this version has been published"
+    ! gh release view "$tag" --repo "$repo" >/dev/null 2>&1 || die "GitHub release $tag already exists"
+fi
 
 echo "== uxsm $version from $(git rev-parse --short HEAD) on $branch"
 
