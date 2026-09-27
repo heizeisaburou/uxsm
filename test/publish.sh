@@ -200,7 +200,9 @@ if [ -z "$dry" ] && [ -z "$yes" ]; then
     esac
 fi
 
-run git push origin "$branch"
+# -u so the branch tracks the remote afterwards: the first publish of a
+# repository is also the first push of its branch.
+run git push -u origin "$branch"
 run git push origin "$tag"
 # shellcheck disable=SC2086
 run gh release create "$tag" --repo "$repo" --title "uxsm $version" \
