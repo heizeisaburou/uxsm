@@ -1,5 +1,5 @@
 # Run the same checks as the pre-commit hook on every push, and the VM suite
-# where it matters: on master, on a version tag, and on demand. The VM job takes
+# where it matters: on main, on a version tag, and on demand. The VM job takes
 # minutes and needs KVM, which GitHub runners do have, so branches and pull
 # requests get the cheap checks and production gets the whole thing in public.
 name: CI
@@ -32,11 +32,11 @@ jobs:
 
   vm:
     name: packages and integration tests in virtual machines
-    # On master and on a version tag, every distribution: that is what someone
+    # On main and on a version tag, every distribution: that is what someone
     # looking at the repository sees. Elsewhere, only when asked.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      github.ref == 'refs/heads/master' ||
+      github.ref == 'refs/heads/main' ||
       startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     timeout-minutes: 120
