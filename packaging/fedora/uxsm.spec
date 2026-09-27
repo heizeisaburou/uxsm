@@ -46,8 +46,8 @@ make test
 %{_mandir}/man1/uxsm.1*
 
 %changelog
-* Sun Sep 27 2026 平生三郎 <heizeisaburou@gmail.com> - 0.1.0-1
+* Sun Sep 27 2026 平城三郎 <heizeisaburou@gmail.com> - 0.1.0-1
 - First release.
 
-* Thu Sep 17 2026 平生三郎 <heizeisaburou@gmail.com> - 0.0.0-1
+* Thu Sep 17 2026 平城三郎 <heizeisaburou@gmail.com> - 0.0.0-1
 - Initial packaging skeleton.

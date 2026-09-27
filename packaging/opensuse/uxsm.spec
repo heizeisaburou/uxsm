@@ -1,7 +1,7 @@
 #
 # spec file for package uxsm
 #
-# Copyright (c) 2026 平生三郎 <heizeisaburou@gmail.com>
+# Copyright (c) 2026 平城三郎 <heizeisaburou@gmail.com>
 #
 # All modifications and additions to the file contributed by third parties
 # remain the property of their copyright owners, unless otherwise agreed

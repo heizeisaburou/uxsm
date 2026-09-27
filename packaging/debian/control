@@ -1,7 +1,7 @@
 Source: uxsm
 Section: x11
 Priority: optional
-Maintainer: 平生三郎 <heizeisaburou@gmail.com>
+Maintainer: 平城三郎 <heizeisaburou@gmail.com>
 Build-Depends: debhelper-compat (= 13),
                golang-go (>= 2:1.22~),
 Standards-Version: 4.7.0

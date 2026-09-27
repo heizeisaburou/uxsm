@@ -1,4 +1,4 @@
-# Maintainer: 平生三郎 <heizeisaburou@gmail.com>
+# Maintainer: 平城三郎 <heizeisaburou@gmail.com>
 #
 # Source of truth for the AUR package; the AUR repository gets a copy of this
 # file plus its .SRCINFO (makepkg --printsrcinfo > .SRCINFO).
