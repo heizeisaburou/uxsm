@@ -7,6 +7,11 @@
 # The PKGBUILD downloads the GitHub tag tarball. makepkg downloads nothing when
 # a file with that name already sits beside the PKGBUILD, so setting the version
 # and placing the tarball there is sufficient.
+#
+# Its sha256sums is the checksum of the published tarball, which is what the AUR
+# needs, and never matches the one built here from the working tree. So it is
+# replaced with SKIP: what this tests is that the recipe builds, not that a file
+# made three lines above is the file it says it is.
 
 set -eu
 cd "$HOME/uxsm"
@@ -22,7 +27,7 @@ echo "== building uxsm $v"
 mkdir build
 cd build
 tar -xzf "../uxsm-$v.tar.gz" --strip-components=3 "uxsm-$v/packaging/arch/PKGBUILD"
-sed -i "s/^pkgver=.*/pkgver=$v/" PKGBUILD
+sed -i "s/^pkgver=.*/pkgver=$v/;s/^sha256sums=.*/sha256sums=('SKIP')/" PKGBUILD
 cp "../uxsm-$v.tar.gz" .
 # -s installs PKGBUILD makedepends, so a missing dependency fails here.
 makepkg -s --noconfirm
