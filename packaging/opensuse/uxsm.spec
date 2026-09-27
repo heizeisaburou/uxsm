@@ -17,7 +17,7 @@
 
 
 Name:           uxsm
-Version:        0.0.0
+Version:        0.1.0
 Release:        0
 Summary:        X11 session manager for systemd --user
 License:        Apache-2.0
