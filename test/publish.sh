@@ -86,7 +86,7 @@ if [ -n "$hashes" ]; then
         sri=$(printf %s "$sum" | python3 -c 'import sys, base64, binascii; print("sha256-" + base64.b64encode(binascii.unhexlify(sys.stdin.read().strip())).decode())' 2>/dev/null || true)
     fi
     if [ -z "$sri" ]; then
-        echo "publish.sh: neither openssl nor python3 is here; write sha256-<base64> into packaging/nix/package.nix by hand" >&2
+        echo "publish.sh: could not turn $sum into an SRI hash with openssl or python3; write sha256-<base64> into packaging/nix/package.nix by hand" >&2
     else
         run sed -i "s|hash = lib.fakeHash;|hash = \"$sri\";|;s|hash = \"sha256-[^\"]*\";|hash = \"$sri\";|;s/^  version = \".*\";/  version = \"$version\";/" packaging/nix/package.nix
     fi

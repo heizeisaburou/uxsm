@@ -56,3 +56,30 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq qemu-system-x86 qemu-utils cloud-image-utils
       - run: make test-vm DISTROS=${{ inputs.distros || 'all' }}
+
+  nixos:
+    name: the declared NixOS machine
+    # Same trigger as the VM job: NixOS is not an extra, it is the sixth
+    # distribution, and the only one where nothing sits where the others put it.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.ref == 'refs/heads/main' ||
+      startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      # The machine is built and booted by Nix itself, so the runner needs Nix
+      # and KVM, not QEMU of its own.
+      - name: check KVM
+        run: |
+          test -e /dev/kvm || { echo "this runner has no /dev/kvm"; exit 1; }
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - run: make test-nixos

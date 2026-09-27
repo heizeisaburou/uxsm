@@ -127,7 +127,11 @@ test-nixos:
 
 # Run the same checks on every distribution and, if all pass, publish
 # build/release as the releases/latest directory.
-release:
+# NixOS goes first: it is the quickest of the two and the one that catches what
+# the other five cannot, since nothing there sits where every other distribution
+# puts it. It is not optional — a release is not a release without it — so a
+# machine without nix fails here instead of publishing five sixths of the tests.
+release: test-nixos
 	test/release.sh --publish
 
 # Publish a version: the tag, the push, and the GitHub release with the

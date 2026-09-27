@@ -98,8 +98,9 @@ the `Makefile`, every package file list, and the Nix `postInstall` phase.
   this repository, `nix build` builds the current checkout through `flake.nix`.
 
 `make test-vm` builds each selected native package in a VM, installs it in a second clean VM, and
-runs the integration suite. `make release` does this for all supported distributions and writes the
-artifacts to the `releases/latest` directory. See
+runs the integration suite. `make release` does this for all supported distributions, after the
+declarative NixOS machine of `make test-nixos`, and writes the artifacts to the `releases/latest`
+directory. CI runs the same six on every push to `main` and on every version tag. See
 [Build and test](docs/development.md#build-and-test).
 
 `make publish TAG=v0.1.0` publishes a version. It checks that the tree is clean and the version is

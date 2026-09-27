@@ -72,7 +72,7 @@ With `FAST=1`, one VM builds and tests the package. On Ubuntu this reduced a mea
 
 `make test-nixos` starts a complete declarative NixOS machine with LightDM, autologin, bspwm, and an uxsm session entry. It verifies that the session starts, the desktop is the service's main process, the XDG identity is present, and stopping the display manager tears everything down.
 
-The definition is [`test/nixos/session.nix`](../test/nixos/session.nix) and is exposed through the flake's `checks`. It requires Nix and a running Nix daemon, just as the other VM tests require QEMU. `flake.lock` pins nixpkgs so the test machine remains reproducible. This test covers the NixOS layout and packaging path, which differ from conventional distributions.
+The definition is [`test/nixos/session.nix`](../test/nixos/session.nix) and is exposed through the flake's `checks`. It requires Nix and a running Nix daemon, just as the other VM tests require QEMU. `flake.lock` pins nixpkgs so the test machine remains reproducible. This test covers the NixOS layout and packaging path, which differ from conventional distributions. It is not optional: `make release` runs it before the five QEMU machines, so publishing from a machine without Nix fails there instead of shipping a release that skipped a sixth of the tests, and CI runs it as its own job on `main` and on every version tag.
 
 ### Continuous integration and hooks
 
