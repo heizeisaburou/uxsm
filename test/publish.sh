@@ -78,16 +78,22 @@ if [ -n "$hashes" ]; then
     sum=$(sha256sum "$tmp/src.tar.gz" | cut -d' ' -f1)
     echo "SHA-256 of the tag archive: $sum"
     run sed -i "s/^pkgver=.*/pkgver=$version/;s/^sha256sums=.*/sha256sums=('$sum')/" packaging/arch/PKGBUILD
-    # The SRI hash Nix wants is the same digest in base64, straight from the
-    # archive that was just downloaded, so nix does not have to be installed.
-    if command -v openssl >/dev/null 2>&1; then
-        sri="sha256-$(openssl dgst -binary -sha256 "$tmp/src.tar.gz" | base64 -w0)"
-    else
-        sri=$(printf %s "$sum" | python3 -c 'import sys, base64, binascii; print("sha256-" + base64.b64encode(binascii.unhexlify(sys.stdin.read().strip())).decode())' 2>/dev/null || true)
+    # Nix hashes something else: fetchFromGitHub records the hash of the
+    # unpacked tree, not of the .tar.gz, so the two numbers are different
+    # things and only nix knows how to compute the second one. Without nix the
+    # recipe is left alone and said so: a plausible wrong hash is worse than
+    # none, and in v0.1.0 that is exactly what went in.
+    sri=
+    if command -v nix >/dev/null 2>&1; then
+        sri=$(nix --extra-experimental-features "nix-command flakes" \
+            store prefetch-file --unpack --json "$url" 2>/dev/null |
+            sed -n 's/.*"hash":"\([^"]*\)".*/\1/p')
     fi
     if [ -z "$sri" ]; then
-        echo "publish.sh: could not turn $sum into an SRI hash with openssl or python3; write sha256-<base64> into packaging/nix/package.nix by hand" >&2
+        echo "publish.sh: nix could not give the hash of the unpacked tree, so packaging/nix/package.nix is untouched" >&2
+        echo "publish.sh: get it with: nix store prefetch-file --unpack --json $url" >&2
     else
+        echo "Nix hash of the unpacked tree: $sri"
         run sed -i "s|hash = lib.fakeHash;|hash = \"$sri\";|;s|hash = \"sha256-[^\"]*\";|hash = \"$sri\";|;s/^  version = \".*\";/  version = \"$version\";/" packaging/nix/package.nix
     fi
     # What a sed did is not what it meant to do: the recipes are read back, and
@@ -100,10 +106,16 @@ if [ -n "$hashes" ]; then
         }
         check_recipe packaging/arch/PKGBUILD "^pkgver=$version\$" "the version"
         check_recipe packaging/arch/PKGBUILD "^sha256sums=('$sum')\$" "the checksum"
-        check_recipe packaging/nix/package.nix "version = \"$version\";" "the version"
-        [ -z "$sri" ] || check_recipe packaging/nix/package.nix "hash = \"$sri\";" "the checksum"
+        if [ -n "$sri" ]; then
+            check_recipe packaging/nix/package.nix "version = \"$version\";" "the version"
+            check_recipe packaging/nix/package.nix "hash = \"$sri\";" "the hash"
+        fi
     fi
-    echo "Wrote the version and the checksum into packaging/arch/PKGBUILD and packaging/nix/package.nix; review and commit them, and generate .SRCINFO for the AUR."
+    if [ -n "$sri" ]; then
+        echo "Wrote the version, the checksum and the Nix hash into packaging/arch/PKGBUILD and packaging/nix/package.nix; review and commit them, and generate .SRCINFO for the AUR."
+    else
+        echo "Wrote the version and the checksum into packaging/arch/PKGBUILD; packaging/nix/package.nix still needs its hash."
+    fi
     exit 0
 fi
 
