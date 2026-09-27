@@ -2,6 +2,7 @@
 # Publish a version: the tag, the push, and the GitHub release.
 #
 #   test/publish.sh [--dry-run] [--yes] vX.Y.Z
+#   test/publish.sh --build vX.Y.Z
 #   test/publish.sh --hashes vX.Y.Z
 #
 # `make release` already builds and tests the distribution packages. This script
@@ -36,11 +37,13 @@ cd "$(dirname "$0")/.."
 dry=
 yes=
 hashes=
+build=
 while [ $# -gt 1 ]; do
     case $1 in
     --dry-run) dry=1 ;;
     --yes) yes=1 ;;
     --hashes) hashes=1 ;;
+    --build) build=1 ;;
     *) echo "publish.sh: unknown option $1" >&2; exit 2 ;;
     esac
     shift
@@ -105,7 +108,7 @@ echo "== uxsm $version from $(git rev-parse --short HEAD) on $branch"
 
 # 2. The tag, and the release build with the tag in place: test/version.sh reads
 # the tag, so the packages only carry X.Y.Z once it exists.
-run git tag -a "$tag" -m "uxsm $version"
+[ -n "$tagged" ] || run git tag -a "$tag" -m "uxsm $version"
 if [ -n "$dry" ]; then
     echo "would run: make release, unless releases/latest is already uxsm $version"
 else
@@ -147,9 +150,15 @@ else
         [ -n "$(find "releases/latest/$d" -type f 2>/dev/null)" ] ||
             die "releases/latest has no package for $d"
     done
-    artifacts=$(find releases/latest -type f ! -name version | LC_ALL=C sort)
-    echo "== would publish:"
+        artifacts=$(find releases/latest -type f ! -name version | LC_ALL=C sort)
+    echo "== ready to publish:"
     echo "$artifacts" | sed 's|^|  |'
+fi
+
+if [ -n "$build" ]; then
+    echo "== built, and nothing has left this clone"
+    echo "To publish it from where the push key is: test/publish.sh $tag"
+    exit 0
 fi
 
 # 4. Public, and it cannot be undone.
