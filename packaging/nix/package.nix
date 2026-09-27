@@ -11,13 +11,13 @@
 
 buildGoModule (finalAttrs: {
   pname = "uxsm";
-  version = "0.0.0";
+  version = "0.1.0";
 
   src = fetchFromGitHub {
     owner = "heizeisaburou";
     repo = "uxsm";
     tag = "v${finalAttrs.version}";
-    hash = lib.fakeHash;
+    hash = "sha256-PHODySJV5Z2dRs6ImQBO6IIgMe4XKNgrv6Yj8q3Dm7I=";
   };
 
   # Standard library only: no vendor directory to hash.

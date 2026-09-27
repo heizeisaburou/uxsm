@@ -78,16 +78,19 @@ if [ -n "$hashes" ]; then
     sum=$(sha256sum "$tmp/src.tar.gz" | cut -d' ' -f1)
     echo "SHA-256 of the tag archive: $sum"
     run sed -i "s/^pkgver=.*/pkgver=$version/;s/^sha256sums=.*/sha256sums=('$sum')/" packaging/arch/PKGBUILD
-    if command -v nix >/dev/null 2>&1; then
-        sri=$(nix hash convert --hash-algo sha256 "$sum" 2>/dev/null ||
-            nix hash to-sri --type sha256 "$sum" 2>/dev/null || echo)
-    fi
-    if [ -n "${sri:-}" ]; then
-        run sed -i "s|hash = lib.fakeHash;|hash = \"$sri\";|;s|hash = \".*\";|hash = \"$sri\";|;s/^  version = \".*\";/  version = \"$version\";/" packaging/nix/package.nix
+    # The SRI hash Nix wants is the same digest in base64, straight from the
+    # archive that was just downloaded, so nix does not have to be installed.
+    if command -v openssl >/dev/null 2>&1; then
+        sri="sha256-$(openssl dgst -binary -sha256 "$tmp/src.tar.gz" | base64 -w0)"
     else
-        echo "nix is not installed; put sha256-<base64> in packaging/nix/package.nix manually" >&2
+        sri=$(printf %s "$sum" | python3 -c 'import sys, base64, binascii; print("sha256-" + base64.b64encode(binascii.unhexlify(sys.stdin.read().strip())).decode())' 2>/dev/null || true)
     fi
-    echo "Updated the Arch and Nix recipes; review and commit them for the AUR and nixpkgs."
+    if [ -z "$sri" ]; then
+        echo "publish.sh: neither openssl nor python3 is here; write sha256-<base64> into packaging/nix/package.nix by hand" >&2
+    else
+        run sed -i "s|hash = lib.fakeHash;|hash = \"$sri\";|;s|hash = \"sha256-[^\"]*\";|hash = \"$sri\";|;s/^  version = \".*\";/  version = \"$version\";/" packaging/nix/package.nix
+    fi
+    echo "Wrote the version and the checksum into packaging/arch/PKGBUILD and packaging/nix/package.nix; review and commit them, and generate .SRCINFO for the AUR."
     exit 0
 fi
 

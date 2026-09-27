@@ -4,7 +4,7 @@
 # file plus its .SRCINFO (makepkg --printsrcinfo > .SRCINFO).
 
 pkgname=uxsm
-pkgver=0.0.0
+pkgver=0.1.0
 pkgrel=1
 pkgdesc='X11 session manager for systemd --user, the X11 counterpart of uwsm'
 arch=('x86_64' 'aarch64')
@@ -13,7 +13,7 @@ license=('Apache-2.0')
 depends=('glibc' 'systemd')
 makedepends=('go>=1.22')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('3c7383c92255e59d9d46ce8899004ee8822031ee1728d82bbfa623f2adc39bb2')
 
 build() {
   cd "$pkgname-$pkgver"
