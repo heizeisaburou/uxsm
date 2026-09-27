@@ -1,5 +1,7 @@
 # uxsm
 
+[![CI](https://github.com/heizeisaburou/uxsm/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/heizeisaburou/uxsm/actions/workflows/ci.yml)
+
 An X11 session manager for `systemd --user`, and the X11 counterpart to
 [uwsm](https://github.com/Vladimir-csp/uwsm).
 

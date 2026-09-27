@@ -90,6 +90,19 @@ if [ -n "$hashes" ]; then
     else
         run sed -i "s|hash = lib.fakeHash;|hash = \"$sri\";|;s|hash = \"sha256-[^\"]*\";|hash = \"$sri\";|;s/^  version = \".*\";/  version = \"$version\";/" packaging/nix/package.nix
     fi
+    # What a sed did is not what it meant to do: the recipes are read back, and
+    # a message saying "updated" is only printed when they really are. This is
+    # what went missing in v0.1.0, when a changed file made a sed miss and the
+    # script said it had written a hash it had not.
+    if [ -z "$dry" ]; then
+        check_recipe() {
+            grep -q "$2" "$1" || die "$1 does not carry $3 after being written; fix it by hand"
+        }
+        check_recipe packaging/arch/PKGBUILD "^pkgver=$version\$" "the version"
+        check_recipe packaging/arch/PKGBUILD "^sha256sums=('$sum')\$" "the checksum"
+        check_recipe packaging/nix/package.nix "version = \"$version\";" "the version"
+        [ -z "$sri" ] || check_recipe packaging/nix/package.nix "hash = \"$sri\";" "the checksum"
+    fi
     echo "Wrote the version and the checksum into packaging/arch/PKGBUILD and packaging/nix/package.nix; review and commit them, and generate .SRCINFO for the AUR."
     exit 0
 fi
