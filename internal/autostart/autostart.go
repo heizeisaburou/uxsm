@@ -34,7 +34,7 @@ const dropInName = "uxsm-tweaks.conf"
 // dropIn is the content written to disk. The two [Unit] lines match uwsm and let
 // entries start and stop with their target instead of only with the whole
 // session.
-var dropIn = []byte(`# Escrito por uxsm mientras dura la sesión; se borra al cerrarla.
+var dropIn = []byte(`# Written by uxsm while the session lasts; removed when it ends.
 [Unit]
 PartOf=xdg-desktop-autostart.target
 After=xdg-desktop-autostart.target
