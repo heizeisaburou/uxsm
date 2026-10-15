@@ -103,8 +103,9 @@ uninstall:
 # Integration tests use real packages in disposable VMs: test/release.sh builds
 # each distribution's package on that distribution, copies it to build/release,
 # and installs it on a clean VM to run test/integration/run.sh
-# DISTROS is quick, pair, all, or a comma-separated list; only those
-# distributions are built.
+# DISTROS is quick, pair, all, or a comma-separated list, which may name nixos;
+# only those distributions are run. A package is rebuilt only when its sources
+# change, and each run's log is under build/logs.
 # FAST=1 builds and tests in the same VM. It is much faster, but no longer checks
 # that the package declares runtime dependencies because build dependencies are
 # already present. It is for development, not publishing.
@@ -125,13 +126,13 @@ test-nixos:
 	$(NIX) build --extra-experimental-features "nix-command flakes" \
 		'.#checks.$(shell $(NIX) eval --extra-experimental-features "nix-command flakes" --impure --raw --expr builtins.currentSystem).session' -L
 
-# Run the same checks on every distribution and, if all pass, publish
-# build/release as the releases/latest directory.
-# NixOS goes first: it is the quickest of the two and the one that catches what
-# the other five cannot, since nothing there sits where every other distribution
-# puts it. It is not optional — a release is not a release without it — so a
-# machine without nix fails here instead of publishing five sixths of the tests.
-release: test-nixos
+# Run the same checks on every distribution, NixOS included, and once all six
+# have passed with these sources, publish build/release as the releases/latest
+# directory. A distribution that passed in the last 24 hours with the same
+# files is not run again, so after a failure only what failed is repeated.
+# NixOS is not optional — a release is not a release without it — so a machine
+# without nix fails there instead of publishing five sixths of the tests.
+release:
 	test/release.sh --publish
 
 # Publish a version: the tag, the push, and the GitHub release with the

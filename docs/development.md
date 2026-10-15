@@ -20,15 +20,16 @@ The important distinction is the boundary each command tests:
 uxsm uses only the Go standard library. Common commands are:
 
 ```sh
-make build             # go vet, then bin/uxsm
-make test              # Go unit tests
-make check             # formatting, vet, unit tests, and shell syntax
-make test-vm           # Ubuntu by default
+make build   # go vet, then bin/uxsm
+make test    # Go unit tests
+make check   # formatting, vet, unit tests, and shell syntax
+make test-vm # Ubuntu by default
 make test-vm DISTROS=pair
 make test-vm DISTROS=all
-make test-vm FAST=1    # build and test in one VM
-make test-nixos        # NixOS VM declared by the flake
-make release           # strict VM path for every distribution
+make test-vm FAST=1 # build and test in one VM
+make test-vm DISTROS=nixos,arch
+make test-nixos # NixOS VM declared by the flake
+make release    # strict VM path for every distribution
 ```
 
 ### Unit tests
@@ -45,10 +46,16 @@ make release           # strict VM path for every distribution
 
 ### Integration tests
 
-[`test/release.sh`](../test/release.sh) archives the current working tree, including uncommitted changes, and drives disposable QEMU machines through [`test/vm.sh`](../test/vm.sh). Each distribution uses two VMs:
+[`test/release.sh`](../test/release.sh) archives the current working tree, including uncommitted changes, and drives disposable QEMU machines through [`test/vm.sh`](../test/vm.sh). Each distribution is a run of its own, with two VMs:
 
 1. a build VM creates the native package with the real recipe under `packaging/`; and
 2. a clean VM installs that package through the distribution package manager and runs the suite.
+
+Runs go one at a time and stop at the first failure. A package is rebuilt only when the files that go into it change, so the installation and the tests can be adjusted without building from scratch; a new commit always rebuilds it, as its version carries the commit hash.
+
+Each run writes its complete output to `build/logs/<distribution>/<time>/run.log`, with the time of each step, and a summary of how long each step took to `times` beside it. The terminal shows only the steps, failures, and that summary. A failed VM also leaves its console and journal there. The ten latest runs of each distribution are kept, and nothing there is uploaded.
+
+Downloads from the distribution's repositories that uxsm does not decide, such as index refreshes, system updates, and the build and test tools, go through [`test/mirror.sh`](../test/mirror.sh): a rolling distribution's mirror caught halfway through a sync is retried in the same VM for about a quarter of an hour, and if it still fails the run ends as `MIRROR`, not `FAILED`. What the recipe asks for, including the uxsm package and its dependencies, is not retried, because there a failure may be uxsm's.
 
 The scripts under `test/integration` use Xvfb and normally replace the display manager with a transient service. The last test installs and starts LightDM instead.
 
@@ -68,11 +75,13 @@ The supported matrix is Ubuntu 24.04, Debian 13, Arch Linux, Fedora 43, and open
 
 With `FAST=1`, one VM builds and tests the package. On Ubuntu this reduced a measured run from 4:07 to 3:37, but it cannot detect undeclared runtime dependencies because build dependencies remain installed. Use it while developing, not when publishing. `make release` always uses separate build and test VMs.
 
+`make release` runs NixOS and the five distributions. A run that passes leaves a key in `build/keys`, valid while the tested files stay the same and for 24 hours, since Arch and Tumbleweed change daily. Runs with a valid key are skipped, so after a failure only what failed is repeated, and one distribution passing never invalidates another. Once all six have a key, `build/release` becomes `releases/latest`. A `FAST=1` run leaves no key.
+
 ### NixOS
 
 `make test-nixos` starts a complete declarative NixOS machine with LightDM, autologin, bspwm, and an uxsm session entry. It verifies that the session starts, the desktop is the service's main process, the XDG identity is present, and stopping the display manager tears everything down.
 
-The definition is [`test/nixos/session.nix`](../test/nixos/session.nix) and is exposed through the flake's `checks`. It requires Nix and a running Nix daemon, just as the other VM tests require QEMU. `flake.lock` pins nixpkgs so the test machine remains reproducible. This test covers the NixOS layout and packaging path, which differ from conventional distributions. It is not optional: `make release` runs it before the five QEMU machines, so publishing from a machine without Nix fails there instead of shipping a release that skipped a sixth of the tests, and CI runs it as its own job on `main` and on every version tag.
+The definition is [`test/nixos/session.nix`](../test/nixos/session.nix) and is exposed through the flake's `checks`. It requires Nix and a running Nix daemon, just as the other VM tests require QEMU. `flake.lock` pins nixpkgs so the test machine remains reproducible. This test covers the NixOS layout and packaging path, which differ from conventional distributions. It is not optional: `make release` runs it as its first distribution, so publishing from a machine without Nix fails there instead of shipping a release that skipped a sixth of the tests, and CI runs it as its own job on `main` and on every version tag.
 
 ### Continuous integration and hooks
 
@@ -106,44 +115,24 @@ make hooks
 
 ## Publishing a release
 
-`make release` builds and tests; `make publish TAG=vX.Y.Z` publishes. They are separate because the
-release build is also a test gate used during development, while publishing is a public,
-irreversible action.
+`make release` builds and tests; `make publish TAG=vX.Y.Z` publishes. They are separate because the release build is also a test gate used during development, while publishing is a public, irreversible action.
 
 `test/publish.sh` follows this order and stops at the first failed precondition or command:
 
-1. **Checks.** The version has the form `vX.Y.Z`, the tree is clean, the branch is `main` or
-   `master`, the tag is unused locally and remotely, no GitHub release has that name, and `gh` is
-   logged in.
-2. **The local tag.** It must precede the build because `test/version.sh` derives the version from
-   `git describe`; packages and tarballs contain `X.Y.Z` only after the tag exists. If
-   `releases/latest` does not contain that version, `make release` runs now.
-3. **The binary tarball.** It is placed beside the packages and included in a new `SHA256SUMS`.
-   Before publication, the script installs the tarball into a temporary root and checks the
-   installed binary's version. A tarball that cannot install itself is never published.
-4. **The push and GitHub release.** The commit and tag are pushed, then `gh release create` uploads
-   the five packages, source tarball, binary tarball, and `SHA256SUMS`.
+1. **Checks.** The version has the form `vX.Y.Z`, the tree is clean, the branch is `main` or `master`, the tag is unused locally and remotely, no GitHub release has that name, and `gh` is logged in.
+2. **The local tag.** It must precede the build because `test/version.sh` derives the version from `git describe`; packages and tarballs contain `X.Y.Z` only after the tag exists. If `releases/latest` does not contain that version, `make release` runs now.
+3. **The binary tarball.** It is placed beside the packages and included in a new `SHA256SUMS`. Before publication, the script installs the tarball into a temporary root and checks the installed binary's version. A tarball that cannot install itself is never published.
+4. **The push and GitHub release.** The commit and tag are pushed, then `gh release create` uploads the five packages, source tarball, binary tarball, and `SHA256SUMS`.
 
-Everything through step 3 remains local, and the tag can still be removed with `git tag -d`.
-Step 4 asks for confirmation unless `--yes` is used. `DRY_RUN=1` still performs read-only checks,
-but executes no state-changing command and prints each one it would run.
+Everything through step 3 remains local, and the tag can still be removed with `git tag -d`. Step 4 asks for confirmation unless `--yes` is used. `DRY_RUN=1` still performs read-only checks, but executes no state-changing command and prints each one it would run.
 
-Afterwards, `test/publish.sh --hashes vX.Y.Z` downloads GitHub's tag archive and writes its checksum
-to `packaging/arch/PKGBUILD` and `packaging/nix/package.nix` for publication in the AUR and nixpkgs.
-This cannot happen earlier because GitHub creates and compresses that archive itself; its checksum
-is knowable only after the tag is available there.
+Afterwards, `test/publish.sh --hashes vX.Y.Z` downloads GitHub's tag archive and writes its checksum to `packaging/arch/PKGBUILD` and `packaging/nix/package.nix` for publication in the AUR and nixpkgs. This cannot happen earlier because GitHub creates and compresses that archive itself; its checksum is knowable only after the tag is available there.
 
 ## The manual page
 
-`data/man/uxsm.1.in` is the source of `uxsm.1`. `make install` writes it under `$(MANDIR)/man1` and
-replaces `@VERSION@` and `@BINDIR@`, just as it fills in the unit templates. Arch and Debian obtain
-the page through that installation; the Fedora, openSUSE, and Nix recipes list it explicitly.
+`data/man/uxsm.1.in` is the source of `uxsm.1`. `make install` writes it under `$(MANDIR)/man1` and replaces `@VERSION@` and `@BINDIR@`, just as it fills in the unit templates. Arch and Debian obtain the page through that installation; the Fedora, openSUSE, and Nix recipes list it explicitly.
 
-`make check` lints it with `groff -man -z -ww`. Because groff exits successfully even after a
-warning, the check separately fails on any standard-error output; this catches problems such as an
-unknown macro or an unclosed section. The integration suite verifies installation:
-`test/integration/run.sh` fails if a package omits `man/man1/uxsm.1`, regardless of the compression
-used by that distribution.
+`make check` lints it with `groff -man -z -ww`. Because groff exits successfully even after a warning, the check separately fails on any standard-error output; this catches problems such as an unknown macro or an unclosed section. The integration suite verifies installation: `test/integration/run.sh` fails if a package omits `man/man1/uxsm.1`, regardless of the compression used by that distribution.
 
 ## Go version
 

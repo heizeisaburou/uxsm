@@ -1,34 +1,50 @@
 #!/bin/sh
-# Build uxsm packages and test them after installation, entirely in disposable
-# virtual machines through the test/vm.sh runner:
+# Build uxsm packages and test them after installation, in disposable virtual
+# machines through the test/vm.sh runner, one distribution at a time. Each
+# distribution is a run of its own:
 #
-#   1. Archive the working tree, including uncommitted changes and new files not
-#      ignored by git.
-#   2. Build each distribution's package in a VM of that distribution with its
-#      packaging tool, then copy it under build/release/<distro>
-#   3. On a clean VM for each distribution, install its package through its
-#      package manager and run the test/integration/run.sh suite.
-#   4. With --publish, after success, promote build/release to the
-#      releases/latest directory.
+#   1. Build its package in a VM of that distribution with its packaging tool,
+#      under build/release/<distro>, unless the package there was built from
+#      the same sources.
+#   2. On a clean VM, install the package through the package manager and run
+#      the test/integration/run.sh suite.
+#
+# NixOS is a run too: `make test-nixos`, a machine declared by the flake.
 #
 #   test/release.sh [distros]
 #   test/release.sh --publish
 #
-# With FAST=1, steps 2 and 3 share a VM, saving one boot and one dependency
-# installation per distribution. This loses the clean-machine guarantee: a clean
-# VM has only the package and test requirements, exposing undeclared runtime
-# dependencies. FAST=1 is therefore for development, not publishing; --publish
-# always uses separate VMs.
-#
 #   distros    quick  ubuntu (default)
 #              pair   ubuntu and arch, the two most different
 #              all    ubuntu, debian, arch, fedora, and opensuse
-#              or a comma-separated list: ubuntu,arch
+#              or a comma-separated list, which may name nixos: nixos,arch
+#
+# Runs stop at the first failure: a release needs all of them, so going on would
+# only spend time on runs that have to be repeated anyway.
+#
+# Keys. A run that passes leaves a key in build/keys, valid while the files it
+# tested stay the same and for 24 hours: Arch and Tumbleweed change daily, and
+# a key from last week proves nothing about today's distribution. One run's key
+# never depends on another's, so a failed run is repeated alone. --publish runs
+# every distribution without a valid key and, once all six have one, promotes
+# build/release to releases/latest, which is what the pre-push hook checks.
+#
+# Packages. A package is rebuilt only when what goes into it changes, so the
+# installation and the tests can be adjusted without building from scratch.
+# Its version carries the commit hash, so a new commit rebuilds it.
+#
+# Logs. Each run writes its complete output to build/logs/<distro>/<time>, with
+# the time of each step and how long each took; the terminal shows only the
+# steps, failures, and a summary. The ten latest runs of each distribution are
+# kept, and nothing there is uploaded anywhere.
+#
+# With FAST=1, the package is built and tested in the same VM, saving one boot
+# and one dependency installation. This loses the clean-machine guarantee: a
+# clean VM has only the package and test requirements, exposing undeclared
+# runtime dependencies. So a FAST run leaves no key, and --publish refuses it.
 #
 # Each distribution has its own package even when formats match: Debian and
 # Ubuntu build against their own libraries and tools, as do Fedora and openSUSE.
-# --publish builds and tests every distribution, so releases/latest is always a
-# complete set.
 
 set -eu
 cd "$(dirname "$0")/.."
@@ -46,7 +62,9 @@ if [ "${1:-}" = --publish ]; then
     echo "release.sh: --publish always builds and tests on separate machines" >&2
     exit 2
   }
-  set -- all
+  # NixOS goes first: it is the one that catches what the other five cannot,
+  # since nothing there sits where every other distribution puts it.
+  set -- nixos,ubuntu,debian,arch,fedora,opensuse
 fi
 
 case "${1:-quick}" in
@@ -67,7 +85,7 @@ recipe() {
 }
 
 for d in $distros; do
-  recipe "$d" >/dev/null || {
+  [ "$d" = nixos ] || recipe "$d" >/dev/null || {
     echo "release.sh: no package for $d yet" >&2
     exit 2
   }
@@ -77,62 +95,209 @@ done
 version=$(test/version.sh)
 
 out=build/release
-rm -rf "$out" build/vm
-mkdir -p "$out" build/vm
+keys=build/keys
+logs=build/logs
+key_ttl=$((24 * 60 * 60))
+rm -rf build/vm
+mkdir -p "$out" "$keys" "$logs" build/vm
 echo "$version" >"$out/version"
 
+# sources: files known to git or not ignored by it, excluding deleted files.
+sources() {
+  git ls-files --cached --others --exclude-standard | while IFS= read -r f; do
+    if [ -e "$f" ]; then printf '%s\n' "$f"; fi
+  done | LC_ALL=C sort
+}
+
+# The tarball is byte for byte the same while the files are: sorted, with fixed
+# owners and the commit's time on every file. So its checksum is the
+# fingerprint of everything a run tests.
+tarball=uxsm-$version.tar.gz
+rm -f "$out"/uxsm-*.tar.gz
+sources |
+  tar --create --file=- --files-from=- --transform="s|^|uxsm-$version/|" \
+    --owner=0 --group=0 --numeric-owner --mtime="@$(git log -1 --format=%ct)" |
+  gzip -n >"$out/$tarball"
+tested=$(sha256sum "$out/$tarball" | cut -d' ' -f1)
+
+# The fingerprint of a package leaves out what cannot change it: the
+# integration tests, the VM and release scripts, documentation, CI, and the
+# flake. Anything else counts, so a file added later rebuilds the packages
+# rather than being missed.
+packaged=$(sources |
+  grep -vE '^(test/(integration|nixos|xsessions)/|test/(vm|release|publish|xsessions)\.sh$|docs/|\.github/|\.githooks/|flake\.|[^/]*\.md$|\.editorconfig$|\.gitignore$)' |
+  xargs -d '\n' sha256sum | sha256sum | cut -d' ' -f1)
+
+# has_package DISTRO: its package was built from these sources.
+has_package() {
+  [ "$(cat "$keys/$1.package" 2>/dev/null)" = "$version $packaged" ] &&
+    [ -n "$(find "$out/$1" -type f 2>/dev/null)" ]
+}
+
+# has_passed DISTRO: its key is valid; prints when it was made.
+has_passed() {
+  [ -f "$keys/$1.passed" ] || return 1
+  read -r key_version key_tested key_time <"$keys/$1.passed"
+  [ "$key_version" = "$version" ] && [ "$key_tested" = "$tested" ] &&
+    [ $(($(date +%s) - key_time)) -lt "$key_ttl" ] || return 1
+  date -d "@$key_time" +%H:%M
+}
+
+# note TEXT: a step of the run, timed, in the log and on the terminal.
+note() {
+  line="$(date +%T) == $*"
+  printf '%s\n' "$line" >>"$log"
+  printf '%s\n' "$line" >&2
+}
+
+# stamp: copy a run's output to its log, timing the lines that mark a step or a
+# failure and showing only those on the terminal.
+stamp() {
+  while IFS= read -r line || [ -n "$line" ]; do
+    case $line in
+    *"] == "* | vm.sh* | *"  FAIL: "* | *"  late: "* | *"  stuck: "* | \
+      *"  skipped: "* | *"mirror: "* | *": ok" | *": FAILED" | *": MIRROR" | *"error: "*)
+      line="$(date +%T) $line"
+      printf '%s\n' "$line" >&2
+      ;;
+    esac
+    printf '%s\n' "$line"
+  done >>"$log"
+}
+
+# logged COMMAND...: run COMMAND through stamp and return its status.
+logged() {
+  {
+    "$@" 2>&1
+    echo $? >"$logdir/status"
+  } | stamp
+  set -- "$(cat "$logdir/status")"
+  rm -f "$logdir/status"
+  return "$1"
+}
+
+# durations LOG: how long each step took, from one timed line to the next.
+durations() {
+  awk '
+    function secs(t, a) { split(t, a, ":"); return a[1] * 3600 + a[2] * 60 + a[3] }
+    /^[0-9][0-9]:[0-9][0-9]:[0-9][0-9] / {
+      t = secs($1)
+      if (n++) {
+        d = t - prev
+        if (d < 0) d += 86400
+        printf "%4d:%02d  %s\n", d / 60, d % 60, label
+      }
+      prev = t
+      label = substr($0, 10)
+      if (n == 1) first = t
+    }
+    END {
+      d = prev - first
+      if (d < 0) d += 86400
+      printf "%4d:%02d  total\n", d / 60, d % 60
+    }' "$1"
+}
+
+# run DISTRO: build its package if needed and test it on a clean VM. NixOS
+# builds and boots its own machine.
+run() {
+  d=$1
+  if [ "$d" = nixos ]; then
+    note "NixOS machine"
+    logged make --no-print-directory test-nixos || return
+    echo "$version $tested $(date +%s)" >"$keys/$d.passed"
+    return
+  fi
+
+  stage=build/vm/$d
+  mkdir -p "$stage"
+  if has_package "$d"; then
+    note "the $d package was built from these sources; not rebuilding it"
+  else
+    rm -rf "${out:?}/$d" "$keys/$d.package"
+    mkdir -p "$stage/build"
+    cp "$out/version" "$out/$tarball" test/mirror.sh "$stage/build/"
+    cp "test/package/$(recipe "$d").sh" "$stage/build/package.sh"
+    # With FAST, the same VM builds the package and runs tests with it
+    # installed: package.sh leaves it in ~/uxsm/out, where run.sh finds it and
+    # vm.sh downloads it afterwards.
+    if [ -n "$fast" ]; then
+      cp -r test/integration "$stage/build/integration"
+      note "build and test VM"
+      UXSM_VM_UPLOAD=$stage/build UXSM_VM_DOWNLOAD=$out/$d UXSM_VM_LOGS=$logdir \
+        logged test/vm.sh "$d" "sh ~/uxsm/package.sh &&
+          mkdir -p ~/uxsm/packages &&
+          cp -r ~/uxsm/out ~/uxsm/packages/$d &&
+          sh ~/uxsm/integration/run.sh" || return
+      echo "$version $packaged" >"$keys/$d.package"
+      return
+    fi
+    note "build VM"
+    UXSM_VM_UPLOAD=$stage/build UXSM_VM_DOWNLOAD=$out/$d UXSM_VM_LOGS=$logdir \
+      logged test/vm.sh "$d" 'sh ~/uxsm/package.sh' || return
+    echo "$version $packaged" >"$keys/$d.package"
+  fi
+
+  mkdir -p "$stage/test/packages"
+  cp -r test/integration "$stage/test/integration"
+  cp "$out/version" test/mirror.sh "$stage/test/"
+  cp -r "$out/$d" "$stage/test/packages/$d"
+  note "test VM"
+  UXSM_VM_UPLOAD=$stage/test UXSM_VM_LOGS=$logdir \
+    logged test/vm.sh "$d" 'sh ~/uxsm/integration/run.sh' || return
+  echo "$version $tested $(date +%s)" >"$keys/$d.passed"
+}
+
 if [ -n "$fast" ]; then
-  echo "== uxsm $version: building and testing on $distros, one machine each" >&2
+  echo "== uxsm $version on $distros, building and testing on one machine each" >&2
 else
-  echo "== uxsm $version: building and testing on $distros" >&2
+  echo "== uxsm $version on $distros" >&2
 fi
 
-# Tarball: files known to git or not ignored by it, excluding deleted files.
-tarball=uxsm-$version.tar.gz
-git ls-files --cached --others --exclude-standard | while IFS= read -r f; do
-  if [ -e "$f" ]; then printf '%s\n' "$f"; fi
-done | LC_ALL=C sort |
-  tar --create --file=- --files-from=- --transform="s|^|uxsm-$version/|" \
-    --owner=0 --group=0 --numeric-owner |
-  gzip -n >"$out/$tarball"
-
+summary=
+status=0
 for d in $distros; do
-  stage=build/vm/build-$d
-  mkdir -p "$stage"
-  cp "$out/version" "$out/$tarball" test/mirror.sh "$stage/"
-  cp "test/package/$(recipe "$d").sh" "$stage/package.sh"
-  # With FAST, the same VM builds the package and runs tests with it installed:
-  # package.sh leaves it in ~/uxsm/out, where run.sh finds it and vm.sh
-  # downloads it afterwards.
-  if [ -n "$fast" ]; then
-    cp -r test/integration "$stage/integration"
-    UXSM_VM_UPLOAD=$stage UXSM_VM_DOWNLOAD=$out/$d \
-      test/vm.sh "$d" "sh ~/uxsm/package.sh &&
-                mkdir -p ~/uxsm/packages &&
-                cp -r ~/uxsm/out ~/uxsm/packages/$d &&
-                sh ~/uxsm/integration/run.sh"
-  else
-    UXSM_VM_UPLOAD=$stage UXSM_VM_DOWNLOAD=$out/$d \
-      test/vm.sh "$d" 'sh ~/uxsm/package.sh'
+  if [ -n "$publish" ] && since=$(has_passed "$d"); then
+    summary="$summary$d: ok (key from $since)\n"
+    continue
   fi
+  if [ "$status" -ne 0 ]; then
+    summary="$summary$d: not run\n"
+    continue
+  fi
+
+  logdir=$logs/$d/$(date +%Y%m%d-%H%M%S)
+  mkdir -p "$logdir"
+  log=$logdir/run.log
+  note "uxsm $version on $d"
+  rc=0
+  run "$d" || rc=$?
+  case $rc in
+  0) result=ok ;;
+  75) result=MIRROR ;;
+  *) result=FAILED ;;
+  esac
+  note "$d: $result"
+
+  durations "$log" >"$logdir/times"
+  echo "== $d: $result, log in $logdir" >&2
+  sed 's/^/  /' "$logdir/times" >&2
+  if [ "$rc" -ne 0 ]; then
+    echo "== last lines of the log:" >&2
+    tail -n 30 "$log" | sed 's/^/  /' >&2
+    status=$rc
+  fi
+  summary="$summary$d: $result\n"
+
+  # Keep the ten latest runs of this distribution.
+  find "$logs/$d" -mindepth 1 -maxdepth 1 -type d | LC_ALL=C sort -r | tail -n +11 | xargs -r rm -rf
 done
 
-# Without FAST, a clean VM for each distribution installs the contents of
-# packages/<distro> and runs the tests.
-if [ -z "$fast" ]; then
-  stage=build/vm/test
-  mkdir -p "$stage/packages"
-  cp -r test/integration "$stage/integration"
-  cp "$out/version" test/mirror.sh "$stage/"
-  for d in $distros; do
-    cp -r "$out/$d" "$stage/packages/$d"
-  done
-  UXSM_VM_UPLOAD=$stage test/vm.sh "$(echo $distros | tr ' ' ',')" 'sh ~/uxsm/integration/run.sh'
-fi
+printf '\n%b' "$summary" >&2
 
 (cd "$out" && find . -type f ! -name version ! -name SHA256SUMS -printf '%P\n' | LC_ALL=C sort | xargs sha256sum >SHA256SUMS)
 
-if [ -n "$publish" ]; then
+if [ -n "$publish" ] && [ "$status" -eq 0 ]; then
   rm -rf releases/latest.new
   mkdir -p releases
   cp -r "$out" releases/latest.new
@@ -140,3 +305,4 @@ if [ -n "$publish" ]; then
   mv releases/latest.new releases/latest
   echo "== releases/latest is uxsm $version" >&2
 fi
+exit "$status"

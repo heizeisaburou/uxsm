@@ -170,7 +170,7 @@ All packages except Nix call `make build` and `make install`. When adding an ins
 - **openSUSE:** use `packaging/opensuse/` in OBS. Its changelog belongs in `uxsm.changes`, not the spec.
 - **NixOS:** submit `packaging/nix/package.nix` as `pkgs/by-name/ux/uxsm/package.nix` in nixpkgs. In this repository, `nix build` builds the current checkout through `flake.nix`.
 
-`make test-vm` builds each selected native package in a VM, installs it in a second clean VM, and runs the integration suite. `make release` does this for all supported distributions, after the declarative NixOS machine of `make test-nixos`, and writes the artifacts to the `releases/latest` directory. CI runs the same six on every push to `main` and on every version tag. See [Build and test](docs/development.md#build-and-test).
+`make test-vm` builds each selected native package in a VM, installs it in a second clean VM, and runs the integration suite, one distribution at a time. `make release` does this for all supported distributions and the declarative NixOS machine of `make test-nixos`, repeats only those that have not passed with the current files in the last 24 hours, and writes the artifacts to the `releases/latest` directory once all have. CI runs the same six on every push to `main` and on every version tag. See [Build and test](docs/development.md#build-and-test).
 
 `make publish TAG=v0.1.0` publishes a version. It checks that the tree is clean and the version is unused, then creates the tag before building because package versions come from `git describe`. After testing every distribution, it uploads the packages, both tarballs, and `SHA256SUMS` to a GitHub release. Add `DRY_RUN=1` to preview every step. See [Publishing a release](docs/development.md#publishing-a-release).
 
