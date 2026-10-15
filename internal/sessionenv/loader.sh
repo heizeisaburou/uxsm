@@ -13,48 +13,48 @@
 
 # reverse LIST: reverse a colon-separated list, omitting empty elements.
 reverse() {
-	__reverse_out__=''
-	IFS=':'
-	for __item__ in $1; do
-		if [ -n "${__item__}" ]; then
-			__reverse_out__="${__item__}${__reverse_out__:+:}${__reverse_out__}"
-		fi
-	done
-	IFS="${__UXSM_OIFS__}"
-	printf '%s' "${__reverse_out__}"
-	unset __reverse_out__ __item__
+  __reverse_out__=''
+  IFS=':'
+  for __item__ in $1; do
+    if [ -n "${__item__}" ]; then
+      __reverse_out__="${__item__}${__reverse_out__:+:}${__reverse_out__}"
+    fi
+  done
+  IFS="${__UXSM_OIFS__}"
+  printf '%s' "${__reverse_out__}"
+  unset __reverse_out__ __item__
 }
 
 lowercase() {
-	printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
 }
 
 # source_file FILE: load it if it exists, is readable, and has valid syntax.
 source_file() {
-	if [ -f "$1" ]; then
-		if [ ! -r "$1" ]; then
-			printf '%s\n' "Environment file $1 is not readable" >&2
-			return
-		fi
-		if ! sh -n "$1"; then
-			return
-		fi
-		printf '%s\n' "Sourcing environment file \"$1\"."
-		. "$1"
-	fi
+  if [ -f "$1" ]; then
+    if [ ! -r "$1" ]; then
+      printf '%s\n' "Environment file $1 is not readable" >&2
+      return
+    fi
+    if ! sh -n "$1"; then
+      return
+    fi
+    printf '%s\n' "Sourcing environment file \"$1\"."
+    . "$1"
+  fi
 }
 
 # source_dir DIRECTORY: load each file in name order except backups and examples.
 source_dir() {
-	if [ -d "$1" ]; then
-		for __env_file__ in "$1/"*; do
-			case "${__env_file__}" in
-			*.bak | *~ | *.disabled | *.example | *.sample | *.broken) continue ;;
-			esac
-			source_file "${__env_file__}"
-		done
-		unset __env_file__
-	fi
+  if [ -d "$1" ]; then
+    for __env_file__ in "$1/"*; do
+      case "${__env_file__}" in
+      *.bak | *~ | *.disabled | *.example | *.sample | *.broken) continue ;;
+      esac
+      source_file "${__env_file__}"
+    done
+    unset __env_file__
+  fi
 }
 
 __UXSM_OIFS__=$IFS
@@ -86,15 +86,15 @@ export XDG_BACKEND="x11"
 __env_files__='uxsm/env'
 IFS=':'
 for __name__ in $(lowercase "${XDG_CURRENT_DESKTOP}"); do
-	__env_files__="${__env_files__}:uxsm/env-${__name__}"
+  __env_files__="${__env_files__}:uxsm/env-${__name__}"
 done
 for __dir__ in $(reverse "${XDG_CONFIG_HOME}:${XDG_CONFIG_DIRS}:${XDG_DATA_DIRS}"); do
-	for __env_file__ in ${__env_files__}; do
-		IFS="${__UXSM_OIFS__}"
-		source_file "${__dir__}/${__env_file__}"
-		source_dir "${__dir__}/${__env_file__}.d"
-		IFS=':'
-	done
+  for __env_file__ in ${__env_files__}; do
+    IFS="${__UXSM_OIFS__}"
+    source_file "${__dir__}/${__env_file__}"
+    source_dir "${__dir__}/${__env_file__}.d"
+    IFS=':'
+  done
 done
 IFS="${__UXSM_OIFS__}"
 unset __env_files__ __env_file__ __name__ __dir__

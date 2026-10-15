@@ -14,7 +14,7 @@ destdir=
 uninstall=
 
 usage() {
-    cat <<USAGE
+  cat <<USAGE
 Usage: ./install.sh [--prefix DIR] [--destdir DIR] [--uninstall]
 
 Install the uxsm binary, systemd user units, and manual page.
@@ -29,13 +29,28 @@ USAGE
 }
 
 while [ $# -gt 0 ]; do
-    case $1 in
-    --prefix) prefix=${2:?--prefix requires DIR}; shift 2 ;;
-    --destdir) destdir=${2:?--destdir requires DIR}; shift 2 ;;
-    --uninstall) uninstall=1; shift ;;
-    -h | --help) usage; exit 0 ;;
-    *) usage >&2; exit 2 ;;
-    esac
+  case $1 in
+  --prefix)
+    prefix=${2:?--prefix requires DIR}
+    shift 2
+    ;;
+  --destdir)
+    destdir=${2:?--destdir requires DIR}
+    shift 2
+    ;;
+  --uninstall)
+    uninstall=1
+    shift
+    ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+  esac
 done
 
 bindir=$prefix/bin
@@ -49,31 +64,31 @@ units=$(ls systemd/user/*.in 2>/dev/null || true)
 pages=$(ls man/*.1.in 2>/dev/null || true)
 
 if [ -n "$uninstall" ]; then
-    rm -f "$destdir$bindir/uxsm"
-    for f in $units; do rm -f "$destdir$unitdir/$(basename "$f" .in)"; done
-    for f in $pages; do rm -f "$destdir$mandir/$(basename "$f" .in)"; done
-    echo "Removed uxsm from $destdir$prefix"
-    exit 0
+  rm -f "$destdir$bindir/uxsm"
+  for f in $units; do rm -f "$destdir$unitdir/$(basename "$f" .in)"; done
+  for f in $pages; do rm -f "$destdir$mandir/$(basename "$f" .in)"; done
+  echo "Removed uxsm from $destdir$prefix"
+  exit 0
 fi
 
 # A clear message beats a permission error halfway through.
 if ! mkdir -p "$destdir$bindir" 2>/dev/null; then
-    echo "install.sh: cannot write under $destdir$bindir (run as root or pass --prefix)" >&2
-    exit 1
+  echo "install.sh: cannot write under $destdir$bindir (run as root or pass --prefix)" >&2
+  exit 1
 fi
 
 install -Dm755 uxsm "$destdir$bindir/uxsm"
 for f in $units; do
-    unit="$destdir$unitdir/$(basename "$f" .in)"
-    mkdir -p "$destdir$unitdir"
-    sed "s|@BINDIR@|$bindir|g" "$f" >"$unit"
-    chmod 644 "$unit"
+  unit="$destdir$unitdir/$(basename "$f" .in)"
+  mkdir -p "$destdir$unitdir"
+  sed "s|@BINDIR@|$bindir|g" "$f" >"$unit"
+  chmod 644 "$unit"
 done
 for f in $pages; do
-    page="$destdir$mandir/$(basename "$f" .in)"
-    mkdir -p "$destdir$mandir"
-    sed "s|@BINDIR@|$bindir|g;s|@VERSION@|$version|g" "$f" >"$page"
-    chmod 644 "$page"
+  page="$destdir$mandir/$(basename "$f" .in)"
+  mkdir -p "$destdir$mandir"
+  sed "s|@BINDIR@|$bindir|g;s|@VERSION@|$version|g" "$f" >"$page"
+  chmod 644 "$page"
 done
 
 # No full stop after a path: it can be copied from the terminal with a double

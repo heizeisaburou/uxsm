@@ -11,16 +11,16 @@ set -eu
 cd "$(dirname "$0")/.."
 
 if tag=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null); then
-    version=${tag#v}
-    commits=$(git rev-list --count "$tag..HEAD")
+  version=${tag#v}
+  commits=$(git rev-list --count "$tag..HEAD")
 else
-    version=0.0.0
-    commits=$(git rev-list --count HEAD)
+  version=0.0.0
+  commits=$(git rev-list --count HEAD)
 fi
 if [ "$commits" -gt 0 ]; then
-    version=$version.r$commits.g$(git rev-parse --short HEAD)
+  version=$version.r$commits.g$(git rev-parse --short HEAD)
 fi
 if [ -n "$(git status --porcelain)" ]; then
-    version=$version.dirty
+  version=$version.dirty
 fi
 echo "$version"

@@ -13,8 +13,8 @@ set -eu
 make_test_entries
 
 cleanup() {
-    systemctl --user stop uxsm-it-session.service uxsm-it-xvfb-5.service 2>/dev/null || true
-    remove_test_entries
+  systemctl --user stop uxsm-it-session.service uxsm-it-xvfb-5.service 2>/dev/null || true
+  remove_test_entries
 }
 trap cleanup EXIT
 
@@ -32,7 +32,7 @@ ok "without -e, the desktop gets the entry names, then -D, and the XDG_* identit
 dir=$XDG_RUNTIME_DIR/uxsm
 tr '\0' '\n' <"$dir/env_login" | grep -qx 'DISPLAY=:5' || fail "env_login does not have DISPLAY=:5"
 tr '\0' '\n' <"$dir/env_identity" | grep -qx 'XDG_CURRENT_DESKTOP=TestDE:Second:Extra' ||
-    fail "env_identity does not have the computed XDG_CURRENT_DESKTOP"
+  fail "env_identity does not have the computed XDG_CURRENT_DESKTOP"
 ok "the login environment and the identity are saved in \$XDG_RUNTIME_DIR/uxsm"
 stop_session
 

@@ -23,13 +23,13 @@ nowm=uxsm-desktop@sleep.service
 clear_ready() { rm -f "$XDG_RUNTIME_DIR/uxsm/ready"; }
 
 cleanup() {
-    systemctl --user stop uxsm-it-session.service "$slow_unit" "$final_unit" "$nowm" \
-        uxsm-it-wm.service uxsm-it-xvfb-5.service 2>/dev/null || true
-    clear_ready
-    rm -f "$entries/uxsm-it-slowwm.desktop" "$entries/uxsm-it-finalize.desktop" \
-        "$slow" "$final" "$dropin/uxsm-it-timeout.conf"
-    rmdir "$dropin" 2>/dev/null || true
-    systemctl --user daemon-reload
+  systemctl --user stop uxsm-it-session.service "$slow_unit" "$final_unit" "$nowm" \
+    uxsm-it-wm.service uxsm-it-xvfb-5.service 2>/dev/null || true
+  clear_ready
+  rm -f "$entries/uxsm-it-slowwm.desktop" "$entries/uxsm-it-finalize.desktop" \
+    "$slow" "$final" "$dropin/uxsm-it-timeout.conf"
+  rmdir "$dropin" 2>/dev/null || true
+  systemctl --user daemon-reload
 }
 trap cleanup EXIT
 
@@ -38,7 +38,7 @@ wait_no_session || fail "a session from an earlier test is still shutting down"
 
 # Without a session, there is nothing to mark ready.
 if err=$(uxsm finalize 2>&1); then
-    fail "uxsm finalize outside a session did not fail"
+  fail "uxsm finalize outside a session did not fail"
 fi
 case $err in
 *"no uxsm session"*) ok "uxsm finalize outside a session says there is none" ;;
@@ -50,7 +50,7 @@ start_xvfb :5
 # Without a window manager or desktop signal, the wait times out and reports it.
 clear_ready
 if err=$(DISPLAY=:5 uxsm aux wait-ready -timeout 2s 2>&1); then
-    fail "uxsm aux wait-ready succeeded on a display with no window manager"
+  fail "uxsm aux wait-ready succeeded on a display with no window manager"
 fi
 case $err in
 *"no EWMH window manager"*) ok "with neither of the two, the wait times out and says so" ;;
@@ -71,7 +71,7 @@ esac
 systemctl --user stop uxsm-it-wm.service
 clear_ready
 if err=$(DISPLAY=:5 uxsm aux wait-ready -timeout 2s 2>&1); then
-    fail "uxsm aux wait-ready succeeded after the window manager was gone"
+  fail "uxsm aux wait-ready succeeded after the window manager was gone"
 fi
 ok "the mark of a window manager that is gone does not count"
 
@@ -94,14 +94,14 @@ ENTRY
 
 began=$(date +%s)
 systemd-run --user --quiet --collect --unit=uxsm-it-session -E DISPLAY=:5 \
-    uxsm start uxsm-it-slowwm.desktop
+  uxsm start uxsm-it-slowwm.desktop
 wait_for 30 systemctl --user is-active graphical-session.target ||
-    fail "the session of the slow desktop did not start"
-elapsed=$(( $(date +%s) - began ))
+  fail "the session of the slow desktop did not start"
+elapsed=$(($(date +%s) - began))
 [ "$elapsed" -ge 2 ] ||
-    fail "the session was ready in ${elapsed}s, before its window manager was up"
+  fail "the session was ready in ${elapsed}s, before its window manager was up"
 DISPLAY=:5 xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | grep -q "window id" ||
-    fail "graphical-session.target was reached before the window manager was up"
+  fail "graphical-session.target was reached before the window manager was up"
 ok "graphical-session.target waits for the window manager"
 
 DISPLAY=:5 bspc quit
@@ -122,9 +122,9 @@ Exec=$final
 ENTRY
 
 systemd-run --user --quiet --collect --unit=uxsm-it-session -E DISPLAY=:5 \
-    uxsm start uxsm-it-finalize.desktop
+  uxsm start uxsm-it-finalize.desktop
 wait_for 20 systemctl --user is-active graphical-session.target ||
-    fail "the session of a desktop that runs uxsm finalize did not become ready"
+  fail "the session of a desktop that runs uxsm finalize did not become ready"
 ok "a desktop with no window manager becomes ready by running uxsm finalize"
 
 out=$(uxsm finalize) || fail "a second uxsm finalize failed: $out"
@@ -149,10 +149,10 @@ systemctl --user daemon-reload
 systemd-run --user --quiet --collect --unit=uxsm-it-session -E DISPLAY=:5 uxsm start -- sleep infinity
 sleep 2
 if systemctl --user is-active -q graphical-session.target; then
-    fail "the session became ready with neither a window manager nor uxsm finalize"
+  fail "the session became ready with neither a window manager nor uxsm finalize"
 fi
 ok "with neither of the two, the session never becomes ready"
 
 wait_stopped 20 uxsm-it-session.service "$nowm" uxsm-env@sleep.service graphical-session.target ||
-    fail "the session that was never ready did not stop when the wait timed out"
+  fail "the session that was never ready did not stop when the wait timed out"
 ok "and the whole session is shut down when the wait times out"

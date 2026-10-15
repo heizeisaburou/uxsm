@@ -18,15 +18,15 @@ dropin=$XDG_RUNTIME_DIR/systemd/user/app-@autostart.service.d/uxsm-tweaks.conf
 # diagnose prints autostart unit state after a failure, avoiding a manual search
 # inside the VM.
 diagnose() {
-    systemctl --user list-units --all --no-legend "$target" xdg-desktop-autostart.target "$unit" || true
-    journalctl --user -n 15 --no-pager -u "$target" -u uxsm-desktop@bspwm.desktop.service || true
+  systemctl --user list-units --all --no-legend "$target" xdg-desktop-autostart.target "$unit" || true
+  journalctl --user -n 15 --no-pager -u "$target" -u uxsm-desktop@bspwm.desktop.service || true
 }
 
 cleanup() {
-    uxsm stop 2>/dev/null || true
-    systemctl --user stop uxsm-it-session.service uxsm-it-xvfb-5.service 2>/dev/null || true
-    rm -f "$probe" "$entry" "$log" "$dropin"
-    systemctl --user daemon-reload
+  uxsm stop 2>/dev/null || true
+  systemctl --user stop uxsm-it-session.service uxsm-it-xvfb-5.service 2>/dev/null || true
+  rm -f "$probe" "$entry" "$log" "$dropin"
+  systemctl --user daemon-reload
 }
 trap cleanup EXIT
 
@@ -55,8 +55,8 @@ start_xvfb :5
 # A known window manager: uxsm owns autostart.
 run_session bspwm.desktop --
 wait_for 15 systemctl --user is-active "$unit" || {
-    diagnose
-    fail "the autostart entry did not start with the session"
+  diagnose
+  fail "the autostart entry did not start with the session"
 }
 ok "with a window manager, uxsm starts the XDG autostart"
 
@@ -92,8 +92,8 @@ rm -f "$log"
 run_session bspwm.desktop -- --no-autostart
 sleep 3
 if systemctl --user is-active -q "$unit"; then
-    diagnose
-    fail "uxsm start --no-autostart started the XDG autostart"
+  diagnose
+  fail "uxsm start --no-autostart started the XDG autostart"
 fi
 [ "$(runs)" = 0 ] || fail "the autostart entry ran $(runs) times with --no-autostart"
 ok "uxsm start --no-autostart does not start it"

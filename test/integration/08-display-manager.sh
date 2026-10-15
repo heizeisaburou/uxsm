@@ -25,9 +25,9 @@ entry=/usr/local/share/xsessions/bspwm-uxsm.desktop
 desktop=uxsm-desktop@bspwm.desktop.service
 
 cleanup() {
-    sudo systemctl stop lightdm.service 2>/dev/null || true
-    uxsm stop 2>/dev/null || true
-    sudo rm -f "$entry" "$dropin" "$ours" "$xserver"
+  sudo systemctl stop lightdm.service 2>/dev/null || true
+  uxsm stop 2>/dev/null || true
+  sudo rm -f "$entry" "$dropin" "$ours" "$xserver"
 }
 trap cleanup EXIT
 
@@ -36,18 +36,18 @@ wait_no_session || fail "a session from an earlier test is still shutting down"
 echo "  installing LightDM"
 install_log=$HOME/uxsm-it-lightdm-install.log
 if command -v apt-get >/dev/null 2>&1; then
-    # Debian and Ubuntu start a display manager when installing it; policy-rc.d
-    # prevents that because this test starts it with its own configuration.
-    printf '#!/bin/sh\nexit 101\n' | sudo tee /usr/sbin/policy-rc.d >/dev/null
-    sudo chmod 755 /usr/sbin/policy-rc.d
-    sudo DEBIAN_FRONTEND=noninteractive apt-get -y -qq install lightdm >"$install_log" 2>&1 || true
-    sudo rm -f /usr/sbin/policy-rc.d
+  # Debian and Ubuntu start a display manager when installing it; policy-rc.d
+  # prevents that because this test starts it with its own configuration.
+  printf '#!/bin/sh\nexit 101\n' | sudo tee /usr/sbin/policy-rc.d >/dev/null
+  sudo chmod 755 /usr/sbin/policy-rc.d
+  sudo DEBIAN_FRONTEND=noninteractive apt-get -y -qq install lightdm >"$install_log" 2>&1 || true
+  sudo rm -f /usr/sbin/policy-rc.d
 elif command -v pacman >/dev/null 2>&1; then
-    sudo pacman -S --noconfirm --needed lightdm >"$install_log" 2>&1 || true
+  sudo pacman -S --noconfirm --needed lightdm >"$install_log" 2>&1 || true
 elif command -v dnf >/dev/null 2>&1; then
-    sudo dnf -y -q install lightdm >"$install_log" 2>&1 || true
+  sudo dnf -y -q install lightdm >"$install_log" 2>&1 || true
 elif command -v zypper >/dev/null 2>&1; then
-    sudo zypper --non-interactive --quiet install --no-recommends lightdm >"$install_log" 2>&1 || true
+  sudo zypper --non-interactive --quiet install --no-recommends lightdm >"$install_log" 2>&1 || true
 fi
 sudo systemctl disable --now lightdm.service display-manager.service 2>/dev/null || true
 
@@ -56,17 +56,17 @@ sudo systemctl disable --now lightdm.service display-manager.service 2>/dev/null
 # distribution installs the program.
 lightdm=$(command -v lightdm 2>/dev/null || true)
 if [ -z "$lightdm" ]; then
-    for p in /usr/sbin/lightdm /usr/bin/lightdm /sbin/lightdm; do
-        [ -x "$p" ] || continue
-        lightdm=$p
-        break
-    done
+  for p in /usr/sbin/lightdm /usr/bin/lightdm /sbin/lightdm; do
+    [ -x "$p" ] || continue
+    lightdm=$p
+    break
+  done
 fi
 if [ -z "$lightdm" ]; then
-    echo "  skipped: lightdm could not be installed here"
-    tail -n 5 "$install_log" 2>/dev/null | sed 's/^/    /' || true
-    rm -f "$install_log"
-    exit 0
+  echo "  skipped: lightdm could not be installed here"
+  tail -n 5 "$install_log" 2>/dev/null | sed 's/^/    /' || true
+  rm -f "$install_log"
+  exit 0
 fi
 rm -f "$install_log"
 
@@ -123,7 +123,7 @@ case $out in
 *) fail "uxsm setup sessions-dir -i did not say how to restart it: $out" ;;
 esac
 if systemctl is-active --quiet lightdm.service; then
-    fail "uxsm restarted the display manager by itself"
+  fail "uxsm restarted the display manager by itself"
 fi
 ok "and does not restart it by itself"
 case $(uxsm setup sessions-dir lightdm) in
@@ -140,25 +140,25 @@ sudo uxsm entry -i bspwm >/dev/null 2>&1 || fail "uxsm entry -i bspwm failed"
 # them it starts, complains, and never opens a session.
 sudo mkdir -p /var/lib/lightdm/data /var/lib/lightdm-data /var/cache/lightdm /var/log/lightdm /run/lightdm
 if id lightdm >/dev/null 2>&1; then
-    sudo chown -R lightdm:lightdm /var/lib/lightdm /var/lib/lightdm-data \
-        /var/cache/lightdm /var/log/lightdm /run/lightdm 2>/dev/null || true
+  sudo chown -R lightdm:lightdm /var/lib/lightdm /var/lib/lightdm-data \
+    /var/cache/lightdm /var/log/lightdm /run/lightdm 2>/dev/null || true
 fi
 
 # Start it through its unit, as on a normal machine.
 sudo systemctl start lightdm.service || fail "lightdm did not start"
 
 wait_for 60 systemctl --user is-active "$desktop" || {
-    # Every useful diagnostic: systemd's view of the display manager, its own
-    # output, the session's final output, and logind state.
-    sudo journalctl -u lightdm -n 20 --no-pager 2>/dev/null | sed 's/^/  journal: /' || true
-    sudo tail -n 30 /var/log/lightdm/*.log 2>/dev/null | sed 's/^/  lightdm: /' || true
-    tail -n 20 "$HOME/.xsession-errors" 2>/dev/null | sed 's/^/  xsession-errors: /' || true
-    loginctl list-sessions --no-legend 2>/dev/null | sed 's/^/  loginctl: /' || true
-    loginctl list-seats --no-legend 2>/dev/null | sed 's/^/  seats: /' || true
-    fail "LightDM did not start the uxsm session"
+  # Every useful diagnostic: systemd's view of the display manager, its own
+  # output, the session's final output, and logind state.
+  sudo journalctl -u lightdm -n 20 --no-pager 2>/dev/null | sed 's/^/  journal: /' || true
+  sudo tail -n 30 /var/log/lightdm/*.log 2>/dev/null | sed 's/^/  lightdm: /' || true
+  tail -n 20 "$HOME/.xsession-errors" 2>/dev/null | sed 's/^/  xsession-errors: /' || true
+  loginctl list-sessions --no-legend 2>/dev/null | sed 's/^/  loginctl: /' || true
+  loginctl list-seats --no-legend 2>/dev/null | sed 's/^/  seats: /' || true
+  fail "LightDM did not start the uxsm session"
 }
 wait_for 30 systemctl --user is-active graphical-session.target ||
-    fail "the session started by LightDM is not ready"
+  fail "the session started by LightDM is not ready"
 ok "LightDM opens the session of the generated entry"
 
 pid=$(systemctl --user show -p MainPID --value "$desktop")
@@ -172,11 +172,11 @@ env_of() { tr '\0' '\n' <"/proc/$pid/environ" | sed -n "s/^$1=//p"; }
 # it to connect to the X server, which activated the graphical session.
 xauth=$(env_of XAUTHORITY)
 [ -n "$xauth" ] && [ -f "$xauth" ] ||
-    fail "the desktop has XAUTHORITY='$xauth', which is not a file that exists"
+  fail "the desktop has XAUTHORITY='$xauth', which is not a file that exists"
 ok "the desktop got a working XAUTHORITY ($xauth) on DISPLAY=$(env_of DISPLAY)"
 
 [ "$(env_of DESKTOP_SESSION)" = bspwm-uxsm ] ||
-    fail "DESKTOP_SESSION is $(env_of DESKTOP_SESSION), expected bspwm-uxsm"
+  fail "DESKTOP_SESSION is $(env_of DESKTOP_SESSION), expected bspwm-uxsm"
 ok "and DESKTOP_SESSION says the session is uxsm's"
 
 # This is a logind session, not a standalone process; that determines polkit
@@ -186,9 +186,9 @@ ok "and DESKTOP_SESSION says the session is uxsm's"
 # sessionSpecific).
 session=""
 for id in $(loginctl list-sessions --no-legend | awk '{print $1}'); do
-    case $(loginctl show-session "$id" -p Service --value 2>/dev/null) in
-    lightdm*) session=$id ;;
-    esac
+  case $(loginctl show-session "$id" -p Service --value 2>/dev/null) in
+  lightdm*) session=$id ;;
+  esac
 done
 [ -n "$session" ] || fail "logind has no session opened by lightdm: $(loginctl list-sessions --no-legend)"
 
@@ -200,5 +200,5 @@ ok "logind has an x11 session from LightDM, led by $(tr '\0' ' ' <"/proc/$leader
 # Finally, test display-manager-only shutdown by terminating the whole session.
 sudo systemctl stop lightdm.service
 wait_stopped 30 "$desktop" uxsm-env@bspwm.desktop.service graphical-session.target ||
-    fail "the session outlived the display manager"
+  fail "the session outlived the display manager"
 ok "stopping the display manager shuts the whole session down"

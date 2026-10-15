@@ -39,24 +39,30 @@ yes=
 hashes=
 build=
 while [ $# -gt 1 ]; do
-    case $1 in
-    --dry-run) dry=1 ;;
-    --yes) yes=1 ;;
-    --hashes) hashes=1 ;;
-    --build) build=1 ;;
-    *) echo "publish.sh: unknown option $1" >&2; exit 2 ;;
-    esac
-    shift
+  case $1 in
+  --dry-run) dry=1 ;;
+  --yes) yes=1 ;;
+  --hashes) hashes=1 ;;
+  --build) build=1 ;;
+  *)
+    echo "publish.sh: unknown option $1" >&2
+    exit 2
+    ;;
+  esac
+  shift
 done
 tag=${1:-}
 
-die() { echo "publish.sh: $*" >&2; exit 1; }
+die() {
+  echo "publish.sh: $*" >&2
+  exit 1
+}
 run() {
-    if [ -n "$dry" ]; then
-        echo "would run: $*"
-        return 0
-    fi
-    "$@"
+  if [ -n "$dry" ]; then
+    echo "would run: $*"
+    return 0
+  fi
+  "$@"
 }
 
 case $tag in
@@ -70,53 +76,53 @@ command -v gh >/dev/null 2>&1 || die "gh is required to publish a GitHub release
 gh auth status >/dev/null 2>&1 || die "gh is not authenticated; run gh auth login"
 
 if [ -n "$hashes" ]; then
-    url="https://github.com/$repo/archive/refs/tags/$tag.tar.gz"
-    tmp=$(mktemp -d)
-    trap 'rm -rf "$tmp"' EXIT
-    echo "== downloading $url"
-    curl -fsSL "$url" -o "$tmp/src.tar.gz" || die "GitHub does not serve $tag yet"
-    sum=$(sha256sum "$tmp/src.tar.gz" | cut -d' ' -f1)
-    echo "SHA-256 of the tag archive: $sum"
-    run sed -i "s/^pkgver=.*/pkgver=$version/;s/^sha256sums=.*/sha256sums=('$sum')/" packaging/arch/PKGBUILD
-    # Nix hashes something else: fetchFromGitHub records the hash of the
-    # unpacked tree, not of the .tar.gz, so the two numbers are different
-    # things and only nix knows how to compute the second one. Without nix the
-    # recipe is left alone and said so: a plausible wrong hash is worse than
-    # none, and in v0.1.0 that is exactly what went in.
-    sri=
-    if command -v nix >/dev/null 2>&1; then
-        sri=$(nix --extra-experimental-features "nix-command flakes" \
-            store prefetch-file --unpack --json "$url" 2>/dev/null |
-            sed -n 's/.*"hash":"\([^"]*\)".*/\1/p')
-    fi
-    if [ -z "$sri" ]; then
-        echo "publish.sh: nix could not give the hash of the unpacked tree, so packaging/nix/package.nix is untouched" >&2
-        echo "publish.sh: get it with: nix store prefetch-file --unpack --json $url" >&2
-    else
-        echo "Nix hash of the unpacked tree: $sri"
-        run sed -i "s|hash = lib.fakeHash;|hash = \"$sri\";|;s|hash = \"sha256-[^\"]*\";|hash = \"$sri\";|;s/^  version = \".*\";/  version = \"$version\";/" packaging/nix/package.nix
-    fi
-    # What a sed did is not what it meant to do: the recipes are read back, and
-    # a message saying "updated" is only printed when they really are. This is
-    # what went missing in v0.1.0, when a changed file made a sed miss and the
-    # script said it had written a hash it had not.
-    if [ -z "$dry" ]; then
-        check_recipe() {
-            grep -q "$2" "$1" || die "$1 does not carry $3 after being written; fix it by hand"
-        }
-        check_recipe packaging/arch/PKGBUILD "^pkgver=$version\$" "the version"
-        check_recipe packaging/arch/PKGBUILD "^sha256sums=('$sum')\$" "the checksum"
-        if [ -n "$sri" ]; then
-            check_recipe packaging/nix/package.nix "version = \"$version\";" "the version"
-            check_recipe packaging/nix/package.nix "hash = \"$sri\";" "the hash"
-        fi
-    fi
+  url="https://github.com/$repo/archive/refs/tags/$tag.tar.gz"
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' EXIT
+  echo "== downloading $url"
+  curl -fsSL "$url" -o "$tmp/src.tar.gz" || die "GitHub does not serve $tag yet"
+  sum=$(sha256sum "$tmp/src.tar.gz" | cut -d' ' -f1)
+  echo "SHA-256 of the tag archive: $sum"
+  run sed -i "s/^pkgver=.*/pkgver=$version/;s/^sha256sums=.*/sha256sums=('$sum')/" packaging/arch/PKGBUILD
+  # Nix hashes something else: fetchFromGitHub records the hash of the
+  # unpacked tree, not of the .tar.gz, so the two numbers are different
+  # things and only nix knows how to compute the second one. Without nix the
+  # recipe is left alone and said so: a plausible wrong hash is worse than
+  # none, and in v0.1.0 that is exactly what went in.
+  sri=
+  if command -v nix >/dev/null 2>&1; then
+    sri=$(nix --extra-experimental-features "nix-command flakes" \
+      store prefetch-file --unpack --json "$url" 2>/dev/null |
+      sed -n 's/.*"hash":"\([^"]*\)".*/\1/p')
+  fi
+  if [ -z "$sri" ]; then
+    echo "publish.sh: nix could not give the hash of the unpacked tree, so packaging/nix/package.nix is untouched" >&2
+    echo "publish.sh: get it with: nix store prefetch-file --unpack --json $url" >&2
+  else
+    echo "Nix hash of the unpacked tree: $sri"
+    run sed -i "s|hash = lib.fakeHash;|hash = \"$sri\";|;s|hash = \"sha256-[^\"]*\";|hash = \"$sri\";|;s/^  version = \".*\";/  version = \"$version\";/" packaging/nix/package.nix
+  fi
+  # What a sed did is not what it meant to do: the recipes are read back, and
+  # a message saying "updated" is only printed when they really are. This is
+  # what went missing in v0.1.0, when a changed file made a sed miss and the
+  # script said it had written a hash it had not.
+  if [ -z "$dry" ]; then
+    check_recipe() {
+      grep -q "$2" "$1" || die "$1 does not carry $3 after being written; fix it by hand"
+    }
+    check_recipe packaging/arch/PKGBUILD "^pkgver=$version\$" "the version"
+    check_recipe packaging/arch/PKGBUILD "^sha256sums=('$sum')\$" "the checksum"
     if [ -n "$sri" ]; then
-        echo "Wrote the version, the checksum and the Nix hash into packaging/arch/PKGBUILD and packaging/nix/package.nix; review and commit them, and generate .SRCINFO for the AUR."
-    else
-        echo "Wrote the version and the checksum into packaging/arch/PKGBUILD; packaging/nix/package.nix still needs its hash."
+      check_recipe packaging/nix/package.nix "version = \"$version\";" "the version"
+      check_recipe packaging/nix/package.nix "hash = \"$sri\";" "the hash"
     fi
-    exit 0
+  fi
+  if [ -n "$sri" ]; then
+    echo "Wrote the version, the checksum and the Nix hash into packaging/arch/PKGBUILD and packaging/nix/package.nix; review and commit them, and generate .SRCINFO for the AUR."
+  else
+    echo "Wrote the version and the checksum into packaging/arch/PKGBUILD; packaging/nix/package.nix still needs its hash."
+  fi
+  exit 0
 fi
 
 # 1. Checks.
@@ -131,18 +137,18 @@ esac
 # it is not ours.
 tagged=
 if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
-    [ "$(git rev-parse "$tag^{commit}")" = "$(git rev-parse HEAD)" ] ||
-        die "tag $tag already exists locally and points elsewhere; remove it with git tag -d $tag if it is incorrect"
-    tagged=1
-    echo "publish.sh: tag $tag is already here, from an earlier run" >&2
+  [ "$(git rev-parse "$tag^{commit}")" = "$(git rev-parse HEAD)" ] ||
+    die "tag $tag already exists locally and points elsewhere; remove it with git tag -d $tag if it is incorrect"
+  tagged=1
+  echo "publish.sh: tag $tag is already here, from an earlier run" >&2
 fi
 if [ -z "$build" ]; then
-    # A remote that cannot be reached is not an answer: without this check, a
-    # broken connection would read as "the tag is not published".
-    remote_tags=$(git ls-remote --tags origin "refs/tags/$tag") ||
-        die "cannot ask origin about tags; publish where the push key is available, or build first with --build"
-    [ -z "$remote_tags" ] || die "tag $tag already exists on origin, so this version has been published"
-    ! gh release view "$tag" --repo "$repo" >/dev/null 2>&1 || die "GitHub release $tag already exists"
+  # A remote that cannot be reached is not an answer: without this check, a
+  # broken connection would read as "the tag is not published".
+  remote_tags=$(git ls-remote --tags origin "refs/tags/$tag") ||
+    die "cannot ask origin about tags; publish where the push key is available, or build first with --build"
+  [ -z "$remote_tags" ] || die "tag $tag already exists on origin, so this version has been published"
+  ! gh release view "$tag" --repo "$repo" >/dev/null 2>&1 || die "GitHub release $tag already exists"
 fi
 
 echo "== uxsm $version from $(git rev-parse --short HEAD) on $branch"
@@ -151,65 +157,65 @@ echo "== uxsm $version from $(git rev-parse --short HEAD) on $branch"
 # the tag, so the packages only carry X.Y.Z once it exists.
 [ -n "$tagged" ] || run git tag -a "$tag" -m "uxsm $version"
 if [ -n "$dry" ]; then
-    echo "would run: make release, unless releases/latest is already uxsm $version"
+  echo "would run: make release, unless releases/latest is already uxsm $version"
 else
-    if [ "$(cat releases/latest/version 2>/dev/null)" = "$version" ]; then
-        echo "== releases/latest already contains tested packages for uxsm $version"
-    else
-        echo "== releases/latest does not contain uxsm $version; building and testing every distribution"
-        make release || die "make release failed; the tag remains local and can be removed with git tag -d $tag"
-    fi
+  if [ "$(cat releases/latest/version 2>/dev/null)" = "$version" ]; then
+    echo "== releases/latest already contains tested packages for uxsm $version"
+  else
+    echo "== releases/latest does not contain uxsm $version; building and testing every distribution"
+    make release || die "make release failed; the tag remains local and can be removed with git tag -d $tag"
+  fi
 fi
 
 # The binary tarball goes next to the packages, and into the checksums with them.
 run make bindist VERSION="$version" DISTDIR=releases/latest
 if [ -z "$dry" ]; then
-    (cd releases/latest &&
-        find . -type f ! -name version ! -name SHA256SUMS -printf '%P\n' |
-        LC_ALL=C sort | xargs sha256sum >SHA256SUMS)
-    # What is about to be published, installed from the tarball into a temporary
-    # root: if the tarball does not install, nobody should be downloading it.
-    tmp=$(mktemp -d)
-    trap 'rm -rf "$tmp"' EXIT
-    tar xzf "releases/latest/uxsm-$version-linux-$(uname -m).tar.gz" -C "$tmp"
-    (cd "$tmp"/uxsm-* && ./install.sh --destdir "$tmp/root" --prefix /usr >/dev/null)
-    [ -x "$tmp/root/usr/bin/uxsm" ] || die "the binary tarball does not install its binary"
-    [ -f "$tmp/root/usr/share/man/man1/uxsm.1" ] || die "the binary tarball does not install the manual page"
-    got=$("$tmp/root/usr/bin/uxsm" version)
-    [ "$got" = "$version" ] || die "the binary in the tarball says it is $got, not $version"
-    echo "== binary tarball installs successfully and reports uxsm $version"
+  (cd releases/latest &&
+    find . -type f ! -name version ! -name SHA256SUMS -printf '%P\n' |
+    LC_ALL=C sort | xargs sha256sum >SHA256SUMS)
+  # What is about to be published, installed from the tarball into a temporary
+  # root: if the tarball does not install, nobody should be downloading it.
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' EXIT
+  tar xzf "releases/latest/uxsm-$version-linux-$(uname -m).tar.gz" -C "$tmp"
+  (cd "$tmp"/uxsm-* && ./install.sh --destdir "$tmp/root" --prefix /usr >/dev/null)
+  [ -x "$tmp/root/usr/bin/uxsm" ] || die "the binary tarball does not install its binary"
+  [ -f "$tmp/root/usr/share/man/man1/uxsm.1" ] || die "the binary tarball does not install the manual page"
+  got=$("$tmp/root/usr/bin/uxsm" version)
+  [ "$got" = "$version" ] || die "the binary in the tarball says it is $got, not $version"
+  echo "== binary tarball installs successfully and reports uxsm $version"
 fi
 
 if [ ! -d releases/latest ]; then
-    [ -n "$dry" ] || die "releases/latest is not there after make release"
-    echo "== would publish what make release leaves in releases/latest"
-    artifacts=
+  [ -n "$dry" ] || die "releases/latest is not there after make release"
+  echo "== would publish what make release leaves in releases/latest"
+  artifacts=
 else
-    # Every distribution has to have left its package: a release with four is not
-    # a release.
-    for d in ubuntu debian arch fedora opensuse; do
-        [ -n "$(find "releases/latest/$d" -type f 2>/dev/null)" ] ||
-            die "releases/latest has no package for $d"
-    done
-        artifacts=$(find releases/latest -type f ! -name version | LC_ALL=C sort)
-    echo "== ready to publish:"
-    echo "$artifacts" | sed 's|^|  |'
+  # Every distribution has to have left its package: a release with four is not
+  # a release.
+  for d in ubuntu debian arch fedora opensuse; do
+    [ -n "$(find "releases/latest/$d" -type f 2>/dev/null)" ] ||
+      die "releases/latest has no package for $d"
+  done
+  artifacts=$(find releases/latest -type f ! -name version | LC_ALL=C sort)
+  echo "== ready to publish:"
+  echo "$artifacts" | sed 's|^|  |'
 fi
 
 if [ -n "$build" ]; then
-    echo "== built, and nothing has left this clone"
-    echo "To publish it from where the push key is: test/publish.sh $tag"
-    exit 0
+  echo "== built, and nothing has left this clone"
+  echo "To publish it from where the push key is: test/publish.sh $tag"
+  exit 0
 fi
 
 # 4. Public, and it cannot be undone.
 if [ -z "$dry" ] && [ -z "$yes" ]; then
-    printf 'Push %s and publish uxsm %s on GitHub? [y/N] ' "$tag" "$version"
-    read -r answer
-    case $answer in
-    y | Y | yes) ;;
-    *) die "nothing was pushed; the tag remains local and can be removed with git tag -d $tag" ;;
-    esac
+  printf 'Push %s and publish uxsm %s on GitHub? [y/N] ' "$tag" "$version"
+  read -r answer
+  case $answer in
+  y | Y | yes) ;;
+  *) die "nothing was pushed; the tag remains local and can be removed with git tag -d $tag" ;;
+  esac
 fi
 
 # -u so the branch tracks the remote afterwards: the first publish of a
@@ -218,8 +224,8 @@ run git push -u origin "$branch"
 run git push origin "$tag"
 # shellcheck disable=SC2086
 run gh release create "$tag" --repo "$repo" --title "uxsm $version" \
-    --notes "Packages for Ubuntu, Debian, Arch, Fedora, and openSUSE; the source tarball; and a self-installing binary tarball for machines without an uxsm package. SHA-256 checksums are provided in SHA256SUMS" \
-    $artifacts
+  --notes "Packages for Ubuntu, Debian, Arch, Fedora, and openSUSE; the source tarball; and a self-installing binary tarball for machines without an uxsm package. SHA-256 checksums are provided in SHA256SUMS" \
+  $artifacts
 
 echo "== published https://github.com/$repo/releases/tag/$tag"
 echo "Next, once GitHub serves the tag archive, run test/publish.sh --hashes $tag"

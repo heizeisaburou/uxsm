@@ -10,7 +10,7 @@ v=$(cat version)
 . /etc/os-release
 
 apt() {
-    sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1 apt-get -y -qq "$@" >/dev/null
+  sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1 apt-get -y -qq "$@" >/dev/null
 }
 
 mkdir build

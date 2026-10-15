@@ -15,18 +15,18 @@ gated=
 
 # One line per reference: <local ref> <local sha> <remote ref> <remote sha>.
 while read -r _ local_sha remote_ref _; do
-    [ "$local_sha" != "$zero" ] || continue # borrar una referencia
-    case "$remote_ref" in
-    refs/heads/main | refs/heads/master | refs/tags/v[0-9]*) ;;
-    *) continue ;;
-    esac
-    # An annotated tag arrives as its own object rather than as the commit.
-    commit=$(git rev-parse "$local_sha^{commit}")
-    if [ "$commit" != "$(git rev-parse HEAD)" ]; then
-        echo "pre-push: $remote_ref is not HEAD; check it out so make release can build it" >&2
-        exit 1
-    fi
-    gated=1
+  [ "$local_sha" != "$zero" ] || continue # borrar una referencia
+  case "$remote_ref" in
+  refs/heads/main | refs/heads/master | refs/tags/v[0-9]*) ;;
+  *) continue ;;
+  esac
+  # An annotated tag arrives as its own object rather than as the commit.
+  commit=$(git rev-parse "$local_sha^{commit}")
+  if [ "$commit" != "$(git rev-parse HEAD)" ]; then
+    echo "pre-push: $remote_ref is not HEAD; check it out so make release can build it" >&2
+    exit 1
+  fi
+  gated=1
 done
 
 [ -n "$gated" ] || exit 0
@@ -34,14 +34,14 @@ done
 version=$(test/version.sh)
 case "$version" in
 *.dirty)
-    echo "pre-push: the working tree has changes; commit or stash them first" >&2
-    exit 1
-    ;;
+  echo "pre-push: the working tree has changes; commit or stash them first" >&2
+  exit 1
+  ;;
 esac
 
 if [ "$(cat releases/latest/version 2>/dev/null)" = "$version" ]; then
-    echo "pre-push: releases/latest is uxsm $version, already tested" >&2
-    exit 0
+  echo "pre-push: releases/latest is uxsm $version, already tested" >&2
+  exit 0
 fi
 
 echo "pre-push: releases/latest is not uxsm $version; running make release" >&2

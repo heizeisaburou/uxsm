@@ -14,7 +14,7 @@ cd "$(dirname "$0")/.."
 
 distros=${1:-arch,debian,ubuntu,fedora}
 for d in $(echo "$distros" | tr ',' ' '); do
-    rm -rf "build/xsessions/$d"
-    UXSM_VM_UPLOAD=test/xsessions UXSM_VM_DOWNLOAD=build/xsessions/$d \
-        test/vm.sh "$d" 'sh ~/uxsm/collect.sh'
+  rm -rf "build/xsessions/$d"
+  UXSM_VM_UPLOAD=test/xsessions UXSM_VM_DOWNLOAD=build/xsessions/$d \
+    test/vm.sh "$d" 'sh ~/uxsm/collect.sh'
 done

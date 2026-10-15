@@ -12,11 +12,11 @@ entry=$apps/uxsm-it-app.desktop
 term=$apps/uxsm-it-term.desktop
 
 cleanup() {
-    uxsm stop 2>/dev/null || true
-    systemctl --user stop uxsm-it-session.service uxsm-it-xvfb-5.service 2>/dev/null || true
-    systemctl --user stop 'app-uxsm-*' 2>/dev/null || true
-    rm -f "$entry" "$term"
-    remove_test_entries
+  uxsm stop 2>/dev/null || true
+  systemctl --user stop uxsm-it-session.service uxsm-it-xvfb-5.service 2>/dev/null || true
+  systemctl --user stop 'app-uxsm-*' 2>/dev/null || true
+  rm -f "$entry" "$term"
+  remove_test_entries
 }
 trap cleanup EXIT
 
@@ -48,7 +48,7 @@ run_session uxsm-it-names.desktop --
 
 # unit_of PATTERN: the active unit name matching the pattern.
 unit_of() {
-    systemctl --user list-units --state=active --no-legend "$1" | awk '{print $1}' | head -1
+  systemctl --user list-units --state=active --no-legend "$1" | awk '{print $1}' | head -1
 }
 slice_of() { systemctl --user show -p Slice --value "$1"; }
 
@@ -63,7 +63,7 @@ unit=$(unit_of 'app-uxsm-sleep@*.service')
 [ -n "$unit" ] || fail "no unit was created for the command"
 ok "a command runs in its own unit ($unit)"
 [ "$(slice_of "$unit")" = app-uxsm.slice ] ||
-    fail "the unit is in $(slice_of "$unit"), not app-uxsm.slice"
+  fail "the unit is in $(slice_of "$unit"), not app-uxsm.slice"
 ok "and in the applications slice of the session"
 
 # -s selects the slice.
@@ -71,22 +71,22 @@ uxsm app -t service -s b -a background -- sleep 3000 || fail "uxsm app -s b fail
 unit=$(unit_of 'app-uxsm-background@*.service')
 [ -n "$unit" ] || fail "no unit was created with -s b"
 [ "$(slice_of "$unit")" = background-uxsm.slice ] ||
-    fail "with -s b the unit is in $(slice_of "$unit"), not background-uxsm.slice"
+  fail "with -s b the unit is in $(slice_of "$unit"), not background-uxsm.slice"
 ok "-s b puts it in the background slice"
 
 # -p passes systemd properties to the unit, as systemd-run does.
 uxsm app -t service -a props -p MemoryMax=512M -p TimeoutStopSec=5 -- sleep 3000 ||
-    fail "uxsm app -p failed"
+  fail "uxsm app -p failed"
 unit=$(unit_of 'app-uxsm-props@*.service')
 [ -n "$unit" ] || fail "no unit was created with -p"
 [ "$(systemctl --user show -p MemoryMax --value "$unit")" = 536870912 ] ||
-    fail "MemoryMax is $(systemctl --user show -p MemoryMax --value "$unit"), not 512M"
+  fail "MemoryMax is $(systemctl --user show -p MemoryMax --value "$unit"), not 512M"
 [ "$(systemctl --user show -p TimeoutStopUSec --value "$unit")" = 5s ] ||
-    fail "TimeoutStopSec is $(systemctl --user show -p TimeoutStopUSec --value "$unit"), not 5s"
+  fail "TimeoutStopSec is $(systemctl --user show -p TimeoutStopUSec --value "$unit"), not 5s"
 ok "-p passes the properties to the unit"
 
 if err=$(uxsm app -t service -p MemoryMax -- sleep 3000 2>&1); then
-    fail "a property without a value was accepted"
+  fail "a property without a value was accepted"
 fi
 case $err in
 *"Key=Value"*) ok "and a property that is not Key=Value says so" ;;
@@ -100,7 +100,7 @@ unit=$(unit_of 'app-uxsm-uxsm-it-app@*.service')
 [ -n "$unit" ] || fail "no unit was created for the desktop entry"
 ok "a desktop entry runs in a unit named after it ($unit)"
 [ "$(systemctl --user show -p Description --value "$unit")" = "uxsm integration test app" ] ||
-    fail "the unit description is not the Name= of the entry"
+  fail "the unit description is not the Name= of the entry"
 ok "with the name of the entry as description"
 
 # Also test its actions.
@@ -109,11 +109,11 @@ unit=$(unit_of 'app-uxsm-action@*.service')
 [ -n "$unit" ] || fail "no unit was created for the action"
 pid=$(systemctl --user show -p MainPID --value "$unit")
 tr '\0' ' ' <"/proc/$pid/cmdline" | grep -q 3001 ||
-    fail "the action ran $(tr '\0' ' ' <"/proc/$pid/cmdline"), not its own Exec="
+  fail "the action ran $(tr '\0' ' ' <"/proc/$pid/cmdline"), not its own Exec="
 ok "an action runs its own Exec="
 
 if err=$(uxsm app -t service uxsm-it-app.desktop:nope 2>&1); then
-    fail "an action that does not exist was accepted"
+  fail "an action that does not exist was accepted"
 fi
 case $err in
 *"has no action"*) ok "and an action that does not exist says so" ;;
@@ -122,7 +122,7 @@ esac
 
 # Unsupported behavior is reported instead of being launched incorrectly.
 if err=$(uxsm app -t service uxsm-it-term.desktop 2>&1); then
-    fail "an entry with Terminal=true was accepted"
+  fail "an entry with Terminal=true was accepted"
 fi
 case $err in
 *"inside a terminal"*) ok "an entry that wants a terminal says it is not supported yet" ;;
@@ -132,19 +132,19 @@ esac
 # A scope, the default: the application remains attached to its launcher.
 uxsm app -a scoped -p TimeoutStopSec=5 -- sleep 3000 &
 wait_for 10 sh -c 'systemctl --user list-units --state=active --no-legend "app-uxsm-scoped-*.scope" | grep -q .' ||
-    fail "no scope was created"
+  fail "no scope was created"
 ok "without -t, the application runs in a scope"
 [ "$(systemctl --user show -p TimeoutStopUSec --value "$(unit_of 'app-uxsm-scoped-*.scope')")" = 5s ] ||
-    fail "a scope did not take the TimeoutStopSec of -p"
+  fail "a scope did not take the TimeoutStopSec of -p"
 ok "and a scope takes properties too"
 
 # The reason for all of this: applications stop with the session.
 stop_session
 wait_for 15 sh -c '! systemctl --user list-units --state=active --no-legend "app-uxsm-*" | grep -q .' ||
-    fail "the applications outlived the session: $(systemctl --user list-units --state=active --no-legend 'app-uxsm-*')"
+  fail "the applications outlived the session: $(systemctl --user list-units --state=active --no-legend 'app-uxsm-*')"
 ok "the applications stop with the session"
 
 if uxsm check is-active; then
-    fail "uxsm check is-active says there is a session after it stopped"
+  fail "uxsm check is-active says there is a session after it stopped"
 fi
 ok "and is-active says there is no session any more"

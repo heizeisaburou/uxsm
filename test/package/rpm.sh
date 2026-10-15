@@ -13,12 +13,12 @@ cd "$HOME/uxsm"
 v=$(cat version)
 
 if command -v dnf >/dev/null 2>&1; then
-    pm_install() { sudo dnf -y -q install "$@" >/dev/null; }
+  pm_install() { sudo dnf -y -q install "$@" >/dev/null; }
 else
-    pm_install() {
-        sudo zypper --non-interactive --quiet install --no-recommends "$@" >/dev/null
-    }
-    sudo zypper --non-interactive --quiet refresh >/dev/null
+  pm_install() {
+    sudo zypper --non-interactive --quiet install --no-recommends "$@" >/dev/null
+  }
+  sudo zypper --non-interactive --quiet refresh >/dev/null
 fi
 
 mkdir -p "$HOME/rpmbuild/SOURCES" "$HOME/rpmbuild/SPECS"
@@ -33,7 +33,7 @@ pm_install rpm-build
 buildrequires=$(rpmspec -q --buildrequires "$spec")
 set --
 while IFS= read -r dep; do
-    set -- "$@" "$dep"
+  set -- "$@" "$dep"
 done <<EOF
 $buildrequires
 EOF
