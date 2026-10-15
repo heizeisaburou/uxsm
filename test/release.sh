@@ -136,11 +136,11 @@ sources |
 tested=$(sha256sum "$out/$tarball" | cut -d' ' -f1)
 
 # The fingerprint of a package leaves out what cannot change it: the
-# integration tests, the VM and release scripts, documentation, CI, and the
-# flake. Anything else counts, so a file added later rebuilds the packages
-# rather than being missed.
+# integration tests, the VM and release scripts, documentation (every .md
+# file, wherever it is), CI, and the flake. Anything else counts, so a file
+# added later rebuilds the packages rather than being missed.
 packaged=$(sources |
-  grep -vE '^(test/(integration|nixos|xsessions)/|test/(vm|release|publish|xsessions)\.sh$|docs/|\.github/|\.githooks/|flake\.|[^/]*\.md$|\.editorconfig$|\.gitignore$)' |
+  grep -vE '^(test/(integration|nixos|xsessions)/|test/(vm|release|publish|xsessions)\.sh$|docs/|\.github/|\.githooks/|flake\.|.*\.md$|\.editorconfig$|\.gitignore$)' |
   xargs -d '\n' sha256sum | sha256sum | cut -d' ' -f1)
 
 # has_package DISTRO: its package was built from these sources.
