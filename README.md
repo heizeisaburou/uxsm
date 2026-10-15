@@ -68,7 +68,48 @@ sudo zypper refresh && sudo zypper install uxsm
 
 ### NixOS
 
-The package is under review in nixpkgs ([NixOS/nixpkgs#574216](https://github.com/NixOS/nixpkgs/pull/574216)). Until it is merged, the flake in this repository provides it as `github:heizeisaburou/uxsm`; its units have to be listed in `systemd.packages` so that each user's systemd finds them.
+The package is pending merge in nixpkgs ([NixOS/nixpkgs#574216](https://github.com/NixOS/nixpkgs/pull/574216)). Once it is merged and has reached your channel, starting with nixos-unstable:
+
+```nix
+{ pkgs, ... }:
+{
+  environment.systemPackages = [ pkgs.uxsm ];
+  systemd.packages = [ pkgs.uxsm ];
+}
+```
+
+Until then, the flake in this repository builds it from `main`. Add it to the inputs of your system flake and pass it to your configuration through `specialArgs`:
+
+```nix
+# flake.nix
+{
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs.uxsm.url = "github:heizeisaburou/uxsm";
+
+  outputs =
+    { nixpkgs, uxsm, ... }:
+    {
+      nixosConfigurations.HOSTNAME = nixpkgs.lib.nixosSystem {
+        specialArgs = { inherit uxsm; };
+        modules = [ ./configuration.nix ];
+      };
+    };
+}
+```
+
+```nix
+# configuration.nix
+{ pkgs, uxsm, ... }:
+let
+  package = uxsm.packages.${pkgs.stdenv.hostPlatform.system}.default;
+in
+{
+  environment.systemPackages = [ package ];
+  systemd.packages = [ package ];
+}
+```
+
+Either way, `systemd.packages` is what places the unit templates where each user's systemd finds them.
 
 ### Other distributions
 
