@@ -101,7 +101,9 @@ func TestRunLoader(t *testing.T) {
 
 	base := []string{
 		"HOME=" + home,
-		"PATH=/usr/bin:/bin",
+		// The loader runs id, tr and env, which are not in /usr/bin or /bin
+		// everywhere: the Nix build sandbox has neither directory.
+		"PATH=" + os.Getenv("PATH"),
 		"XDG_CONFIG_HOME=" + filepath.Join(home, ".config"),
 		"XDG_CONFIG_DIRS=" + filepath.Join(sys, "etc-xdg-empty"),
 		"XDG_DATA_DIRS=" + sys,
