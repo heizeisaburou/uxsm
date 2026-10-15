@@ -20,8 +20,10 @@ trap cleanup EXIT
 # process PID watcher.
 start_session() {
     systemd-run --user --quiet --collect --unit=uxsm-it-session -E DISPLAY=:5 uxsm start bspwm.desktop
-    wait_for 15 systemctl --user is-active graphical-session.target ||
+    wait_for 15 systemctl --user is-active graphical-session.target || {
+        explain_no_session
         fail "graphical-session.target did not become active"
+    }
     systemctl --user is-active --quiet "$desktop" "$session" || fail "$desktop or $session is not active"
 
     pid=$(systemctl --user show -p MainPID --value uxsm-it-session.service)

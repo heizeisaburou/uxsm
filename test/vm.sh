@@ -16,6 +16,8 @@
 # command hung; the default is half an hour.
 # UXSM_VM_UPLOAD=dir copies dir to ~/uxsm on each machine before the command.
 # UXSM_VM_DOWNLOAD=dir copies ~/uxsm/out from each machine to dir after success.
+# UXSM_VM_LOGS=dir is where a failed machine leaves its console and journal; by
+# default, build/vm/logs in the repository.
 #
 #   test/vm.sh all
 #   test/vm.sh pair 'uname -r'
@@ -31,6 +33,7 @@ SSH_PORT=${UXSM_VM_SSH_PORT:-2222}
 BOOT_TIMEOUT=${UXSM_VM_BOOT_TIMEOUT:-300}
 # Time allowed for the command inside the VM before considering it hung.
 COMMAND_TIMEOUT=${UXSM_VM_COMMAND_TIMEOUT:-1800}
+LOGS=${UXSM_VM_LOGS:-$(cd "$(dirname "$0")/.." && pwd)/build/vm/logs}
 VM_USER=uxsm
 
 DEFAULT_COMMAND='. /etc/os-release; echo "$PRETTY_NAME, kernel $(uname -r)"; id; sudo -n true && echo "sudo: ok"; echo "system: $(systemctl is-system-running --wait)"'
@@ -110,6 +113,20 @@ vm_ssh() {
         "$VM_USER@127.0.0.1" "$@"
 }
 
+# save_logs: keep the console and, if ssh still answers, the journal of a failed
+# machine. cleanup destroys the machine, and with it the only evidence of an
+# intermittent failure that a second run may not reproduce.
+save_logs() {
+    dir=$LOGS/$distro-$(date +%H%M%S)
+    mkdir -p "$dir"
+    cp "$work/console.log" "$dir/" 2>/dev/null || true
+    if ! vm_ssh --timeout 60 'sudo journalctl -b --no-pager -o short-monotonic' >"$dir/journal.txt" 2>/dev/null; then
+        rm -f "$dir/journal.txt"
+        echo "vm.sh[$distro]: no journal, ssh does not answer" >&2
+    fi
+    echo "vm.sh[$distro]: logs in $dir" >&2
+}
+
 # run_vm DISTRO: start the VM, run $command, and destroy it.
 run_vm() {
     distro=$1
@@ -159,6 +176,7 @@ EOF
         if [ $(( $(date +%s) - start )) -ge "$BOOT_TIMEOUT" ]; then
             echo "vm.sh[$distro]: no ssh after ${BOOT_TIMEOUT}s; last console lines:" >&2
             tail -n 20 "$work/console.log" >&2
+            save_logs
             return 1
         fi
         sleep 2
@@ -185,6 +203,7 @@ EOF
             echo "vm.sh[$distro]: the guest kernel panicked; last console lines:" >&2
             tail -n 20 "$work/console.log" >&2
         fi
+        save_logs
         return "$rc"
     fi
 

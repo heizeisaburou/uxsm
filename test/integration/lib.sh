@@ -17,6 +17,24 @@ wait_for() {
     done
 }
 
+# explain_no_session: graphical-session.target did not arrive in time. Wait up
+# to a minute more to tell a slow start from a stuck one, then show the session
+# units and the user's journal: the VM is destroyed once the test fails.
+explain_no_session() {
+    late_from=$(date +%s)
+    if wait_for 60 systemctl --user is-active graphical-session.target; then
+        echo "  late: graphical-session.target arrived $(( $(date +%s) - late_from ))s after the limit"
+    else
+        echo "  stuck: graphical-session.target still not active a minute after the limit"
+    fi
+    systemctl --user list-units --all --plain --no-legend 'uxsm-*' graphical-session.target |
+        sed 's/^/  unit: /'
+    # The system journal, filtered by user: cloud images keep a volatile
+    # journal, where `journalctl --user` may find no files of its own.
+    sudo -n journalctl --no-pager -o short-monotonic -n 40 _UID="$(id -u)" 2>/dev/null |
+        sed 's/^/  journal: /' || true
+}
+
 # wait_stopped SECONDS UNITS...: wait until none is active, activating, or
 # deactivating. `systemctl is-active` also fails for a deactivating unit even
 # while its ExecStopPost= may still be running.
@@ -97,8 +115,10 @@ run_session() {
     systemd-run --user --quiet --collect --unit=uxsm-it-session -E DISPLAY=:5 \
         env -u XDG_CURRENT_DESKTOP $assignments uxsm start "$@" "$entry"
     desktop=uxsm-desktop@$entry.service
-    wait_for 15 systemctl --user is-active graphical-session.target ||
+    wait_for 15 systemctl --user is-active graphical-session.target || {
+        explain_no_session
         fail "the session of $entry did not start with: $*"
+    }
 }
 
 # stop_session closes the session with uxsm stop and waits until nothing remains.
