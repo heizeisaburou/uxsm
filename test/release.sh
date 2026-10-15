@@ -13,11 +13,16 @@
 #
 #   test/release.sh [distros]
 #   test/release.sh --publish
+#   test/release.sh --list [distros]
 #
 #   distros    quick  ubuntu (default)
 #              pair   ubuntu and arch, the two most different
 #              all    ubuntu, debian, arch, fedora, and opensuse
 #              or a comma-separated list, which may name nixos: nixos,arch
+#
+# --list prints the distributions those names stand for, one per line, and
+# runs nothing: CI starts one job for each, and this way only this script
+# knows what quick, pair, and all mean.
 #
 # Runs stop at the first failure: a release needs all of them, so going on would
 # only spend time on runs that have to be repeated anyway.
@@ -51,6 +56,11 @@ cd "$(dirname "$0")/.."
 
 fast=${FAST:-}
 publish=
+list=
+if [ "${1:-}" = --list ]; then
+  list=1
+  shift
+fi
 if [ "${1:-}" = --publish ]; then
   publish=1
   shift
@@ -90,6 +100,11 @@ for d in $distros; do
     exit 2
   }
 done
+
+if [ -n "$list" ]; then
+  printf '%s\n' $distros
+  exit 0
+fi
 
 # Package version comes from the test/version.sh script.
 version=$(test/version.sh)

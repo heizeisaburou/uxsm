@@ -1,3 +1,4 @@
+---
 # Run the same checks as the pre-commit hook on every push, and the VM suite
 # where it matters: on main, on a version tag, and on demand. The VM job takes
 # minutes and needs KVM, which GitHub runners do have, so branches and pull
@@ -30,18 +31,46 @@ jobs:
       - run: make check
       - run: make build
 
-  vm:
-    name: packages and integration tests in virtual machines
+  distros:
+    name: distributions to test
     # On main and on a version tag, every distribution: that is what someone
     # looking at the repository sees. Elsewhere, only when asked.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.ref == 'refs/heads/main' ||
-      startsWith(github.ref, 'refs/tags/v')
+      github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    outputs:
+      list: ${{ steps.list.outputs.list }}
     steps:
       - uses: actions/checkout@v5
+      # release.sh says what quick, pair, and all mean, so they are defined in
+      # one place. NixOS has its own job below, with Nix instead of QEMU.
+      - id: list
+        env:
+          DISTROS: ${{ inputs.distros || 'all' }}
+        run: |
+          list=$(test/release.sh --list "$DISTROS" | grep -vx nixos | sed 's/.*/"&"/' | paste -sd, -)
+          echo "list=[$list]" >>"$GITHUB_OUTPUT"
+
+  vm:
+    name: ${{ matrix.distro }}, package and integration tests
+    needs: distros
+    # Asking for NixOS alone leaves no distribution for this job.
+    if: needs.distros.outputs.list != '[]'
+    # One job per distribution, each on its own runner with its own KVM: they
+    # run at the same time, and each one's result shows on its own instead of
+    # one failure hiding how the others went.
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: ${{ fromJSON(needs.distros.outputs.list) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      # The whole history and its tags: the package version comes from git
+      # describe, and a shallow clone without tags makes it 0.0.0.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       # VMs require KVM: without it, QEMU emulates the CPU and takes hours.
       - name: check KVM
         run: |
@@ -55,16 +84,22 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq qemu-system-x86 qemu-utils cloud-image-utils
-      - run: make test-vm DISTROS=${{ inputs.distros || 'all' }}
+      - run: make test-vm DISTROS=${{ matrix.distro }}
+      # The runner is gone when the job ends, and with it the run's log and
+      # the console and journal of a failed VM: keep them for two weeks.
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: logs-${{ matrix.distro }}
+          path: build/logs/
+          retention-days: 14
 
   nixos:
     name: the declared NixOS machine
     # Same trigger as the VM job: NixOS is not an extra, it is the sixth
     # distribution, and the only one where nothing sits where the others put it.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.ref == 'refs/heads/main' ||
-      startsWith(github.ref, 'refs/tags/v')
+      github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:

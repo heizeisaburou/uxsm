@@ -85,7 +85,7 @@ The definition is [`test/nixos/session.nix`](../test/nixos/session.nix) and is e
 
 ### Continuous integration and hooks
 
-[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs `make check` and `make build` on every push and pull request. The VM suite is available through `workflow_dispatch`, with the distribution set as an input. GitHub-hosted runners expose `/dev/kvm`; a full two-VM distribution run takes about four minutes there.
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs `make check` and `make build` on every push and pull request. On `main`, on version tags, and through `workflow_dispatch` (with the distribution set as an input), it also runs one VM job per distribution, each on its own runner, plus the NixOS machine; GitHub-hosted runners expose `/dev/kvm`, and a distribution takes three to five minutes there. The VM jobs check out the whole history so that packages carry the real version, and a failed job keeps its logs, including the console and journal of a failed VM, as an artifact for 14 days.
 
 The pre-commit hook runs `gofmt`, `go vet`, unit tests, and `sh -n` over shell scripts. The pre-push hook requires a successful `make release` for the exact commit pushed to `main`, `master`, or a `vX.Y.Z` tag. Enable both with:
 
