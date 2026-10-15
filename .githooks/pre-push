@@ -15,7 +15,7 @@ gated=
 
 # One line per reference: <local ref> <local sha> <remote ref> <remote sha>.
 while read -r _ local_sha remote_ref _; do
-  [ "$local_sha" != "$zero" ] || continue # borrar una referencia
+  [ "$local_sha" != "$zero" ] || continue # a deleted reference
   case "$remote_ref" in
   refs/heads/main | refs/heads/master | refs/tags/v[0-9]*) ;;
   *) continue ;;
