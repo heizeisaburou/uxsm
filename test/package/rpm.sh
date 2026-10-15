@@ -11,6 +11,7 @@
 set -eu
 cd "$HOME/uxsm"
 v=$(cat version)
+. "$HOME/uxsm/mirror.sh"
 
 if command -v dnf >/dev/null 2>&1; then
   pm_install() { sudo dnf -y -q install "$@" >/dev/null; }
@@ -18,7 +19,7 @@ else
   pm_install() {
     sudo zypper --non-interactive --quiet install --no-recommends "$@" >/dev/null
   }
-  sudo zypper --non-interactive --quiet refresh >/dev/null
+  mirror sudo zypper --non-interactive --quiet refresh >/dev/null
 fi
 
 mkdir -p "$HOME/rpmbuild/SOURCES" "$HOME/rpmbuild/SPECS"
@@ -28,7 +29,7 @@ tar -xzOf "uxsm-$v.tar.gz" "uxsm-$v/packaging/$UXSM_VM_DISTRO/uxsm.spec" >"$spec
 sed -i "s/^Version:\( *\).*/Version:\1$v/" "$spec"
 
 echo "== installing build dependencies"
-pm_install rpm-build
+mirror pm_install rpm-build
 # Install BuildRequires from the .spec, so a missing dependency fails here.
 buildrequires=$(rpmspec -q --buildrequires "$spec")
 set --

@@ -8,6 +8,7 @@ set -eu
 cd "$HOME/uxsm"
 v=$(cat version)
 . /etc/os-release
+. "$HOME/uxsm/mirror.sh"
 
 apt() {
   sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1 apt-get -y -qq "$@" >/dev/null
@@ -25,8 +26,10 @@ cp -r packaging/debian debian
 sed -i "1s/([^)]*)/($v-1~$ID$VERSION_ID)/" debian/changelog
 
 echo "== installing build dependencies"
-apt update
-apt install --no-install-recommends build-essential dpkg-dev
+# apt-get update exits with 0 when it cannot download an index, keeping the old
+# one; Error-Mode=any makes that an error, so mirror sees it and retries.
+mirror apt -o APT::Update::Error-Mode=any update
+mirror apt install --no-install-recommends build-essential dpkg-dev
 # Install Build-Depends from debian/control, so a missing dependency fails here.
 apt build-dep ./
 

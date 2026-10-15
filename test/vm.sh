@@ -16,6 +16,7 @@
 # command hung; the default is half an hour.
 # UXSM_VM_UPLOAD=dir copies dir to ~/uxsm on each machine before the command.
 # UXSM_VM_DOWNLOAD=dir copies ~/uxsm/out from each machine to dir after success.
+# UXSM_MIRROR_WAITS, if set, is passed on to the command (see test/mirror.sh).
 # UXSM_VM_LOGS=dir is where a failed machine leaves its console and journal; by
 # default, build/vm/logs in the repository.
 #
@@ -196,7 +197,7 @@ EOF
 
   # Return the command's exit status, not sed's.
   {
-    vm_ssh --timeout "$COMMAND_TIMEOUT" "export UXSM_VM_DISTRO=$distro; $command" 2>&1
+    vm_ssh --timeout "$COMMAND_TIMEOUT" "export UXSM_VM_DISTRO=$distro${UXSM_MIRROR_WAITS:+ UXSM_MIRROR_WAITS='$UXSM_MIRROR_WAITS'}; $command" 2>&1
     echo $? >"$work/status"
   } | sed -u "s/^/[$distro] /"
   rc=$(cat "$work/status")
@@ -224,11 +225,19 @@ EOF
   fi
 }
 
+# A command that exits with 75 could not download from the distribution
+# (test/mirror.sh): MIRROR, not FAILED, and vm.sh exits with 75 only when that
+# is all that went wrong, so callers can tell the two apart.
 summary=
 status=0
 for d in $distros; do
-  if run_vm "$d"; then
+  rc=0
+  run_vm "$d" || rc=$?
+  if [ "$rc" -eq 0 ]; then
     summary="$summary$d: ok\n"
+  elif [ "$rc" -eq 75 ]; then
+    summary="$summary$d: MIRROR\n"
+    [ "$status" -ne 0 ] || status=75
   else
     summary="$summary$d: FAILED\n"
     status=1

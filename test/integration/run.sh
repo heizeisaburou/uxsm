@@ -10,6 +10,7 @@
 
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
+. "$HOME/uxsm/mirror.sh"
 
 # Packages for this distribution live in packages/<distro>; vm.sh identifies it.
 # Globs select only the main package, not debug packages (uxsm-dbgsym, uxsm-debug,
@@ -19,8 +20,10 @@ packages=$HOME/uxsm/packages/$UXSM_VM_DISTRO
 if command -v apt-get >/dev/null 2>&1; then
   apt() { sudo DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1 apt-get -y -qq "$@" >/dev/null; }
   echo "== installing test dependencies"
-  apt update
-  apt install xvfb x11-utils bspwm
+  # apt-get update exits with 0 when it cannot download an index, keeping the
+  # old one; Error-Mode=any makes that an error, so mirror sees it and retries.
+  mirror apt -o APT::Update::Error-Mode=any update
+  mirror apt install xvfb x11-utils bspwm
   echo "== installing uxsm"
   # Use apt rather than dpkg -i: it resolves package Depends and fails if it cannot.
   apt install "$packages"/uxsm_*.deb
@@ -28,24 +31,24 @@ if command -v apt-get >/dev/null 2>&1; then
 elif command -v pacman >/dev/null 2>&1; then
   echo "== updating the system"
   # The package was built against an updated system, so this one must match.
-  sudo pacman -Sy --noconfirm --needed archlinux-keyring >/dev/null
-  sudo pacman -Su --noconfirm >/dev/null
+  mirror sudo pacman -Sy --noconfirm --needed archlinux-keyring >/dev/null
+  mirror sudo pacman -Su --noconfirm >/dev/null
   echo "== installing test dependencies"
-  sudo pacman -S --noconfirm --needed xorg-server-xvfb xorg-xprop bspwm >/dev/null
+  mirror sudo pacman -S --noconfirm --needed xorg-server-xvfb xorg-xprop bspwm >/dev/null
   echo "== installing uxsm"
   sudo pacman -U --noconfirm "$packages"/uxsm-[0-9]*.pkg.tar.zst >/dev/null
   files=$(pacman -Qlq uxsm)
 elif command -v dnf >/dev/null 2>&1; then
   echo "== installing test dependencies"
-  sudo dnf -y -q install xorg-x11-server-Xvfb xprop bspwm >/dev/null
+  mirror sudo dnf -y -q install xorg-x11-server-Xvfb xprop bspwm >/dev/null
   echo "== installing uxsm"
   sudo dnf -y -q install "$packages"/uxsm-[0-9]*.rpm >/dev/null
   files=$(rpm -ql uxsm)
 elif command -v zypper >/dev/null 2>&1; then
   zypper() { sudo zypper --non-interactive --quiet "$@" >/dev/null; }
-  zypper refresh
+  mirror zypper refresh
   echo "== installing test dependencies"
-  zypper install --no-recommends xorg-x11-server-Xvfb xprop bspwm
+  mirror zypper install --no-recommends xorg-x11-server-Xvfb xprop bspwm
   echo "== installing uxsm"
   # A package built here is unsigned.
   zypper install --allow-unsigned-rpm "$packages"/uxsm-[0-9]*.rpm
@@ -79,14 +82,27 @@ want=$(cat "$HOME/uxsm/version")
 }
 echo "uxsm $got"
 
+# A test that exits with 75 could not download what it needed (mirror.sh): it
+# counts as failed, but if nothing else failed the run says MIRROR, not FAILED.
 failed=0
+mirror_failed=0
 for t in "$here"/[0-9][0-9]-*.sh; do
   echo "== $(basename "$t")"
-  sh "$t" || failed=$((failed + 1))
+  rc=0
+  sh "$t" || rc=$?
+  if [ "$rc" -eq 75 ]; then
+    mirror_failed=$((mirror_failed + 1))
+  elif [ "$rc" -ne 0 ]; then
+    failed=$((failed + 1))
+  fi
 done
 
 if [ "$failed" -gt 0 ]; then
   echo "== $failed test(s) failed"
   exit 1
+fi
+if [ "$mirror_failed" -gt 0 ]; then
+  echo "== $mirror_failed test(s) could not download their dependencies"
+  exit 75
 fi
 echo "== all tests passed"

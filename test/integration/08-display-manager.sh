@@ -35,19 +35,27 @@ wait_no_session || fail "a session from an earlier test is still shutting down"
 
 echo "  installing LightDM"
 install_log=$HOME/uxsm-it-lightdm-install.log
+# install_lightdm keeps the package manager's output in a file, as it is long,
+# and shows its last lines on failure, so mirror's retries say why.
+install_lightdm() {
+  "$@" >"$install_log" 2>&1 || {
+    tail -n 5 "$install_log" | sed 's/^/    /' >&2
+    return 1
+  }
+}
 if command -v apt-get >/dev/null 2>&1; then
   # Debian and Ubuntu start a display manager when installing it; policy-rc.d
   # prevents that because this test starts it with its own configuration.
   printf '#!/bin/sh\nexit 101\n' | sudo tee /usr/sbin/policy-rc.d >/dev/null
   sudo chmod 755 /usr/sbin/policy-rc.d
-  sudo DEBIAN_FRONTEND=noninteractive apt-get -y -qq install lightdm >"$install_log" 2>&1 || true
+  mirror install_lightdm sudo DEBIAN_FRONTEND=noninteractive apt-get -y -qq install lightdm
   sudo rm -f /usr/sbin/policy-rc.d
 elif command -v pacman >/dev/null 2>&1; then
-  sudo pacman -S --noconfirm --needed lightdm >"$install_log" 2>&1 || true
+  mirror install_lightdm sudo pacman -S --noconfirm --needed lightdm
 elif command -v dnf >/dev/null 2>&1; then
-  sudo dnf -y -q install lightdm >"$install_log" 2>&1 || true
+  mirror install_lightdm sudo dnf -y -q install lightdm
 elif command -v zypper >/dev/null 2>&1; then
-  sudo zypper --non-interactive --quiet install --no-recommends lightdm >"$install_log" 2>&1 || true
+  mirror install_lightdm sudo zypper --non-interactive --quiet install --no-recommends lightdm
 fi
 sudo systemctl disable --now lightdm.service display-manager.service 2>/dev/null || true
 

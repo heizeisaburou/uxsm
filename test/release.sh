@@ -99,7 +99,7 @@ done | LC_ALL=C sort |
 for d in $distros; do
   stage=build/vm/build-$d
   mkdir -p "$stage"
-  cp "$out/version" "$out/$tarball" "$stage/"
+  cp "$out/version" "$out/$tarball" test/mirror.sh "$stage/"
   cp "test/package/$(recipe "$d").sh" "$stage/package.sh"
   # With FAST, the same VM builds the package and runs tests with it installed:
   # package.sh leaves it in ~/uxsm/out, where run.sh finds it and vm.sh
@@ -123,7 +123,7 @@ if [ -z "$fast" ]; then
   stage=build/vm/test
   mkdir -p "$stage/packages"
   cp -r test/integration "$stage/integration"
-  cp "$out/version" "$stage/"
+  cp "$out/version" test/mirror.sh "$stage/"
   for d in $distros; do
     cp -r "$out/$d" "$stage/packages/$d"
   done

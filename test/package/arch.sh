@@ -16,12 +16,13 @@
 set -eu
 cd "$HOME/uxsm"
 v=$(cat version)
+. "$HOME/uxsm/mirror.sh"
 
 echo "== updating the system"
 # An old image may contain a keyring that no longer signs current packages.
-sudo pacman -Sy --noconfirm --needed archlinux-keyring >/dev/null
-sudo pacman -Su --noconfirm >/dev/null
-sudo pacman -S --noconfirm --needed base-devel >/dev/null
+mirror sudo pacman -Sy --noconfirm --needed archlinux-keyring >/dev/null
+mirror sudo pacman -Su --noconfirm >/dev/null
+mirror sudo pacman -S --noconfirm --needed base-devel >/dev/null
 
 echo "== building uxsm $v"
 mkdir build

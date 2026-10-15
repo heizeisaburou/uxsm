@@ -1,5 +1,8 @@
 # Shared integration-test functions, loaded with `. lib.sh`.
 
+# mirror retries downloads from the distribution (see mirror.sh).
+. "$HOME/uxsm/mirror.sh"
+
 # ok and fail report each check; fail also terminates the test.
 ok() { echo "  ok: $*"; }
 fail() {
