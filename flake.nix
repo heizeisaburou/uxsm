@@ -15,10 +15,15 @@
     {
       # The nixpkgs package, built from this checkout instead of the release tag.
       packages = forAllSystems (pkgs: {
-        default = (pkgs.callPackage ./packaging/nix/package.nix { }).overrideAttrs {
+        default = (pkgs.callPackage ./packaging/nix/package.nix { }).overrideAttrs (old: {
           version = "dev";
           src = self;
-        };
+          # Its maintainer entry exists only in nixpkgs, once the package is
+          # there; outside it, lib.maintainers has no such name.
+          meta = old.meta // {
+            maintainers = [ ];
+          };
+        });
       });
 
       # A NixOS machine that logs into a uxsm session through LightDM. Run it
