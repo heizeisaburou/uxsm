@@ -68,17 +68,7 @@ sudo zypper refresh && sudo zypper install uxsm
 
 ### NixOS
 
-The package is pending merge in nixpkgs ([NixOS/nixpkgs#574216](https://github.com/NixOS/nixpkgs/pull/574216)). Once it is merged and has reached your channel, starting with nixos-unstable:
-
-```nix
-{ pkgs, ... }:
-{
-  environment.systemPackages = [ pkgs.uxsm ];
-  systemd.packages = [ pkgs.uxsm ];
-}
-```
-
-Until then, the flake in this repository builds it from `main`. Add it to the inputs of your system flake and pass it to your configuration through `specialArgs`:
+The flake in this repository builds uxsm from `main`. Add it to the inputs of your system flake and pass it to your configuration through `specialArgs`:
 
 ```nix
 # flake.nix
@@ -109,7 +99,7 @@ in
 }
 ```
 
-Either way, `systemd.packages` is what places the unit templates where each user's systemd finds them.
+`systemd.packages` is what places the unit templates where each user's systemd finds them.
 
 ### Other distributions
 
