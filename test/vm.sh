@@ -10,9 +10,9 @@
 # neither has to download what the other already did. test/vm.yaml says when
 # the image is updated (refresh) and when it is made again from a cloud image
 # downloaded anew (lifetime); a failed update also makes it again.
-# UXSM_VM_FRESH=1 skips it and starts from the cloud image, as CI does: a
-# runner would make the image only to throw it away. Freeing the disk is a
-# separate matter, for test/vm-cleanup.sh.
+# UXSM_VM_FRESH=1 skips it and starts from the cloud image, to rule the image
+# out when something fails. Freeing the disk is a separate matter, for
+# test/vm-cleanup.sh.
 #
 #   test/vm.sh [distros] [command]
 #
