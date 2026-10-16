@@ -259,7 +259,10 @@ run() {
       return
     fi
     note "build VM"
+    # From the build image, with the build dependencies already there; the
+    # recipe still installs them, so a new one is never missed.
     UXSM_VM_UPLOAD=$stage/build UXSM_VM_DOWNLOAD=$out/$d UXSM_VM_LOGS=$logdir \
+      UXSM_VM_LAYER='sh ~/uxsm/package.sh deps' \
       logged test/vm.sh "$d" 'sh ~/uxsm/package.sh' || return
     echo "$version $packaged" >"$keys/$d.package"
   fi

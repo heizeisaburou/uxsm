@@ -2,7 +2,8 @@
 # Build the VM distribution's .rpm package, Fedora or openSUSE, using its .spec
 # from packaging/ and rpmbuild. test/release.sh runs this after uploading
 # ~/uxsm/version and ~/uxsm/uxsm-<version>.tar.gz; packages are left in
-# the ~/uxsm/out directory.
+# the ~/uxsm/out directory. With `deps`, it only installs the build
+# dependencies.
 #
 # The .spec downloads the GitHub tag tarball. rpmbuild looks in SOURCES for the
 # final component of Source0, so setting the version and placing the tarball
@@ -39,6 +40,8 @@ done <<EOF
 $buildrequires
 EOF
 pm_install "$@"
+# `package.sh deps` stops here: test/vm.sh keeps the result as the build image.
+[ "${1:-}" != deps ] || exit 0
 
 echo "== building uxsm $v"
 rpmbuild -bb "$spec"

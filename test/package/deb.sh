@@ -2,7 +2,8 @@
 # Build the VM distribution's .deb package, Debian or Ubuntu, using
 # packaging/debian and dpkg-buildpackage. test/release.sh runs this after
 # uploading ~/uxsm/version and ~/uxsm/uxsm-<version>.tar.gz; the package is left
-# in the ~/uxsm/out directory.
+# in the ~/uxsm/out directory. With `deps`, it only installs the build
+# dependencies.
 
 set -eu
 cd "$HOME/uxsm"
@@ -32,6 +33,8 @@ mirror apt -o APT::Update::Error-Mode=any update
 mirror apt install --no-install-recommends build-essential dpkg-dev
 # Install Build-Depends from debian/control, so a missing dependency fails here.
 apt build-dep ./
+# `package.sh deps` stops here: test/vm.sh keeps the result as the build image.
+[ "${1:-}" != deps ] || exit 0
 
 echo "== building uxsm $v"
 dpkg-buildpackage -us -uc -b

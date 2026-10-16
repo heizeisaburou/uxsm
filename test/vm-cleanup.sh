@@ -5,8 +5,9 @@
 # it can also be run by hand.
 #
 # A prepared image was last used when vm.sh last started a machine from it,
-# which it records in <distro>.used; a cloud image, when it was downloaded,
-# since it is only read to make a prepared image right after. The SSH key
+# which it records in <distro>.used, and its build image in
+# <distro>.build.used; a cloud image, when it was downloaded, since vm.sh
+# deletes it once the prepared image is made and only UXSM_VM_FRESH keeps one. The SSH key
 # stays: it takes nothing, and a new one would lock every run out of the
 # prepared images that are left.
 
@@ -41,7 +42,8 @@ for used in "$VM_CACHE"/prepared/*.used "$VM_CACHE"/prepared/*.qcow2; do
     rm -f "$d".*
   fi
 done
-for image in "$VM_CACHE"/*.img "$VM_CACHE"/*.qcow2; do
+# A .part is a download that was cut short; the next one starts over.
+for image in "$VM_CACHE"/*.img "$VM_CACHE"/*.qcow2 "$VM_CACHE"/*.part; do
   [ -f "$image" ] || continue
   if [ "$(stat -c %Y "$image")" -lt "$limit" ]; then
     echo "vm-cleanup.sh: deleting the cloud image $image"

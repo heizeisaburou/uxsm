@@ -4,12 +4,21 @@
 #
 # Each machine starts from a prepared image of its distribution, kept in the
 # cache: the official cloud image, updated, with the test dependencies
-# installed and LightDM downloaded (test/prepare.sh). A machine writes to a
-# temporary layer over it, which is thrown away afterwards, so the build VM and
-# the clean test VM of release.sh start from the same untouched image and
-# neither has to download what the other already did. test/vm.yaml says when
+# installed and LightDM installed but masked (test/prepare.sh). A machine
+# writes to a temporary layer over it, which is thrown away afterwards, so
+# every machine starts from the same untouched image and none has to download
+# what another already did. test/vm.yaml says when
 # the image is updated (refresh) and when it is made again from a cloud image
 # downloaded anew (lifetime); a failed update also makes it again.
+# The cloud image goes once the prepared image is made: remaking that one
+# downloads the cloud image anew anyway.
+#
+# UXSM_VM_LAYER=command keeps a second image over the prepared one: the
+# prepared image after the command, run with UXSM_VM_UPLOAD in ~/uxsm. The
+# machine starts from it instead, and it is made again whenever the prepared
+# image changes. test/release.sh uses it for the build VM, with the build
+# dependencies, so that only the clean test VM goes without them.
+#
 # UXSM_VM_FRESH=1 skips it and starts from the cloud image, as CI does: a
 # runner would make the image only to throw it away, and that was measured to
 # cost more than it saves. Freeing the disk is a separate matter, for
@@ -276,6 +285,59 @@ compact() {
   mv "$2.compact" "$2"
 }
 
+# run_layer DISK: boot DISK, upload UXSM_VM_UPLOAD, run UXSM_VM_LAYER, drop
+# what it downloaded and the upload, and power it off.
+run_layer() {
+  work=$(mktemp -d)
+  start_vm "$1" || {
+    cleanup
+    return 1
+  }
+  if [ -n "${UXSM_VM_UPLOAD:-}" ]; then
+    tar -C "$UXSM_VM_UPLOAD" -cf - . | vm_ssh 'mkdir -p ~/uxsm && tar -C ~/uxsm -xf -'
+  fi
+  {
+    vm_ssh --timeout "$COMMAND_TIMEOUT" "export UXSM_VM_DISTRO=$distro${UXSM_MIRROR_WAITS:+ UXSM_MIRROR_WAITS='$UXSM_MIRROR_WAITS'}; $UXSM_VM_LAYER" 2>&1
+    echo $? >"$work/status"
+  } | sed -u "s/^/[$distro] layer: /"
+  lrc=$(cat "$work/status")
+  if [ "$lrc" -eq 0 ]; then
+    # As in prepare.sh: no downloaded packages, and the free blocks handed back.
+    { vm_ssh 'rm -rf ~/uxsm ~/rpmbuild &&
+        sudo sh -c "apt-get clean 2>/dev/null; rm -rf /var/cache/pacman/pkg/*; fstrim --all"' &&
+      stop_vm; } || lrc=1
+  else
+    save_logs
+  fi
+  cleanup
+  return "$lrc"
+}
+
+# layer DISTRO: set $layered to the distribution's build image, made from the
+# prepared image if it is missing or the prepared image changed since.
+layer() {
+  d=$1
+  layered=$PREPARED/$d.build.qcow2
+  base=$(cat "$PREPARED/$d.updated")
+  if [ -f "$layered" ] && [ "$(cat "$PREPARED/$d.build.based" 2>/dev/null)" = "$base" ]; then
+    return
+  fi
+  echo "vm.sh[$d]: making the build image" >&2
+  rm -f "$PREPARED/$d.build".*
+  new=$PREPARED/$d.build.new.qcow2
+  qemu-img create -q -f qcow2 -F qcow2 -b "$prepared" "$new"
+  prc=0
+  run_layer "$new" || prc=$?
+  if [ "$prc" -ne 0 ]; then
+    rm -f "${new:?}"
+    return "$prc"
+  fi
+  # It holds only what the command changed, and fstrim gave back what it
+  # deleted, so unlike the prepared image it needs no compacting.
+  mv "$new" "$layered"
+  echo "$base" >"$PREPARED/$d.build.based"
+}
+
 # prepare DISTRO: set $prepared to the distribution's prepared image, making or
 # updating it first if it is due; see the header.
 prepare() {
@@ -297,6 +359,7 @@ prepare() {
     prc=0
     run_prepare "$update" || prc=$?
     if [ "$prc" -eq 0 ]; then
+      rm -f "$PREPARED/$d.build".*
       compact "$update" "$prepared" || prc=$?
       rm -f "${update:?}"
       [ "$prc" -eq 0 ] || return "$prc"
@@ -325,9 +388,11 @@ prepare() {
     return "$prc"
   fi
   prc=0
+  rm -f "$PREPARED/$d.build".*
   compact "$new" "$prepared" || prc=$?
   rm -f "${new:?}"
   [ "$prc" -eq 0 ] || return "$prc"
+  rm -f "$image"
   date +%s >"$PREPARED/$d.built"
   date +%s >"$PREPARED/$d.updated"
 }
@@ -345,6 +410,11 @@ run_vm() {
     backing=$prepared
     # When it was last used, for test/vm-cleanup.sh.
     touch "$PREPARED/$distro.used"
+    if [ -n "${UXSM_VM_LAYER:-}" ]; then
+      layer "$distro" || return
+      backing=$layered
+      touch "$PREPARED/$distro.build.used"
+    fi
   fi
 
   work=$(mktemp -d)

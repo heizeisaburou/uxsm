@@ -58,7 +58,9 @@ digraph build_tests {
     choose [shape=note, fillcolor="#ede9fe", color="#7c3aed",
             label="DISTROS=quick → Ubuntu\nDISTROS=pair  → Ubuntu + Arch\nDISTROS=all     → all five"];
     prepared [shape=cylinder, fillcolor="#fef3c7", color="#ca8a04",
-              label="0 · Prepared image (test/prepare.sh)\nCloud image, updated, with the test dependencies\nand LightDM installed but masked\nUpdated every 12 h, made anew every 7 days\nNo build dependencies: the test VM starts from it too"];
+              label="0 · Prepared image (test/prepare.sh)\nCloud image, updated, with the test dependencies\nand LightDM installed but masked\nUpdated every 12 h, made anew every 7 days\nfrom a cloud image downloaded anew\nNo build dependencies: the test VM starts from it"];
+    buildimg [shape=cylinder, fillcolor="#fef3c7", color="#ca8a04",
+              label="Build image\nA layer over the prepared image with the build dependencies\nMade again whenever the prepared image changes"];
     cleanup [shape=note, fillcolor="#fef3c7", color="#ca8a04",
              label="make vm-cleanup: a user timer deletes\nimages unused for 7 days (test/vm.yaml)"];
     package [shape=folder, fillcolor="#ede9fe", color="#7c3aed",
@@ -73,7 +75,8 @@ digraph build_tests {
 
     choose -> testvm [style=dashed, arrowhead=none];
     testvm -> prepared;
-    prepared -> package [label=" temporary layer "];
+    prepared -> buildimg;
+    buildimg -> package [label=" temporary layer "];
     prepared -> install [label=" temporary layer "];
     package -> install -> integration -> artifacts;
     cleanup -> prepared [style=dashed, arrowhead=none];
