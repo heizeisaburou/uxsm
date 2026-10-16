@@ -51,7 +51,7 @@ make release    # strict VM path for every distribution
 1. a build VM creates the native package with the real recipe under `packaging/`; and
 2. a clean VM installs that package through the distribution package manager and runs the suite.
 
-Runs go two at a time (`jobs` in [`test/vm.yaml`](../test/vm.yaml), set by hand rather than taken from the machine), each with its own SSH port, and after the first failure no further run starts. `make release` runs NixOS first, as it catches what the others cannot and takes under a minute, then the slowest first, so that the last run to start is a short one. Ubuntu and Arch side by side took 2:45 against about 3:45 one after the other. A package is rebuilt only when the files that go into it change, so the installation and the tests can be adjusted without building from scratch; a new commit always rebuilds it, as its version carries the commit hash.
+Runs go two at a time (`jobs` in [`test/vm.yaml`](../test/vm.yaml), set by hand rather than taken from the machine), each with its own SSH port, and after the first failure no further run starts. `make release` runs NixOS first, as it catches what the others cannot and takes under a minute, then the slowest first, so that the last run to start is a short one. A package is rebuilt only when the files that go into it change, so the installation and the tests can be adjusted without building from scratch; a new commit always rebuilds it, as its version carries the commit hash.
 
 Both VMs start from a prepared image of their distribution, kept in `~/.cache/uxsm/vm`: the official cloud image, updated, with the test dependencies installed by [`test/prepare.sh`](../test/prepare.sh), LightDM among them but masked, so that the tests before the display manager's see a machine without one. Each VM writes to a temporary layer over it, so the clean VM stays clean and neither downloads what the other already did. Build dependencies stay out of the image, as they would hide a runtime dependency the package forgot. Each update drops the downloaded packages and writes the image anew without the blocks the guest freed, so it does not grow with every update. The build VM starts from a second image, a layer over that one with the build dependencies, made again whenever the prepared image changes: the recipe still installs them, which then takes a few seconds, so a new dependency is never missed. The cloud image goes once the prepared image is made, as remaking that one downloads it anew anyway. [`test/vm.yaml`](../test/vm.yaml) says when an image is updated (12 hours) and when it is made again from a cloud image downloaded anew (7 days); `UXSM_VM_FRESH=1` starts from the cloud image instead.
 
@@ -77,9 +77,31 @@ The scripts under `test/integration` use Xvfb and normally replace the display m
 
 The supported matrix is Ubuntu 24.04, Debian 13, Arch Linux, Fedora 43, and openSUSE Tumbleweed. `DISTROS=quick` selects Ubuntu, `pair` selects Ubuntu and Arch, and `all` selects all five.
 
-With `FAST=1`, one VM builds and tests the package. On Ubuntu this reduced a measured run from 4:07 to 3:37, but it cannot detect undeclared runtime dependencies because build dependencies remain installed. Use it while developing, not when publishing. `make release` always uses separate build and test VMs.
+With `FAST=1`, one VM builds and tests the package, saving a boot, but it cannot detect undeclared runtime dependencies because build dependencies remain installed. Use it while developing, not when publishing. `make release` always uses separate build and test VMs.
 
 `make release` runs NixOS and the five distributions. A run that passes leaves a key in `build/keys`, valid while the tested files stay the same and for 24 hours, since Arch and Tumbleweed change daily. Runs with a valid key are skipped, so after a failure only what failed is repeated, and one distribution passing never invalidates another. Once all six have a key, `build/release` becomes `releases/latest`. A `FAST=1` run leaves no key. `make release FORCE=1` ignores keys and built packages and makes NixOS boot again, which nix otherwise skips while nothing it depends on changes: that measures the whole release.
+
+### How long it takes
+
+Measured on 2026-10-16. Locally, on a 12-core machine with 31 GB and an NVMe disk, with the images up to date and nothing reused (`make release FORCE=1`), the whole release takes about 3 minutes 20 seconds, two runs at a time:
+
+| NixOS | Debian | Arch | Fedora | Ubuntu | openSUSE |
+| ----- | ------ | ---- | ------ | ------ | -------- |
+| 0:42  | 1:14   | 1:20 | 1:02   | 1:16   | 1:00     |
+
+Most of what remains is booting the VMs and the integration suite, about 30 to 40 seconds per distribution. What adds to it, and when:
+
+- **Every 12 hours**, the first run of each distribution updates its prepared image, about 30 to 40 seconds, and makes its build image again, about 10 more.
+- **Every 7 days**, the prepared image is made again from a cloud image downloaded anew: a few minutes per distribution, depending on the mirror.
+- **A slow mirror** shows in the build and test dependencies and the updates; the build image keeps the largest download, the build dependencies, out of every run.
+
+What makes it shorter:
+
+- **A run with a valid key is skipped** (24 hours, same files), so after a failure only that distribution runs again; once all six have a key, `make release` only promotes `releases/latest`.
+- **A package is not rebuilt** while the files that go into it stay the same.
+- **NixOS is not run again** by nix while nothing it depends on changes: about 40 seconds less.
+
+In CI, the five distributions and NixOS run at the same time, each on its own runner from the cloud images: about 5 minutes for the whole run, 3 to 5 for each distribution.
 
 ### NixOS
 
@@ -91,7 +113,7 @@ The definition is [`test/nixos/session.nix`](../test/nixos/session.nix) and is e
 
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs `make check` and `make build` on every push and pull request. On `main`, on version tags, and through `workflow_dispatch` (with the distribution set as an input), it also runs one VM job per distribution, each on its own runner, plus the NixOS machine; GitHub-hosted runners expose `/dev/kvm`, and a distribution takes three to five minutes there. The VM jobs check out the whole history so that packages carry the real version, and every job keeps its logs, passed or failed, including the console and journal of a failed VM, as an artifact for 14 days.
 
-The VM jobs start from the cloud images, as a runner would make a prepared image only to throw it away: measured on 2026-10-16, making it there took the run from 5m17s to 6m51s, since it updates the whole system. For a series of pushes close together, `gh variable set UXSM_VM_CACHE --body 1` keeps the prepared images in GitHub's cache between runs, and `gh variable delete UXSM_VM_CACHE` turns that off again; the next run then empties the cache. It is off by default because the images take several gigabytes of the repository's 10 GB.
+The VM jobs start from the cloud images, as a runner would make a prepared image only to throw it away, and making one updates the whole system, which costs more there than it saves (the measurements are in the workflow). For a series of pushes close together, `gh variable set UXSM_VM_CACHE --body 1` keeps the prepared images in GitHub's cache between runs, and `gh variable delete UXSM_VM_CACHE` turns that off again; the next run then empties the cache. It is off by default because the images take several gigabytes of the repository's 10 GB.
 
 The pre-commit hook runs `gofmt`, `go vet`, unit tests, and `sh -n` over shell scripts. The pre-push hook requires a successful `make release` for the exact commit pushed to `main`, `master`, or a `vX.Y.Z` tag; without one it stops and asks for it, rather than running it, because the remote closes the connection git opened before a release that long finishes. Enable both with:
 
