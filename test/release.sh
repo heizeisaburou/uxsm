@@ -43,6 +43,10 @@
 # steps, failures, and a summary. The ten latest runs of each distribution are
 # kept, and nothing there is uploaded anywhere.
 #
+# With FORCE=1, every run happens and every package is built, keys or not,
+# and NixOS boots again rather than reusing what nix kept: for measuring the
+# whole release, or for checking it from scratch.
+#
 # With FAST=1, the package is built and tested in the same VM, saving one boot
 # and one dependency installation. This loses the clean-machine guarantee: a
 # clean VM has only the package and test requirements, exposing undeclared
@@ -64,6 +68,7 @@ case "$jobs" in
 esac
 
 fast=${FAST:-}
+force=${FORCE:-}
 publish=
 list=
 if [ "${1:-}" = --list ]; then
@@ -156,12 +161,14 @@ packaged=$(sources |
 
 # has_package DISTRO: its package was built from these sources.
 has_package() {
+  [ -z "$force" ] || return 1
   [ "$(cat "$keys/$1.package" 2>/dev/null)" = "$version $packaged" ] &&
     [ -n "$(find "$out/$1" -type f 2>/dev/null)" ]
 }
 
 # has_passed DISTRO: its key is valid; prints when it was made.
 has_passed() {
+  [ -z "$force" ] || return 1
   [ -f "$keys/$1.passed" ] || return 1
   read -r key_version key_tested key_time <"$keys/$1.passed"
   [ "$key_version" = "$version" ] && [ "$key_tested" = "$tested" ] &&

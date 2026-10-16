@@ -112,19 +112,27 @@ uninstall:
 DISTROS ?= quick
 FAST ?=
 test-vm:
-	FAST=$(FAST) test/release.sh $(DISTROS)
+	FAST=$(FAST) FORCE=$(FORCE) test/release.sh $(DISTROS)
 
 # The NixOS test declares a complete machine—LightDM, autologin, bspwm, and the
 # session entry—and starts it through the nixpkgs test framework. It requires Nix
 # and its daemon; flake.lock pins nixpkgs for identical results on every machine.
+# Nix keeps the result and does not run the test again while nothing it depends
+# on changes; FORCE=1 deletes that result first, so the machine boots again.
 NIX ?= nix
+NIXFLAGS = --extra-experimental-features "nix-command flakes"
+FORCE ?=
 test-nixos:
 	@command -v $(NIX) >/dev/null || { \
 		echo "make test-nixos needs nix: install it and enable its daemon" >&2; \
 		exit 1; \
 	}
-	$(NIX) build --extra-experimental-features "nix-command flakes" \
-		'.#checks.$(shell $(NIX) eval --extra-experimental-features "nix-command flakes" --impure --raw --expr builtins.currentSystem).session' -L
+	@check='.#checks.$(shell $(NIX) eval $(NIXFLAGS) --impure --raw --expr builtins.currentSystem).session'; \
+	if [ -n "$(FORCE)" ] && out=$$($(NIX) path-info $(NIXFLAGS) "$$check" 2>/dev/null); then \
+		rm -f result; \
+		$(NIX) store delete $(NIXFLAGS) "$$out" >/dev/null; \
+	fi; \
+	$(NIX) build $(NIXFLAGS) "$$check" -L
 
 # The VM images of test/vm.sh take gigabytes, and it only ever replaces them.
 # vm-cleanup installs a systemd --user timer that runs test/vm-cleanup.sh from
@@ -150,7 +158,7 @@ vm-cleanup-remove:
 # NixOS is not optional — a release is not a release without it — so a machine
 # without nix fails there instead of publishing five sixths of the tests.
 release:
-	test/release.sh --publish
+	FORCE=$(FORCE) test/release.sh --publish
 
 # Publish a version: the tag, the push, and the GitHub release with the
 # packages, both tarballs, and their checksums. TAG is the version, vX.Y.Z.

@@ -79,7 +79,7 @@ The supported matrix is Ubuntu 24.04, Debian 13, Arch Linux, Fedora 43, and open
 
 With `FAST=1`, one VM builds and tests the package. On Ubuntu this reduced a measured run from 4:07 to 3:37, but it cannot detect undeclared runtime dependencies because build dependencies remain installed. Use it while developing, not when publishing. `make release` always uses separate build and test VMs.
 
-`make release` runs NixOS and the five distributions. A run that passes leaves a key in `build/keys`, valid while the tested files stay the same and for 24 hours, since Arch and Tumbleweed change daily. Runs with a valid key are skipped, so after a failure only what failed is repeated, and one distribution passing never invalidates another. Once all six have a key, `build/release` becomes `releases/latest`. A `FAST=1` run leaves no key.
+`make release` runs NixOS and the five distributions. A run that passes leaves a key in `build/keys`, valid while the tested files stay the same and for 24 hours, since Arch and Tumbleweed change daily. Runs with a valid key are skipped, so after a failure only what failed is repeated, and one distribution passing never invalidates another. Once all six have a key, `build/release` becomes `releases/latest`. A `FAST=1` run leaves no key. `make release FORCE=1` ignores keys and built packages and makes NixOS boot again, which nix otherwise skips while nothing it depends on changes: that measures the whole release.
 
 ### NixOS
 
