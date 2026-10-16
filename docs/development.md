@@ -93,7 +93,7 @@ The definition is [`test/nixos/session.nix`](../test/nixos/session.nix) and is e
 
 Each VM job makes the prepared image and starts both VMs from it, which is faster than each VM updating and installing on its own even though the image goes with the runner. For a series of pushes close together, `gh variable set UXSM_VM_CACHE --body 1` keeps the prepared images in GitHub's cache between runs, and `gh variable delete UXSM_VM_CACHE` turns that off again; the next run then empties the cache. It is off by default because the images take several gigabytes of the repository's 10 GB.
 
-The pre-commit hook runs `gofmt`, `go vet`, unit tests, and `sh -n` over shell scripts. The pre-push hook requires a successful `make release` for the exact commit pushed to `main`, `master`, or a `vX.Y.Z` tag. Enable both with:
+The pre-commit hook runs `gofmt`, `go vet`, unit tests, and `sh -n` over shell scripts. The pre-push hook requires a successful `make release` for the exact commit pushed to `main`, `master`, or a `vX.Y.Z` tag; without one it stops and asks for it, rather than running it, because the remote closes the connection git opened before a release that long finishes. Enable both with:
 
 ```sh
 make hooks

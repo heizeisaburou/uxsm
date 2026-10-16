@@ -3,8 +3,10 @@
 # pushed commit must have passed `make release`: build packages and test them
 # installed on every distribution. Other branches are pushed without this gate.
 #
-# releases/latest/version records the built commit, so a release already run for
-# this commit is not repeated. Otherwise it runs now and the push waits.
+# releases/latest/version records the built commit. Without a release for this
+# commit, the push stops and asks for one: git opens the connection to the
+# remote before running this hook, and the remote drops it while a release of
+# a quarter of an hour runs, so a release run from here loses the push.
 # `git push --no-verify` skips it.
 
 set -eu
@@ -44,6 +46,5 @@ if [ "$(cat releases/latest/version 2>/dev/null)" = "$version" ]; then
   exit 0
 fi
 
-echo "pre-push: releases/latest is not uxsm $version; running make release" >&2
-# stdin is the reference list, not a terminal.
-make release </dev/null
+echo "pre-push: releases/latest is not uxsm $version; run make release, then push again" >&2
+exit 1
