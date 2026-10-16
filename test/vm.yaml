@@ -16,3 +16,8 @@ lifetime: 7d
 # used since the computer started. vm.sh itself only ever replaces them, so
 # this is what frees the disk; it needs `make vm-cleanup`.
 cleanup: 7d
+
+# How many distributions test/release.sh runs at a time, each with its own two
+# VMs of 2 CPUs and 2 GB, one after the other. Set by hand rather than taken
+# from the machine: measured on 2026-10-16, see docs/development.md.
+jobs: 2

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Build uxsm packages and test them after installation, in disposable virtual
-# machines through the test/vm.sh runner, one distribution at a time. Each
-# distribution is a run of its own:
+# machines through the test/vm.sh runner, as many distributions at a time as
+# jobs in test/vm.yaml says. Each distribution is a run of its own:
 #
 #   1. Build its package in a VM of that distribution with its packaging tool,
 #      under build/release/<distro>, unless the package there was built from
@@ -53,6 +53,15 @@
 
 set -eu
 cd "$(dirname "$0")/.."
+. test/vm-config.sh
+
+jobs=$(setting jobs)
+case "$jobs" in
+'' | *[!0-9]* | 0)
+  echo "release.sh: jobs=$jobs is not a number of runs such as 2" >&2
+  exit 2
+  ;;
+esac
 
 fast=${FAST:-}
 publish=
@@ -73,8 +82,10 @@ if [ "${1:-}" = --publish ]; then
     exit 2
   }
   # NixOS goes first: it is the one that catches what the other five cannot,
-  # since nothing there sits where every other distribution puts it.
-  set -- nixos,ubuntu,debian,arch,fedora,opensuse
+  # since nothing there sits where every other distribution puts it, and it
+  # takes under a minute. Then the slowest first (measured on 2026-10-16), so
+  # that with runs side by side the last one to start is a short one.
+  set -- nixos,debian,arch,fedora,ubuntu,opensuse
 fi
 
 case "${1:-quick}" in
@@ -160,7 +171,7 @@ has_passed() {
 
 # note TEXT: a step of the run, timed, in the log and on the terminal.
 note() {
-  line="$(date +%T) == $*"
+  line="$(date +%T) [$d] == $*"
   printf '%s\n' "$line" >>"$log"
   printf '%s\n' "$line" >&2
 }
@@ -269,18 +280,11 @@ else
   echo "== uxsm $version on $distros" >&2
 fi
 
-summary=
-status=0
-for d in $distros; do
-  if [ -n "$publish" ] && since=$(has_passed "$d"); then
-    summary="$summary$d: ok (key from $since)\n"
-    continue
-  fi
-  if [ "$status" -ne 0 ]; then
-    summary="$summary$d: not run\n"
-    continue
-  fi
-
+# one DISTRO: its run, with its log, its times, and its result in
+# $results/DISTRO, printed as one block so that runs side by side do not mix
+# their summaries.
+one() {
+  d=$1
   logdir=$logs/$d/$(date +%Y%m%d-%H%M%S)
   mkdir -p "$logdir"
   log=$logdir/run.log
@@ -295,18 +299,69 @@ for d in $distros; do
   note "$d: $result"
 
   durations "$log" >"$logdir/times"
-  echo "== $d: $result, log in $logdir" >&2
-  sed 's/^/  /' "$logdir/times" >&2
-  if [ "$rc" -ne 0 ]; then
-    echo "== last lines of the log:" >&2
-    tail -n 30 "$log" | sed 's/^/  /' >&2
-    status=$rc
-  fi
-  summary="$summary$d: $result\n"
+  {
+    echo "== $d: $result, log in $logdir"
+    sed 's/^/  /' "$logdir/times"
+    if [ "$rc" -ne 0 ]; then
+      echo "== last lines of the $d log:"
+      tail -n 30 "$log" | sed 's/^/  /'
+    fi
+  } >"$logdir/block"
+  cat "$logdir/block" >&2
+  rm -f "$logdir/block"
+  echo "$rc $result" >"$results/$d"
 
   # Keep the ten latest runs of this distribution.
   find "$logs/$d" -mindepth 1 -maxdepth 1 -type d | LC_ALL=C sort -r | tail -n +11 | xargs -r rm -rf
+}
+
+# Up to $jobs runs at a time. Each one takes a token from a FIFO before it
+# starts and puts it back when it ends; the token is the SSH port of its VMs,
+# so two machines never share one. After a failure no further run starts, and
+# the ones under way finish: stopping them would only waste what they did.
+results=$(mktemp -d)
+mkfifo "$results/tokens"
+exec 8<>"$results/tokens"
+i=0
+while [ "$i" -lt "$jobs" ]; do
+  echo $((2222 + i)) >&8
+  i=$((i + 1))
 done
+for d in $distros; do
+  if [ -n "$publish" ] && since=$(has_passed "$d"); then
+    echo "0 ok (key from $since)" >"$results/$d"
+    continue
+  fi
+  read -r port <&8
+  if [ -f "$results/stop" ]; then
+    echo "$port" >&8
+    continue
+  fi
+  (
+    UXSM_VM_SSH_PORT=$port
+    export UXSM_VM_SSH_PORT
+    # Whatever happens to the run, the token goes back, or the loop would
+    # wait for it forever.
+    one "$d" || echo "1 FAILED" >"$results/$d"
+    read -r rc _ <"$results/$d" || rc=1
+    [ "$rc" -eq 0 ] || : >"$results/stop"
+    echo "$port" >&8
+  ) &
+done
+wait
+
+summary=
+status=0
+for d in $distros; do
+  if [ -f "$results/$d" ]; then
+    read -r rc result <"$results/$d"
+  else
+    rc=0 result="not run"
+  fi
+  [ "$status" -ne 0 ] || status=$rc
+  summary="$summary$d: $result\n"
+done
+rm -rf "$results"
 
 printf '\n%b' "$summary" >&2
 

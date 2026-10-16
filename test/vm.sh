@@ -395,10 +395,14 @@ flock -s 9
 
 # A new key cannot open the prepared images made with the old one, so they go
 # with it.
+# With runs side by side, only one of them makes it.
+exec 7>>"$CACHE/key.lock"
+flock 7
 if [ ! -f "$KEY" ]; then
   ssh-keygen -q -t ed25519 -N '' -C uxsm-vm -f "$KEY"
   rm -rf "${PREPARED:?}"
 fi
+flock -u 7
 
 # A command that exits with 75 could not download from the distribution
 # (test/mirror.sh): MIRROR, not FAILED, and vm.sh exits with 75 only when that
