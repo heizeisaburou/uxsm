@@ -15,7 +15,7 @@
 # This deliberately runs last because it brings LightDM in, while earlier tests
 # verify uxsm on a machine without a display manager. The prepared images of
 # test/vm.sh have it installed and masked, so here it is only unmasked; a
-# machine started from a cloud image (UXSM_VM_FRESH) installs it.
+# machine started from a cloud image (UXSM_VM_FRESH, as in CI) installs it.
 
 set -eu
 . "$(dirname "$0")/lib.sh"

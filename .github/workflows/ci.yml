@@ -83,13 +83,17 @@ jobs:
     permissions:
       contents: read
       actions: write
-    # Each job makes the prepared image of test/vm.sh, and both VMs, the build
-    # and the clean test one, start from it: even thrown away with the runner,
-    # that is faster than each VM updating and installing on its own (Ubuntu,
-    # 4m18s against 5m58s). The repository variable UXSM_VM_CACHE also keeps
-    # the image in GitHub's cache, for a series of pushes close together: it
-    # is off by default because it takes gigabytes of the repository's 10 GB,
-    # and turning it off empties it (the distros job).
+    env:
+      # A runner starts empty and is thrown away, so the VMs start from the
+      # cloud image (UXSM_VM_FRESH) rather than from a prepared image made only
+      # to be thrown away with it. Both were measured on 2026-10-16: making it
+      # updates the whole system, and the run went from 5m17s to 6m51s, with
+      # Fedora from 3.1 to 6.7 minutes; only Ubuntu and openSUSE gained. The
+      # repository variable UXSM_VM_CACHE keeps the images in GitHub's cache
+      # instead, for a series of pushes close together: it is off by default
+      # because it takes gigabytes of the repository's 10 GB, and turning it
+      # off empties it (the distros job).
+      UXSM_VM_FRESH: ${{ !vars.UXSM_VM_CACHE && '1' || '' }}
     steps:
       # The whole history and its tags: the package version comes from git
       # describe, and a shallow clone without tags makes it 0.0.0.
