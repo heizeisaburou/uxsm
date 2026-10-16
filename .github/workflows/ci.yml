@@ -38,10 +38,23 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: write
     outputs:
       list: ${{ steps.list.outputs.list }}
     steps:
       - uses: actions/checkout@v5
+      # With UXSM_VM_CACHE off, nothing reads the prepared images, so they go
+      # now instead of taking up the repository's cache until GitHub evicts
+      # them.
+      - if: ${{ !vars.UXSM_VM_CACHE }}
+        name: empty the VM cache
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh cache list --key vm- --limit 100 --json id --jq '.[].id' |
+            xargs -r -n1 gh cache delete
       # release.sh says what quick, pair, and all mean, so they are defined in
       # one place. NixOS has its own job below, with Nix instead of QEMU.
       - id: list
@@ -65,6 +78,19 @@ jobs:
         distro: ${{ fromJSON(needs.distros.outputs.list) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    # Deleting the previous cache entry of a distribution needs write access
+    # to the repository's caches.
+    permissions:
+      contents: read
+      actions: write
+    env:
+      # A runner starts empty and is thrown away, so making a prepared image
+      # there (test/vm.sh) would only add a whole system update to every job.
+      # The repository variable UXSM_VM_CACHE keeps the images in GitHub's
+      # cache instead, for a series of pushes close together: it is off by
+      # default because it takes gigabytes of the repository's 10 GB, and
+      # turning it off empties it (the distros job).
+      UXSM_VM_FRESH: ${{ !vars.UXSM_VM_CACHE && '1' || '' }}
     steps:
       # The whole history and its tags: the package version comes from git
       # describe, and a shallow clone without tags makes it 0.0.0.
@@ -84,7 +110,45 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq qemu-system-x86 qemu-utils cloud-image-utils
+      # Only the key and the prepared image: the cloud image is not needed once
+      # the image is made, and leaving it out saves space in the cache.
+      - if: vars.UXSM_VM_CACHE
+        id: restore
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.cache/uxsm/vm/key
+            ~/.cache/uxsm/vm/key.pub
+            ~/.cache/uxsm/vm/prepared
+          key: vm-${{ matrix.distro }}-${{ github.run_id }}
+          restore-keys: vm-${{ matrix.distro }}-
       - run: make test-vm DISTROS=${{ matrix.distro }}
+      # An entry cannot be overwritten, so an updated image is saved under a
+      # new key, the time of its update, and the old entry is deleted: entries
+      # would otherwise pile up until GitHub evicts them. Saved even when the
+      # tests fail, since the image is not what they test.
+      - if: vars.UXSM_VM_CACHE && !cancelled()
+        id: image
+        env:
+          DISTRO: ${{ matrix.distro }}
+          OLD: ${{ steps.restore.outputs.cache-matched-key }}
+        run: |
+          updated=$(cat ~/.cache/uxsm/vm/prepared/"$DISTRO".updated 2>/dev/null) || exit 0
+          key=vm-$DISTRO-$updated
+          if [ "$key" != "$OLD" ]; then echo "key=$key" >>"$GITHUB_OUTPUT"; fi
+      - if: steps.image.outputs.key
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.cache/uxsm/vm/key
+            ~/.cache/uxsm/vm/key.pub
+            ~/.cache/uxsm/vm/prepared
+          key: ${{ steps.image.outputs.key }}
+      - if: steps.image.outputs.key && steps.restore.outputs.cache-matched-key
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OLD: ${{ steps.restore.outputs.cache-matched-key }}
+        run: gh cache delete "$OLD"
       # The runner is gone when the job ends, and with it the run's log and
       # the console and journal of a failed VM: keep them for two weeks.
       - if: failure()

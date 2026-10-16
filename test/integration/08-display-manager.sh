@@ -12,8 +12,10 @@
 # user's home. The VM is disposable, so configuring system LightDM is simpler
 # and closer to a real installation.
 #
-# This deliberately runs last because it installs LightDM, while earlier tests
-# verify uxsm on a machine without a display manager.
+# This deliberately runs last because it brings LightDM in, while earlier tests
+# verify uxsm on a machine without a display manager. The prepared images of
+# test/vm.sh have it installed and masked, so here it is only unmasked; a
+# machine started from a cloud image (UXSM_VM_FRESH, as in CI) installs it.
 
 set -eu
 . "$(dirname "$0")/lib.sh"
@@ -33,7 +35,6 @@ trap cleanup EXIT
 
 wait_no_session || fail "a session from an earlier test is still shutting down"
 
-echo "  installing LightDM"
 install_log=$HOME/uxsm-it-lightdm-install.log
 # install_lightdm keeps the package manager's output in a file, as it is long,
 # and shows its last lines on failure, so mirror's retries say why.
@@ -43,7 +44,11 @@ install_lightdm() {
     return 1
   }
 }
-if command -v apt-get >/dev/null 2>&1; then
+if [ "$(systemctl show -p LoadState --value lightdm.service)" = masked ]; then
+  echo "  unmasking LightDM"
+  sudo systemctl unmask --quiet lightdm.service
+elif command -v apt-get >/dev/null 2>&1; then
+  echo "  installing LightDM"
   # Debian and Ubuntu start a display manager when installing it; policy-rc.d
   # prevents that because this test starts it with its own configuration.
   printf '#!/bin/sh\nexit 101\n' | sudo tee /usr/sbin/policy-rc.d >/dev/null
@@ -51,10 +56,13 @@ if command -v apt-get >/dev/null 2>&1; then
   mirror install_lightdm sudo DEBIAN_FRONTEND=noninteractive apt-get -y -qq install lightdm
   sudo rm -f /usr/sbin/policy-rc.d
 elif command -v pacman >/dev/null 2>&1; then
+  echo "  installing LightDM"
   mirror install_lightdm sudo pacman -S --noconfirm --needed lightdm
 elif command -v dnf >/dev/null 2>&1; then
+  echo "  installing LightDM"
   mirror install_lightdm sudo dnf -y -q install lightdm
 elif command -v zypper >/dev/null 2>&1; then
+  echo "  installing LightDM"
   mirror install_lightdm sudo zypper --non-interactive --quiet install --no-recommends lightdm
 fi
 sudo systemctl disable --now lightdm.service display-manager.service 2>/dev/null || true

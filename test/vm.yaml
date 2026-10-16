@@ -1,0 +1,18 @@
+---
+# Settings of the test VMs, read by test/vm.sh and test/vm-cleanup.sh, here
+# and in CI. Each is overridden for one run by UXSM_VM_<NAME> in capitals:
+# UXSM_VM_REFRESH=1h test/vm.sh arch. Durations are a number followed by d,
+# h, or m. Only flat `name: value` lines are read.
+
+# Update a prepared image when its last update is older than this.
+refresh: 12h
+
+# Make a prepared image again, from a cloud image downloaded anew, when it was
+# made longer ago than this: updates piled on updates drift away from what an
+# installation today starts with.
+lifetime: 7d
+
+# Delete the images nothing has used for this long, or, with boot, those not
+# used since the computer started. vm.sh itself only ever replaces them, so
+# this is what frees the disk; it needs `make vm-cleanup`.
+cleanup: 7d

@@ -1,0 +1,12 @@
+# Installed by `make vm-cleanup`.
+[Unit]
+Description=Delete the unused uxsm test VM images once a day
+
+[Timer]
+# Not at login, which is busy enough, and not at the same moment every day.
+OnStartupSec=15min
+OnUnitActiveSec=1d
+RandomizedDelaySec=30min
+
+[Install]
+WantedBy=timers.target

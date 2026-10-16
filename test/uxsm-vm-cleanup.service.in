@@ -1,0 +1,10 @@
+# Installed by `make vm-cleanup`, which fills in the path of this repository.
+[Unit]
+Description=Delete the unused uxsm test VM images
+
+[Service]
+Type=oneshot
+ExecStart=@SCRIPT@
+# It runs while the user works, so it takes only what nobody else wants.
+Nice=19
+IOSchedulingClass=idle

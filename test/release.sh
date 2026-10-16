@@ -140,7 +140,7 @@ tested=$(sha256sum "$out/$tarball" | cut -d' ' -f1)
 # file, wherever it is), CI, and the flake. Anything else counts, so a file
 # added later rebuilds the packages rather than being missed.
 packaged=$(sources |
-  grep -vE '^(test/(integration|nixos|xsessions)/|test/(vm|release|publish|xsessions)\.sh$|docs/|\.github/|\.githooks/|flake\.|.*\.md$|\.editorconfig$|\.gitignore$)' |
+  grep -vE '^(test/(integration|nixos|xsessions)/|test/(vm|vm-cleanup|vm-config|prepare|release|publish|xsessions)\.sh$|test/vm\.yaml$|test/uxsm-vm-cleanup\.|docs/|\.github/|\.githooks/|flake\.|.*\.md$|\.editorconfig$|\.gitignore$)' |
   xargs -d '\n' sha256sum | sha256sum | cut -d' ' -f1)
 
 # has_package DISTRO: its package was built from these sources.

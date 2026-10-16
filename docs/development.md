@@ -53,6 +53,10 @@ make release    # strict VM path for every distribution
 
 Runs go one at a time and stop at the first failure. A package is rebuilt only when the files that go into it change, so the installation and the tests can be adjusted without building from scratch; a new commit always rebuilds it, as its version carries the commit hash.
 
+Both VMs start from a prepared image of their distribution, kept in `~/.cache/uxsm/vm`: the official cloud image, updated, with the test dependencies installed by [`test/prepare.sh`](../test/prepare.sh), LightDM among them but masked, so that the tests before the display manager's see a machine without one. Each VM writes to a temporary layer over it, so the clean VM stays clean and neither downloads what the other already did. Build dependencies stay out of the image, as they would hide a runtime dependency the package forgot. [`test/vm.yaml`](../test/vm.yaml) says when an image is updated (12 hours) and when it is made again from a cloud image downloaded anew (7 days); `UXSM_VM_FRESH=1` starts from the cloud image instead.
+
+`test/vm.sh` replaces the images but never deletes them, and they take several gigabytes. `make vm-cleanup` installs a systemd user timer that runs [`test/vm-cleanup.sh`](../test/vm-cleanup.sh) once a day, at low priority, to delete the images unused for 7 days, or for whatever `cleanup` says in `test/vm.yaml` (`1d`, `8h`, or `boot`, for those not used since the computer started). It never deletes while a VM is running. `make vm-cleanup-remove` takes the timer away.
+
 Each run writes its complete output to `build/logs/<distribution>/<time>/run.log`, with the time of each step, and a summary of how long each step took to `times` beside it. The terminal shows only the steps, failures, and that summary. A failed VM also leaves its console and journal there. The ten latest runs of each distribution are kept, and nothing there is uploaded.
 
 Downloads from the distribution's repositories that uxsm does not decide, such as index refreshes, system updates, and the build and test tools, go through [`test/mirror.sh`](../test/mirror.sh): a rolling distribution's mirror caught halfway through a sync is retried in the same VM for about a quarter of an hour, and if it still fails the run ends as `MIRROR`, not `FAILED`. What the recipe asks for, including the uxsm package and its dependencies, is not retried, because there a failure may be uxsm's.
@@ -86,6 +90,8 @@ The definition is [`test/nixos/session.nix`](../test/nixos/session.nix) and is e
 ### Continuous integration and hooks
 
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs `make check` and `make build` on every push and pull request. On `main`, on version tags, and through `workflow_dispatch` (with the distribution set as an input), it also runs one VM job per distribution, each on its own runner, plus the NixOS machine; GitHub-hosted runners expose `/dev/kvm`, and a distribution takes three to five minutes there. The VM jobs check out the whole history so that packages carry the real version, and a failed job keeps its logs, including the console and journal of a failed VM, as an artifact for 14 days.
+
+The VM jobs start from the cloud images, as a runner would make a prepared image only to throw it away. For a series of pushes close together, `gh variable set UXSM_VM_CACHE --body 1` keeps the prepared images in GitHub's cache between runs, and `gh variable delete UXSM_VM_CACHE` turns that off again; the next run then empties the cache. It is off by default because the images take several gigabytes of the repository's 10 GB.
 
 The pre-commit hook runs `gofmt`, `go vet`, unit tests, and `sh -n` over shell scripts. The pre-push hook requires a successful `make release` for the exact commit pushed to `main`, `master`, or a `vX.Y.Z` tag. Enable both with:
 

@@ -32,7 +32,7 @@ UNITS := $(wildcard data/systemd/user/*.in)
 # and @BINDIR@ for each build and prefix.
 MAN := $(wildcard data/man/*.1.in)
 
-.PHONY: all build check test vet fmt install uninstall test-vm test-nixos release publish hooks dist bindist clean
+.PHONY: all build check test vet fmt install uninstall test-vm test-nixos vm-cleanup vm-cleanup-remove release publish hooks dist bindist clean
 
 all: build
 
@@ -125,6 +125,23 @@ test-nixos:
 	}
 	$(NIX) build --extra-experimental-features "nix-command flakes" \
 		'.#checks.$(shell $(NIX) eval --extra-experimental-features "nix-command flakes" --impure --raw --expr builtins.currentSystem).session' -L
+
+# The VM images of test/vm.sh take gigabytes, and it only ever replaces them.
+# vm-cleanup installs a systemd --user timer that runs test/vm-cleanup.sh from
+# this repository once a day, deleting what has gone unused for as long as
+# test/vm.yaml says; vm-cleanup-remove takes it away again.
+VM_UNITDIR = $(or $(XDG_CONFIG_HOME),$(HOME)/.config)/systemd/user
+vm-cleanup:
+	install -d "$(VM_UNITDIR)"
+	sed 's|@SCRIPT@|$(CURDIR)/test/vm-cleanup.sh|' test/uxsm-vm-cleanup.service.in >"$(VM_UNITDIR)/uxsm-vm-cleanup.service"
+	install -m644 test/uxsm-vm-cleanup.timer "$(VM_UNITDIR)/uxsm-vm-cleanup.timer"
+	systemctl --user daemon-reload
+	systemctl --user enable --now uxsm-vm-cleanup.timer
+
+vm-cleanup-remove:
+	systemctl --user disable --now uxsm-vm-cleanup.timer || true
+	rm -f "$(VM_UNITDIR)/uxsm-vm-cleanup.service" "$(VM_UNITDIR)/uxsm-vm-cleanup.timer"
+	systemctl --user daemon-reload
 
 # Run the same checks on every distribution, NixOS included, and once all six
 # have passed with these sources, publish build/release as the releases/latest
