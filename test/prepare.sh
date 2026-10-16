@@ -72,6 +72,11 @@ systemctl mask --quiet lightdm.service
 # sshd. The guest takes its clock from the host (kvmclock), so there is
 # nothing to wait for; masking a unit a distribution lacks is harmless.
 systemctl mask --quiet systemd-time-wait-sync.service
+# Ubuntu catches up on its daily apt run at boot, and unattended-upgrades then
+# holds the dpkg lock just as the build installs its dependencies, which
+# failed and waited a minute for a retry. The image is updated here instead.
+systemctl mask --quiet apt-daily.timer apt-daily-upgrade.timer \
+  apt-daily.service apt-daily-upgrade.service
 # apt and pacman keep every package they download, and the image would carry
 # them: on Ubuntu, more than its whole system. dnf and zypper keep none by
 # default. fstrim then tells the image which blocks are free (vm.sh starts the
