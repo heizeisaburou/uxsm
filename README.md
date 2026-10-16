@@ -16,6 +16,14 @@ The display manager starts uxsm through the selected session entry. The main com
 - `uxsm entry bspwm` generates `bspwm-uxsm.desktop` and can install it in `/usr/local/share/xsessions`
 - `uxsm check` and `uxsm setup sessions-dir` check and configure the local X11 and Wayland session directories used by display managers.
 
+## Status
+
+uxsm is young and still in testing: install it knowing that, and at your own risk.
+
+It was built fast, and largely with AI assistance (vibe-coded, to put it plainly), because getting a working X11 counterpart to uwsm out early mattered more than polishing it first. The price was paid in testing: before any change reaches `main`, it is built as a native package and tested installed, in disposable virtual machines of five distributions and a declarative NixOS machine, and CI repeats that in public on every push. It is also installed and working on the author's own system.
+
+Before a stable release, the code will get a complete review and refactoring, supervised by the author at the very least, and shaped by what users report. Feedback is what will bring uxsm to the distributions' own repositories sooner, so reports from real systems are very welcome.
+
 ## Documentation
 
 - [Architecture](docs/architecture.md) explains the units, lifecycle, environment, autostart, session entries, and display-manager integration.
