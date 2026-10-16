@@ -188,7 +188,7 @@ EOF
 
   qemu-system-x86_64 \
     -machine q35,accel="$accel" -cpu "$cpu" -smp 2 -m 2048 \
-    -drive file="$1",if=virtio,format=qcow2 \
+    -drive file="$1",if=virtio,format=qcow2,discard=unmap \
     -drive file="$work/seed.img",if=virtio,format=raw \
     -netdev user,id=net0,hostfwd=tcp:127.0.0.1:"$SSH_PORT"-:22 \
     -device virtio-net-pci,netdev=net0 \
@@ -263,6 +263,18 @@ run_prepare() {
   return "$prc"
 }
 
+# compact FROM TO: write the image FROM, with whatever it is layered on, to TO
+# as a single image without the blocks the guest freed. Committing an update
+# into the image under it instead would keep every block any update ever
+# wrote, and the image would only grow.
+compact() {
+  qemu-img convert -O qcow2 "$1" "$2.compact" || {
+    rm -f "$2.compact"
+    return 1
+  }
+  mv "$2.compact" "$2"
+}
+
 # prepare DISTRO: set $prepared to the distribution's prepared image, making or
 # updating it first if it is due; see the header.
 prepare() {
@@ -284,8 +296,9 @@ prepare() {
     prc=0
     run_prepare "$update" || prc=$?
     if [ "$prc" -eq 0 ]; then
-      qemu-img commit -q "$update"
+      compact "$update" "$prepared" || prc=$?
       rm -f "${update:?}"
+      [ "$prc" -eq 0 ] || return "$prc"
       date +%s >"$PREPARED/$d.updated"
       return
     fi
@@ -310,7 +323,10 @@ prepare() {
     rm -f "${new:?}"
     return "$prc"
   fi
-  mv "$new" "$prepared"
+  prc=0
+  compact "$new" "$prepared" || prc=$?
+  rm -f "${new:?}"
+  [ "$prc" -eq 0 ] || return "$prc"
   date +%s >"$PREPARED/$d.built"
   date +%s >"$PREPARED/$d.updated"
 }

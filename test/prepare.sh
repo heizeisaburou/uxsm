@@ -72,4 +72,15 @@ systemctl mask --quiet lightdm.service
 # sshd. The guest takes its clock from the host (kvmclock), so there is
 # nothing to wait for; masking a unit a distribution lacks is harmless.
 systemctl mask --quiet systemd-time-wait-sync.service
+# apt and pacman keep every package they download, and the image would carry
+# them: on Ubuntu, more than its whole system. dnf and zypper keep none by
+# default. fstrim then tells the image which blocks are free (vm.sh starts the
+# VM with discard), so that compacting it leaves them out.
+if command -v apt-get >/dev/null 2>&1; then
+  apt-get clean
+elif command -v pacman >/dev/null 2>&1; then
+  # Not pacman -Scc: it stops at the download-* directories pacman leaves there.
+  rm -rf /var/cache/pacman/pkg/*
+fi
+fstrim --all || echo "prepare.sh: fstrim failed; the image keeps the freed blocks" >&2
 echo "== image ready"
