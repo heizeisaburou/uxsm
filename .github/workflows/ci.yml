@@ -150,8 +150,10 @@ jobs:
           OLD: ${{ steps.restore.outputs.cache-matched-key }}
         run: gh cache delete "$OLD"
       # The runner is gone when the job ends, and with it the run's log and
-      # the console and journal of a failed VM: keep them for two weeks.
-      - if: failure()
+      # the console and journal of a failed VM: keep them for two weeks, pass
+      # or fail, so any run can be read after the fact. Nothing of anyone's
+      # is on a runner, unlike the logs of a local run, which stay there.
+      - if: always()
         uses: actions/upload-artifact@v7
         with:
           name: logs-${{ matrix.distro }}
