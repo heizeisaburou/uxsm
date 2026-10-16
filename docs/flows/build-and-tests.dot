@@ -57,6 +57,10 @@ digraph build_tests {
     testvm [label="make test-vm\nUbuntu by default"];
     choose [shape=note, fillcolor="#ede9fe", color="#7c3aed",
             label="DISTROS=quick → Ubuntu\nDISTROS=pair  → Ubuntu + Arch\nDISTROS=all     → all five"];
+    prepared [shape=cylinder, fillcolor="#fef3c7", color="#ca8a04",
+              label="0 · Prepared image (test/prepare.sh)\nCloud image, updated, with the test dependencies\nand LightDM installed but masked\nUpdated every 12 h, made anew every 7 days\nNo build dependencies: the test VM starts from it too"];
+    cleanup [shape=note, fillcolor="#fef3c7", color="#ca8a04",
+             label="make vm-cleanup: a user timer deletes\nimages unused for 7 days (test/vm.yaml)"];
     package [shape=folder, fillcolor="#ede9fe", color="#7c3aed",
              label="1 · Build VM\nArchive the current tree\nBuild the native .deb, .rpm, or .pkg.tar.zst\nwith the distribution recipe"];
     install [label="2 · Clean test VM\nInstall through apt, dnf, zypper, or pacman\nRun real systemd --user, Xvfb, and bspwm"];
@@ -68,7 +72,11 @@ digraph build_tests {
           label="FAST=1 uses one VM for build and test\nUseful while developing; not valid for release"];
 
     choose -> testvm [style=dashed, arrowhead=none];
-    testvm -> package -> install -> integration -> artifacts;
+    testvm -> prepared;
+    prepared -> package [label=" temporary layer "];
+    prepared -> install [label=" temporary layer "];
+    package -> install -> integration -> artifacts;
+    cleanup -> prepared [style=dashed, arrowhead=none];
     fast -> package [style=dashed, arrowhead=none];
   }
 
@@ -85,7 +93,7 @@ digraph build_tests {
     nix -> nixvm;
   }
 
-  release [label="make release\nStrict two-VM path for all five distributions"];
+  release [label="make release\nNixOS + the strict two-VM path for all five distributions\nTwo at a time (jobs in test/vm.yaml); keys valid 24 h"];
   latest [shape=folder, fillcolor="#bbf7d0", color="#15803d", fontcolor="#14532d",
           label="Only when every distribution passes\nreleases/latest"];
 
@@ -95,6 +103,7 @@ digraph build_tests {
   source -> testvm;
   source -> nix;
   source -> release;
-  release -> package [label=" same pipeline × 5 ", style=dashed];
+  release -> prepared [label=" same pipeline × 5 ", style=dashed];
+  release -> nix [style=dashed];
   artifacts -> latest [label=" publish "];
 }
